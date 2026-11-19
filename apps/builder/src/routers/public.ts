@@ -116,6 +116,7 @@ import {
 import { threadsCommentsPublicRouter } from "@/features/threads-comments/api/public"
 import { tiktokCommentsPublicRouter } from "@/features/tiktok-comments/api/public"
 import { tokenPublicRouter } from "@/features/token/api/public"
+import { translationPublicRouter } from "@/features/translation/api/public"
 import { triggersPublicRouter } from "@/features/triggers/api/public"
 import { userPersistentMenusPublicRouter } from "@/features/user-persistent-menus/api/public"
 import { webhooksPublicRouter } from "@/features/webhooks/api/public"
@@ -134,6 +135,7 @@ export const publicRouter = {
   aiAgents: aiAgentsPublicRouter,
   aiFiles: aiFilesPublicRouter,
   aiHandover: aiHandoverPublicRouter,
+  translation: translationPublicRouter,
   aiFunctions: aiFunctionsPublicRouter,
   aiMcpServers: aiMcpServersPublicRouter,
   analytics: analyticsPublicRouter,

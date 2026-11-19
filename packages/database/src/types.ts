@@ -278,6 +278,10 @@ export type AiHandoverBulkRunModel =
   typeof schema.aiHandoverBulkRunModel.$inferSelect
 export type AiHandoverSettingsModel =
   typeof schema.aiHandoverSettingsModel.$inferSelect
+export type InboxTranslationSettingsModel =
+  typeof schema.inboxTranslationSettingsModel.$inferSelect
+export type MessageTranslationModel =
+  typeof schema.messageTranslationModel.$inferSelect
 export type MessengerMessageTemplateModel =
   typeof schema.messengerMessageTemplateModel.$inferSelect
 export type WhatsappFlowModel = typeof schema.whatsappFlowModel.$inferSelect

@@ -25,6 +25,7 @@ import { useChatStore } from "../chat/store/chat-store-provider"
 import { blockContactAction } from "../contacts/actions/block-contact.action"
 import { unblockContactAction } from "../contacts/actions/unblock-contact.action"
 import DeleteContactDialog from "../contacts/components/remove-contact-dialog"
+import { ConversationTranslationMenuItem } from "../translation/components/conversation-translation-menu-item"
 import { archiveConversationAction } from "./actions/archive-conversation.action"
 import { followConversationAction } from "./actions/follow-conversation.action"
 import { unarchiveConversationAction } from "./actions/unarchive-conversation.action"
@@ -198,6 +199,7 @@ export function ConversationAction({ conversation }: ConversationActionProps) {
           <MailIcon />
           {t("actions.markAsUnread")}
         </DropdownMenuItem>
+        <ConversationTranslationMenuItem conversation={conversation} />
         {conversation.archivedAt ? (
           <DropdownMenuItem
             disabled={isUnarchiving}

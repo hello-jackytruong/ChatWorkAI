@@ -82,12 +82,15 @@ const seedMessagesState = async (
   workspaceId: string,
   conversationId: string,
 ): Promise<ChatStoreInitialState> => {
-  const { data, nextCursor } = await listMessages({
-    workspaceId,
-    perPage: INBOX_MESSAGES_PER_PAGE,
-    cursor: "",
-    conversationId,
-  })
+  const { data, nextCursor } = await listMessages(
+    {
+      workspaceId,
+      perPage: INBOX_MESSAGES_PER_PAGE,
+      cursor: "",
+      conversationId,
+    },
+    { includeTranslation: true },
+  )
 
   const messagesSeed: ChatStoreMessagesSeed = {
     messages: [...data].reverse(),

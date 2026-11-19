@@ -162,6 +162,93 @@
   "errors": {
     "superAdminRequired": "Você precisa ser um superadministrador do espaço de trabalho para fazer isso."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Tradução de conversas",
+      "description": "Traduza as mensagens dos seus clientes para sua equipe, e as suas respostas para os clientes, direto na caixa de entrada.",
+      "saved": "Configurações de tradução salvas",
+      "readOnly": "Somente administradores do workspace podem alterar estas configurações.",
+      "languageHint": "Também é o idioma para o qual as mensagens dos clientes são traduzidas quando a tradução de conversas está ativada.",
+      "alert": {
+        "needsReconfiguration": "Reconfiguração necessária: a integração de IA foi removida ou desativada.",
+        "noIntegration": "Conecte primeiro uma integração de IA para usar a tradução.",
+        "connect": "Conectar IA"
+      },
+      "enabled": {
+        "label": "Traduzir conversas",
+        "description": "As mensagens dos clientes só são traduzidas quando alguém abre a conversa. O texto do chat é enviado ao provedor de IA que você escolher e cobrado na sua chave de IA."
+      },
+      "integration": {
+        "label": "Integração de IA",
+        "description": "Somente provedores de IA conectados são listados."
+      },
+      "test": {
+        "label": "Testar conexão",
+        "button": "Testar",
+        "result": "Concluído em {seconds} s: “{sample}” → “{translated}”",
+        "slow": "Este modelo é lento: as mensagens enviadas podem não ser traduzidas a tempo e serão enviadas como escritas.",
+        "failed": "O teste falhou."
+      },
+      "confirmDialog": {
+        "title": "Enviar o texto do chat ao seu provedor de IA?",
+        "description": "O texto da conversa será enviado ao provedor de IA que você escolheu para ser traduzido. Mensagens mais antigas também são traduzidas quando você abre a conversa ou rola até elas.",
+        "confirm": "Ativar"
+      }
+    },
+    "message": {
+      "translating": "Traduzindo…",
+      "stillWaiting": "Ainda aguardando a tradução",
+      "requestAgain": "Solicitar novamente",
+      "failed": "Não foi possível traduzir",
+      "retry": "Tentar novamente",
+      "original": "Original · {language}",
+      "originalNoLanguage": "Original",
+      "sent": "Enviada · {language}",
+      "sentNoLanguage": "Enviada",
+      "translatedFrom": "Traduzido de {language}. Mostrar original",
+      "translatedFromNoLanguage": "Traduzido. Mostrar original",
+      "sentIn": "Enviado em {language}. Mostrar o que foi enviado",
+      "sentInNoLanguage": "Enviado traduzido. Mostrar o que foi enviado",
+      "hideOriginal": "Ocultar original",
+      "hideSent": "Ocultar o que foi enviado"
+    },
+    "badge": {
+      "tooltip": "Idioma do cliente: {language}"
+    },
+    "menu": {
+      "translateConversation": "Traduzir esta conversa",
+      "showOriginals": "Mostrar texto original"
+    },
+    "composer": {
+      "hintUnknown": "O idioma do cliente ainda não é conhecido — a mensagem será enviada como escrita",
+      "hintDetecting": "Detectando o idioma do cliente…",
+      "chip": {
+        "aria": "Idioma da tradução",
+        "target": "→ {language}",
+        "sameLanguage": "Mesmo idioma do workspace",
+        "unknown": "Idioma desconhecido",
+        "hasFiles": "Mensagens com arquivos não são traduzidas",
+        "off": "Tradução desativada"
+      },
+      "popover": {
+        "customerLanguage": "Idioma do cliente",
+        "chooseLanguage": "Escolha um idioma",
+        "preview": "Pré-visualizar tradução",
+        "turnOn": "Ativar a tradução nesta conversa",
+        "turnOff": "Desativar a tradução nesta conversa"
+      },
+      "preview": {
+        "title": "Enviada ao cliente · {language}",
+        "translating": "Traduzindo…",
+        "needsRetranslate": "Precisa ser traduzida novamente",
+        "retranslate": "Traduzir novamente",
+        "failed": "Não foi possível traduzir — será tentado de novo ao enviar"
+      }
+    },
+    "toast": {
+      "fallback": "Não deu tempo de traduzir — a mensagem original foi enviada"
+    }
+  },
   "states": {
     "success": "Sucesso",
     "error": "Erro",

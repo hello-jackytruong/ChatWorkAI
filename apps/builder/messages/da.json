@@ -162,6 +162,93 @@
   "errors": {
     "superAdminRequired": "Du skal være super admin for arbejdsområdet for at gøre dette."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Oversættelse af samtaler",
+      "description": "Oversæt kundernes beskeder til dit team, og dine svar til dine kunder, direkte i indbakken.",
+      "saved": "Oversættelsesindstillinger gemt",
+      "readOnly": "Kun arbejdsområdets administratorer kan ændre disse indstillinger.",
+      "languageHint": "Også det sprog, kundernes beskeder oversættes til, når oversættelse af samtaler er slået til.",
+      "alert": {
+        "needsReconfiguration": "Ny konfiguration nødvendig: AI-integrationen er fjernet eller slået fra.",
+        "noIntegration": "Tilslut først en AI-integration for at bruge oversættelse.",
+        "connect": "Tilslut AI"
+      },
+      "enabled": {
+        "label": "Oversæt samtaler",
+        "description": "Kundebeskeder oversættes kun, når nogen åbner samtalen. Chatteksten sendes til den AI-udbyder, du vælger, og faktureres på din AI-nøgle."
+      },
+      "integration": {
+        "label": "AI-integration",
+        "description": "Kun tilsluttede AI-udbydere vises."
+      },
+      "test": {
+        "label": "Test forbindelsen",
+        "button": "Test",
+        "result": "Færdig på {seconds} s: „{sample}“ → „{translated}“",
+        "slow": "Denne model er langsom: udgående beskeder bliver måske ikke oversat i tide og sendes, som de er skrevet.",
+        "failed": "Testen mislykkedes."
+      },
+      "confirmDialog": {
+        "title": "Send chattekst til din AI-udbyder?",
+        "description": "Samtaleteksten sendes til den AI-udbyder, du har valgt, for at blive oversat. Ældre beskeder oversættes også, når du åbner samtalen eller ruller tilbage til dem.",
+        "confirm": "Slå til"
+      }
+    },
+    "message": {
+      "translating": "Oversætter…",
+      "stillWaiting": "Venter stadig på oversættelsen",
+      "requestAgain": "Anmod igen",
+      "failed": "Kunne ikke oversætte",
+      "retry": "Prøv igen",
+      "original": "Original · {language}",
+      "originalNoLanguage": "Original",
+      "sent": "Sendt · {language}",
+      "sentNoLanguage": "Sendt",
+      "translatedFrom": "Oversat fra {language}. Vis original",
+      "translatedFromNoLanguage": "Oversat. Vis original",
+      "sentIn": "Sendt på {language}. Vis det sendte",
+      "sentInNoLanguage": "Sendt oversat. Vis det sendte",
+      "hideOriginal": "Skjul original",
+      "hideSent": "Skjul det sendte"
+    },
+    "badge": {
+      "tooltip": "Kundens sprog: {language}"
+    },
+    "menu": {
+      "translateConversation": "Oversæt denne samtale",
+      "showOriginals": "Vis original tekst"
+    },
+    "composer": {
+      "hintUnknown": "Kundens sprog kendes ikke endnu – beskeden sendes, som den er skrevet",
+      "hintDetecting": "Registrerer kundens sprog…",
+      "chip": {
+        "aria": "Oversættelsessprog",
+        "target": "→ {language}",
+        "sameLanguage": "Samme sprog som arbejdsområdet",
+        "unknown": "Sproget er ukendt",
+        "hasFiles": "Beskeder med filer oversættes ikke",
+        "off": "Oversættelse fra"
+      },
+      "popover": {
+        "customerLanguage": "Kundens sprog",
+        "chooseLanguage": "Vælg et sprog",
+        "preview": "Se oversættelsen på forhånd",
+        "turnOn": "Slå oversættelse til for denne samtale",
+        "turnOff": "Slå oversættelse fra for denne samtale"
+      },
+      "preview": {
+        "title": "Sendt til kunden · {language}",
+        "translating": "Oversætter…",
+        "needsRetranslate": "Skal oversættes igen",
+        "retranslate": "Oversæt igen",
+        "failed": "Kunne ikke oversætte – det prøves igen, når du sender"
+      }
+    },
+    "toast": {
+      "fallback": "Nåede ikke at oversætte – den oprindelige besked blev sendt"
+    }
+  },
   "states": {
     "success": "Succes",
     "error": "Fejl",

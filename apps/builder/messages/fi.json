@@ -162,6 +162,93 @@
   "errors": {
     "superAdminRequired": "Sinun täytyy olla työtilan pääylläpitäjä tehdäksesi tämän."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Keskustelujen käännös",
+      "description": "Käännä asiakkaiden viestit tiimillesi ja vastauksesi asiakkaille suoraan saapuneissa.",
+      "saved": "Käännösasetukset tallennettu",
+      "readOnly": "Vain työtilan ylläpitäjät voivat muuttaa näitä asetuksia.",
+      "languageHint": "Myös kieli, jolle asiakkaiden viestit käännetään, kun keskustelujen käännös on päällä.",
+      "alert": {
+        "needsReconfiguration": "Määritys on tehtävä uudelleen: tekoälyintegraatio on poistettu tai poistettu käytöstä.",
+        "noIntegration": "Yhdistä ensin tekoälyintegraatio käyttääksesi käännöstä.",
+        "connect": "Yhdistä tekoäly"
+      },
+      "enabled": {
+        "label": "Käännä keskustelut",
+        "description": "Asiakkaiden viestit käännetään vain, kun joku avaa keskustelun. Keskustelun teksti lähetetään valitsemallesi tekoälypalveluntarjoajalle ja laskutetaan tekoälyavaimellasi."
+      },
+      "integration": {
+        "label": "Tekoälyintegraatio",
+        "description": "Vain yhdistetyt tekoälypalveluntarjoajat näytetään."
+      },
+      "test": {
+        "label": "Testaa yhteys",
+        "button": "Testaa",
+        "result": "Valmis {seconds} s:ssa: ”{sample}” → ”{translated}”",
+        "slow": "Tämä malli on hidas: lähtevät viestit eivät välttämättä käänny ajoissa ja lähetetään sellaisinaan.",
+        "failed": "Testi epäonnistui."
+      },
+      "confirmDialog": {
+        "title": "Lähetetäänkö keskustelun teksti tekoälypalveluntarjoajallesi?",
+        "description": "Keskustelun teksti lähetetään käännettäväksi valitsemallesi tekoälypalveluntarjoajalle. Myös vanhemmat viestit käännetään, kun avaat keskustelun tai selaat niihin.",
+        "confirm": "Ota käyttöön"
+      }
+    },
+    "message": {
+      "translating": "Käännetään…",
+      "stillWaiting": "Odotetaan yhä käännöstä",
+      "requestAgain": "Pyydä uudelleen",
+      "failed": "Kääntäminen ei onnistunut",
+      "retry": "Yritä uudelleen",
+      "original": "Alkuperäinen · {language}",
+      "originalNoLanguage": "Alkuperäinen",
+      "sent": "Lähetetty · {language}",
+      "sentNoLanguage": "Lähetetty",
+      "translatedFrom": "Käännetty kielestä {language}. Näytä alkuperäinen",
+      "translatedFromNoLanguage": "Käännetty. Näytä alkuperäinen",
+      "sentIn": "Lähetetty kielellä {language}. Näytä lähetetty",
+      "sentInNoLanguage": "Lähetetty käännettynä. Näytä lähetetty",
+      "hideOriginal": "Piilota alkuperäinen",
+      "hideSent": "Piilota lähetetty"
+    },
+    "badge": {
+      "tooltip": "Asiakkaan kieli: {language}"
+    },
+    "menu": {
+      "translateConversation": "Käännä tämä keskustelu",
+      "showOriginals": "Näytä alkuperäinen teksti"
+    },
+    "composer": {
+      "hintUnknown": "Asiakkaan kieltä ei vielä tiedetä – viesti lähetetään sellaisenaan",
+      "hintDetecting": "Tunnistetaan asiakkaan kieltä…",
+      "chip": {
+        "aria": "Käännöskieli",
+        "target": "→ {language}",
+        "sameLanguage": "Sama kieli kuin työtilassa",
+        "unknown": "Kieli tuntematon",
+        "hasFiles": "Tiedostollisia viestejä ei käännetä",
+        "off": "Käännös pois päältä"
+      },
+      "popover": {
+        "customerLanguage": "Asiakkaan kieli",
+        "chooseLanguage": "Valitse kieli",
+        "preview": "Esikatsele käännös",
+        "turnOn": "Ota käännös käyttöön tässä keskustelussa",
+        "turnOff": "Poista käännös käytöstä tässä keskustelussa"
+      },
+      "preview": {
+        "title": "Lähetetty asiakkaalle · {language}",
+        "translating": "Käännetään…",
+        "needsRetranslate": "Pitää kääntää uudelleen",
+        "retranslate": "Käännä uudelleen",
+        "failed": "Kääntäminen ei onnistunut – yritetään uudelleen lähetettäessä"
+      }
+    },
+    "toast": {
+      "fallback": "Kääntäminen ei ehtinyt ajoissa – alkuperäinen viesti lähetettiin"
+    }
+  },
   "states": {
     "success": "Onnistui",
     "error": "Virhe",

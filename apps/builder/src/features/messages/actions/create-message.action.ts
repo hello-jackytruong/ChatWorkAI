@@ -1,6 +1,7 @@
 "use server"
-import { conversationService, messageService } from "@chatbotx.io/business"
+import { conversationService } from "@chatbotx.io/business"
 import { zodBigintAsString } from "@chatbotx.io/utils"
+import { sendOutgoing } from "@/features/translation/lib/send-outgoing"
 import { workspaceActionClient } from "@/lib/safe-action"
 import { createMessageWithRoutingBypassRequest } from "../schema/mutation"
 export const createMessageAction = workspaceActionClient
@@ -27,7 +28,8 @@ export const createMessageAction = workspaceActionClient
         inboxId: parsedInput.inboxId,
       })
 
-    return messageService.createOutgoing({
+    return sendOutgoing({
+      workspaceId,
       conversation,
       contactInbox,
       input: parsedInput,

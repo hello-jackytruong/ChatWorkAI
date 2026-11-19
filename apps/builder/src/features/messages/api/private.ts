@@ -1,10 +1,7 @@
-import {
-  conversationService,
-  messageService,
-  userService,
-} from "@chatbotx.io/business"
+import { conversationService, userService } from "@chatbotx.io/business"
 import { zodBigintAsString } from "@chatbotx.io/utils"
 import z from "zod"
+import { sendOutgoing } from "@/features/translation/lib/send-outgoing"
 import { assertWorkspaceNotBlocked } from "@/lib/workspace-quota"
 import { workspaceAuthorizedMidddleware } from "@/middlewares/auth"
 import { authorizedAPI } from "@/orpc"
@@ -43,7 +40,10 @@ export const messagesAuthenticatedAPI = {
     .input(listMessagesRequest)
     .use(workspaceAuthorizedMidddleware, (input) => input.workspaceId)
     .output(listMessagesResponse)
-    .handler(async ({ input }) => await listMessages(input)),
+    .handler(
+      async ({ input }) =>
+        await listMessages(input, { includeTranslation: true }),
+    ),
 
   findMessageAuthenticatedAPI: authorizedAPI
     .route({
@@ -55,7 +55,10 @@ export const messagesAuthenticatedAPI = {
     .input(findMessageRequest)
     .use(workspaceAuthorizedMidddleware, (input) => input.workspaceId)
     .output(messageResourceWithRelations)
-    .handler(async ({ input }) => await findMessage(input)),
+    .handler(
+      async ({ input }) =>
+        await findMessage(input, { includeTranslation: true }),
+    ),
 
   getWhatsappFlowResponseAuthenticatedAPI: authorizedAPI
     .route({
@@ -112,7 +115,8 @@ export const messagesAuthenticatedAPI = {
       // session context only carries the lighter better-auth user shape.
       const user = await userService.findByIdOrFail(context.user.id)
 
-      return messageService.createOutgoing({
+      return sendOutgoing({
+        workspaceId: input.workspaceId,
         conversation,
         contactInbox,
         input,

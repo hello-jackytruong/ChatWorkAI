@@ -21,6 +21,7 @@ import {
   closeHumanReplyWindow,
   contactInboxOperationalColumns,
   contactInboxRepository,
+  conversationTranslationStateRepository,
   createMessageRepository,
   getSafeSinceTime,
   insertDmConversationsIfAbsent,
@@ -878,10 +879,9 @@ class ConversationService extends BaseService {
     const updated = await tx
       .update(conversationModel)
       .set({
-        additionalAttributes: {
-          ...conversation.additionalAttributes,
-          channelConversationId,
-        },
+        // Write only this key atomically: spreading the snapshot read earlier
+        // would overwrite a concurrent `challenge` / `translation` write.
+        additionalAttributes: sql`jsonb_set(COALESCE(${conversationModel.additionalAttributes}, '{}'::jsonb), '{channelConversationId}', to_jsonb(${channelConversationId}::text), true)`,
       })
       .where(eq(conversationModel.id, conversation.id))
       .returning()
@@ -2483,6 +2483,63 @@ class ConversationService extends BaseService {
   }
 
   // ─── Cache ───────────────────────────────────────────────────────────────
+
+  /**
+   * Inbox translation state lives under `additionalAttributes.translation`.
+   * The three writers below are the only way to change it: `Conversation` is
+   * read through a cache, so each one invalidates after its single atomic
+   * UPDATE (a repository call from a worker or an app would leave a stale
+   * language/override in the cache that `translateOutbound` reads).
+   * They return the updated row, or `null` when nothing was written.
+   */
+  async setTranslationOverride(props: {
+    workspaceId: string
+    conversationId: string
+    /** `null` clears the override. */
+    enabledOverride: boolean | null
+  }): Promise<ConversationModel | null> {
+    const updated =
+      await conversationTranslationStateRepository.setOverride(props)
+    await this.invalidateAfterTranslationWrite(props, updated)
+    return updated
+  }
+
+  /** An agent's choice of the customer language: always written. */
+  async setTranslationLanguage(props: {
+    workspaceId: string
+    conversationId: string
+    language: string
+  }): Promise<ConversationModel | null> {
+    const updated =
+      await conversationTranslationStateRepository.setLanguage(props)
+    await this.invalidateAfterTranslationWrite(props, updated)
+    return updated
+  }
+
+  /** A detection result: written only while unset (see the repository). */
+  async setTranslationLanguageIfUnset(props: {
+    workspaceId: string
+    conversationId: string
+    language: string
+    workspaceLanguage: string
+  }): Promise<ConversationModel | null> {
+    const updated =
+      await conversationTranslationStateRepository.setLanguageIfUnset(props)
+    await this.invalidateAfterTranslationWrite(props, updated)
+    return updated
+  }
+
+  private async invalidateAfterTranslationWrite(
+    props: { workspaceId: string; conversationId: string },
+    updated: ConversationModel | null,
+  ): Promise<void> {
+    if (updated) {
+      await this.invalidate({
+        workspaceId: props.workspaceId,
+        ids: [props.conversationId],
+      })
+    }
+  }
 
   async invalidate(props: {
     workspaceId: string

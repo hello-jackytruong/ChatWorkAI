@@ -1689,6 +1689,93 @@
     },
     "title": "DeepSeek"
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Översättning av konversationer",
+      "description": "Översätt kundernas meddelanden åt ditt team, och dina svar åt dina kunder, direkt i inkorgen.",
+      "saved": "Översättningsinställningarna har sparats",
+      "readOnly": "Endast arbetsytans administratörer kan ändra dessa inställningar.",
+      "languageHint": "Det är också språket som kundmeddelanden översätts till när översättning av konversationer är på.",
+      "alert": {
+        "needsReconfiguration": "Ny konfiguration krävs: AI-integrationen har tagits bort eller stängts av.",
+        "noIntegration": "Anslut först en AI-integration för att använda översättning.",
+        "connect": "Anslut AI"
+      },
+      "enabled": {
+        "label": "Översätt konversationer",
+        "description": "Kundmeddelanden översätts bara när någon öppnar konversationen. Chattexten skickas till den AI-leverantör du väljer och debiteras på din AI-nyckel."
+      },
+      "integration": {
+        "label": "AI-integration",
+        "description": "Bara anslutna AI-leverantörer visas."
+      },
+      "test": {
+        "label": "Testa anslutning",
+        "button": "Testa",
+        "result": "Klart på {seconds} s: ”{sample}” → ”{translated}”",
+        "slow": "Den här modellen är långsam: utgående meddelanden kanske inte hinner översättas och skickas då som de skrevs.",
+        "failed": "Testet misslyckades."
+      },
+      "confirmDialog": {
+        "title": "Skicka chattext till din AI-leverantör?",
+        "description": "Konversationstexten skickas till den AI-leverantör du valt för översättning. Äldre meddelanden översätts också när du öppnar konversationen eller bläddrar tillbaka till dem.",
+        "confirm": "Slå på"
+      }
+    },
+    "message": {
+      "translating": "Översätter…",
+      "stillWaiting": "Väntar fortfarande på översättningen",
+      "requestAgain": "Begär igen",
+      "failed": "Kunde inte översätta",
+      "retry": "Försök igen",
+      "original": "Original · {language}",
+      "originalNoLanguage": "Original",
+      "sent": "Skickat · {language}",
+      "sentNoLanguage": "Skickat",
+      "translatedFrom": "Översatt från {language}. Visa original",
+      "translatedFromNoLanguage": "Översatt. Visa original",
+      "sentIn": "Skickat på {language}. Visa det som skickades",
+      "sentInNoLanguage": "Skickat översatt. Visa det som skickades",
+      "hideOriginal": "Dölj original",
+      "hideSent": "Dölj det som skickades"
+    },
+    "badge": {
+      "tooltip": "Kundens språk: {language}"
+    },
+    "menu": {
+      "translateConversation": "Översätt den här konversationen",
+      "showOriginals": "Visa originaltext"
+    },
+    "composer": {
+      "hintUnknown": "Kundens språk är inte känt än – meddelandet skickas som det skrevs",
+      "hintDetecting": "Identifierar kundens språk…",
+      "chip": {
+        "aria": "Översättningsspråk",
+        "target": "→ {language}",
+        "sameLanguage": "Samma språk som arbetsytan",
+        "unknown": "Språket är okänt",
+        "hasFiles": "Meddelanden med filer översätts inte",
+        "off": "Översättning av"
+      },
+      "popover": {
+        "customerLanguage": "Kundens språk",
+        "chooseLanguage": "Välj ett språk",
+        "preview": "Förhandsgranska översättningen",
+        "turnOn": "Slå på översättning för den här konversationen",
+        "turnOff": "Stäng av översättning för den här konversationen"
+      },
+      "preview": {
+        "title": "Skickat till kunden · {language}",
+        "translating": "Översätter…",
+        "needsRetranslate": "Behöver översättas igen",
+        "retranslate": "Översätt igen",
+        "failed": "Kunde inte översätta – nytt försök görs när du skickar"
+      }
+    },
+    "toast": {
+      "fallback": "Hann inte översätta – originalmeddelandet skickades"
+    }
+  },
   "muse": {
     "autoReply": {
       "description": "Aktivera automatiska AI-svar för att svara användare naturligt med AI som drivs av dina företagsdata.",

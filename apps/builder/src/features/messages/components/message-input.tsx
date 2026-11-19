@@ -42,6 +42,16 @@ import { MediaLibraryTrigger } from "@/features/media-library/components/media-l
 import type { ListFilesResponse } from "@/features/media-library/schema"
 import { QuickRepliesPopover } from "@/features/saved-replies/quick-replies-popover"
 import type { SavedReplyResource } from "@/features/saved-replies/schema/resource"
+import { ComposerTargetLanguage } from "@/features/translation/components/composer-target-language"
+import { ComposerTranslationPreview } from "@/features/translation/components/composer-translation-preview"
+import { useConversationTranslation } from "@/features/translation/hooks/use-conversation-translation"
+import { useTranslationPreview } from "@/features/translation/hooks/use-translation-preview"
+import { useTranslationPreviewPreference } from "@/features/translation/hooks/use-translation-preview-preference"
+import {
+  resolveComposerTranslation,
+  willTranslateSend,
+} from "@/features/translation/lib/composer-translation"
+import { useTranslationUiStore } from "@/features/translation/store/translation-ui-store"
 import { authClient } from "@/lib/auth/auth-client"
 import { shouldSendOnEnter } from "@/lib/keyboard/should-send-on-enter"
 import { useChatStore } from "../../chat/store/chat-store-provider"
@@ -220,6 +230,42 @@ export const MessageInput = () => {
     }
   }, [form, replyToMessage, isPrivateReply])
 
+  // Inbox translation. All of it is inert while the workspace has translation
+  // off: the chip is hidden, no preview runs, and `translate` is never added to
+  // the message, so the composer sends exactly what it did before.
+  const conversationTranslation = useConversationTranslation()
+  const draftText = useWatch({ control: form.control, name: "text" })
+  const draftFiles = useWatch({ control: form.control, name: "files" })
+  const composerTranslation = resolveComposerTranslation({
+    workspaceEnabled: conversationTranslation.workspaceEnabled,
+    conversationEnabled: conversationTranslation.conversationEnabled,
+    language: conversationTranslation.language,
+    workspaceLanguage: conversationTranslation.workspaceLanguage,
+    hasFiles:
+      selectedMediaFiles.length > 0 ||
+      (Array.isArray(draftFiles) && draftFiles.length > 0),
+    isCommentOrPrivateReply: Boolean(replyToMessage ?? lastContactComment),
+  })
+  const translatesSend = willTranslateSend(composerTranslation)
+  const [previewEnabled, setPreviewEnabled] = useTranslationPreviewPreference()
+  const {
+    preview: translationPreview,
+    translate: translatePreview,
+    edit: editPreview,
+    reset: resetPreview,
+  } = useTranslationPreview({
+    conversationId: activeConversationId,
+    text: draftText ?? "",
+    language:
+      composerTranslation.kind === "active"
+        ? composerTranslation.language
+        : null,
+    enabled: previewEnabled && composerTranslation.kind === "active",
+  })
+  const isDetectingLanguage = useTranslationUiStore((state) =>
+    Object.values(state.entries).some((entry) => entry.state === "pending"),
+  )
+
   // Memoize emoji selection handler
   const setContent = useCallback(
     (value: string, insert = false) => {
@@ -395,6 +441,21 @@ export const MessageInput = () => {
     }
 
     const replyTarget = replyToMessage ?? lastContactComment
+    // Captured now, with the rest of the message: the box is cleared at once
+    // and the queue sends later, so a preview or setting changed after Enter
+    // must not change a message that is already queued. A translation the
+    // agent reviewed is sent as is, but only when it still matches the sentence
+    // and the language; otherwise the server translates again.
+    const reviewedTranslation =
+      translationPreview.status === "ready" &&
+      composerTranslation.kind === "active" &&
+      translationPreview.language === composerTranslation.language &&
+      translationPreview.translated.trim() !== ""
+        ? {
+            text: translationPreview.translated.trim(),
+            targetLanguage: composerTranslation.language,
+          }
+        : undefined
     const values = {
       ...form.getValues(),
       clientId: createId(),
@@ -402,6 +463,9 @@ export const MessageInput = () => {
       replyToMessageId: replyTarget?.id,
       replyToMessageCreatedAt: replyTarget?.createdAt ?? undefined,
       isPrivateReply: replyToMessage ? isPrivateReply : undefined,
+      ...(translatesSend
+        ? { translate: true, editedTranslation: reviewedTranslation }
+        : {}),
     }
     const parsed = createMessageWithRoutingBypassRequest.safeParse(values)
     if (!parsed.success) {
@@ -429,9 +493,14 @@ export const MessageInput = () => {
     form.setValue("mediaFileIds", [])
     setSelectedMediaFiles([])
     setReplyToMessage(null)
+    resetPreview()
     textareaRef.current?.focus()
   }, [
     appendOptimistic,
+    composerTranslation,
+    resetPreview,
+    translatesSend,
+    translationPreview,
     bypassThreadControlLock,
     channelType,
     conversation,
@@ -641,6 +710,13 @@ export const MessageInput = () => {
               reason={sendQueue.holdReason}
             />
           )}
+          {composerTranslation.kind === "unknownLanguage" && (
+            <p className="mx-2.5 mb-1 rounded-md border bg-muted/50 px-3 py-1.5 text-muted-foreground text-xs">
+              {isDetectingLanguage
+                ? t("inboxTranslation.composer.hintDetecting")
+                : t("inboxTranslation.composer.hintUnknown")}
+            </p>
+          )}
           {replyToMessage && (
             <div className="mx-2.5 mb-1 flex items-start gap-2 rounded-lg border-primary bg-muted px-3 py-2 text-sm">
               {isPrivateReply ? (
@@ -692,6 +768,14 @@ export const MessageInput = () => {
               )}
             />
           </div>
+          {composerTranslation.kind === "active" && (
+            <ComposerTranslationPreview
+              language={composerTranslation.language}
+              onEdit={editPreview}
+              onTranslate={translatePreview}
+              preview={translationPreview}
+            />
+          )}
           {!isInstagramPostComment && (
             <div className="px-2">
               <FileUploadPreview ref={fileUploadRef} />
@@ -725,13 +809,21 @@ export const MessageInput = () => {
             </div>
           )}
           <div className="scrollbar-hide flex w-full items-center gap-2 overflow-x-auto ps-2.5">
-            <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-1 items-center gap-1">
               <InboxIcon
                 channel={
                   (conversation?.contactInboxes[0]?.channel ??
                     "webchat") as ChannelType
                 }
               />
+              {conversation && (
+                <ComposerTargetLanguage
+                  conversation={conversation}
+                  onPreviewEnabledChange={setPreviewEnabled}
+                  previewEnabled={previewEnabled}
+                  state={composerTranslation}
+                />
+              )}
             </div>
 
             <div className="message-toolbar flex shrink-0 items-center gap-2">

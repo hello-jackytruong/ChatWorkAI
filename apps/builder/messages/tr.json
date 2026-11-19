@@ -162,6 +162,93 @@
   "errors": {
     "superAdminRequired": "Bunu yapmak için çalışma alanı süper yöneticisi olmanız gerekir."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Konuşma çevirisi",
+      "description": "Müşterilerinizin mesajlarını ekibiniz için, yanıtlarınızı ise müşterileriniz için doğrudan Gelen Kutusu'nda çevirin.",
+      "saved": "Çeviri ayarları kaydedildi",
+      "readOnly": "Bu ayarları yalnızca çalışma alanı yöneticileri değiştirebilir.",
+      "languageHint": "Konuşma çevirisi açıkken müşteri mesajlarının çevrildiği dil de budur.",
+      "alert": {
+        "needsReconfiguration": "Yeniden yapılandırma gerekiyor: yapay zekâ entegrasyonu kaldırıldı veya kapatıldı.",
+        "noIntegration": "Çeviriyi kullanmak için önce bir yapay zekâ entegrasyonu bağlayın.",
+        "connect": "Yapay zekâyı bağla"
+      },
+      "enabled": {
+        "label": "Konuşmaları çevir",
+        "description": "Müşteri mesajları yalnızca biri konuşmayı açtığında çevrilir. Sohbet metni seçtiğiniz yapay zekâ sağlayıcısına gönderilir ve yapay zekâ anahtarınız üzerinden faturalandırılır."
+      },
+      "integration": {
+        "label": "Yapay zekâ entegrasyonu",
+        "description": "Yalnızca bağlı yapay zekâ sağlayıcıları listelenir."
+      },
+      "test": {
+        "label": "Bağlantıyı test et",
+        "button": "Test et",
+        "result": "{seconds} sn içinde tamamlandı: “{sample}” → “{translated}”",
+        "slow": "Bu model yavaş: giden mesajlar zamanında çevrilmeyebilir ve yazıldığı gibi gönderilir.",
+        "failed": "Test başarısız oldu."
+      },
+      "confirmDialog": {
+        "title": "Sohbet metni yapay zekâ sağlayıcınıza gönderilsin mi?",
+        "description": "Konuşma metni, çevrilmek üzere seçtiğiniz yapay zekâ sağlayıcısına gönderilecek. Eski mesajlar da konuşmayı açtığınızda veya onlara geri kaydırdığınızda çevrilir.",
+        "confirm": "Aç"
+      }
+    },
+    "message": {
+      "translating": "Çevriliyor…",
+      "stillWaiting": "Çeviri hâlâ bekleniyor",
+      "requestAgain": "Yeniden iste",
+      "failed": "Çevrilemedi",
+      "retry": "Yeniden dene",
+      "original": "Orijinal · {language}",
+      "originalNoLanguage": "Orijinal",
+      "sent": "Gönderildi · {language}",
+      "sentNoLanguage": "Gönderildi",
+      "translatedFrom": "{language} dilinden çevrildi. Orijinali göster",
+      "translatedFromNoLanguage": "Çevrildi. Orijinali göster",
+      "sentIn": "{language} dilinde gönderildi. Gönderileni göster",
+      "sentInNoLanguage": "Çevrilerek gönderildi. Gönderileni göster",
+      "hideOriginal": "Orijinali gizle",
+      "hideSent": "Gönderileni gizle"
+    },
+    "badge": {
+      "tooltip": "Müşteri dili: {language}"
+    },
+    "menu": {
+      "translateConversation": "Bu konuşmayı çevir",
+      "showOriginals": "Orijinal metni göster"
+    },
+    "composer": {
+      "hintUnknown": "Müşterinin dili henüz bilinmiyor — mesaj yazıldığı gibi gönderilecek",
+      "hintDetecting": "Müşterinin dili algılanıyor…",
+      "chip": {
+        "aria": "Çeviri dili",
+        "target": "→ {language}",
+        "sameLanguage": "Çalışma alanıyla aynı dil",
+        "unknown": "Dil bilinmiyor",
+        "hasFiles": "Dosyalı mesajlar çevrilmez",
+        "off": "Çeviri kapalı"
+      },
+      "popover": {
+        "customerLanguage": "Müşteri dili",
+        "chooseLanguage": "Bir dil seçin",
+        "preview": "Çeviriyi önizle",
+        "turnOn": "Bu konuşma için çeviriyi aç",
+        "turnOff": "Bu konuşma için çeviriyi kapat"
+      },
+      "preview": {
+        "title": "Müşteriye gönderildi · {language}",
+        "translating": "Çevriliyor…",
+        "needsRetranslate": "Yeniden çevrilmesi gerekiyor",
+        "retranslate": "Yeniden çevir",
+        "failed": "Çevrilemedi — gönderirken yeniden denenecek"
+      }
+    },
+    "toast": {
+      "fallback": "Zamanında çevrilemedi — orijinal mesaj gönderildi"
+    }
+  },
   "states": {
     "success": "Başarılı",
     "error": "Hata",

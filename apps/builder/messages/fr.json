@@ -162,6 +162,93 @@
   "errors": {
     "superAdminRequired": "Vous devez être super-administrateur de l’espace de travail pour effectuer cette action."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Traduction des conversations",
+      "description": "Traduisez les messages de vos clients pour votre équipe, et vos réponses pour vos clients, directement dans la boîte de réception.",
+      "saved": "Paramètres de traduction enregistrés",
+      "readOnly": "Seuls les administrateurs de l'espace de travail peuvent modifier ces paramètres.",
+      "languageHint": "C'est aussi la langue dans laquelle les messages des clients sont traduits lorsque la traduction des conversations est activée.",
+      "alert": {
+        "needsReconfiguration": "Reconfiguration nécessaire : l'intégration d'IA a été supprimée ou désactivée.",
+        "noIntegration": "Connectez d'abord une intégration d'IA pour utiliser la traduction.",
+        "connect": "Connecter l'IA"
+      },
+      "enabled": {
+        "label": "Traduire les conversations",
+        "description": "Les messages des clients ne sont traduits que lorsque quelqu'un ouvre la conversation. Le texte du chat est envoyé au fournisseur d'IA que vous choisissez et facturé sur votre clé d'IA."
+      },
+      "integration": {
+        "label": "Intégration d'IA",
+        "description": "Seuls les fournisseurs d'IA connectés sont listés."
+      },
+      "test": {
+        "label": "Tester la connexion",
+        "button": "Tester",
+        "result": "Terminé en {seconds} s : « {sample} » → « {translated} »",
+        "slow": "Ce modèle est lent : les messages sortants risquent de ne pas être traduits à temps et seront envoyés tels quels.",
+        "failed": "Le test a échoué."
+      },
+      "confirmDialog": {
+        "title": "Envoyer le texte du chat à votre fournisseur d'IA ?",
+        "description": "Le texte de la conversation sera envoyé au fournisseur d'IA que vous avez choisi pour être traduit. Les anciens messages sont aussi traduits lorsque vous ouvrez la conversation ou remontez jusqu'à eux.",
+        "confirm": "Activer"
+      }
+    },
+    "message": {
+      "translating": "Traduction en cours…",
+      "stillWaiting": "Toujours en attente de la traduction",
+      "requestAgain": "Redemander",
+      "failed": "Traduction impossible",
+      "retry": "Réessayer",
+      "original": "Original · {language}",
+      "originalNoLanguage": "Original",
+      "sent": "Envoyé · {language}",
+      "sentNoLanguage": "Envoyé",
+      "translatedFrom": "Traduit de {language}. Afficher l'original",
+      "translatedFromNoLanguage": "Traduit. Afficher l'original",
+      "sentIn": "Envoyé en {language}. Afficher ce qui a été envoyé",
+      "sentInNoLanguage": "Envoyé traduit. Afficher ce qui a été envoyé",
+      "hideOriginal": "Masquer l'original",
+      "hideSent": "Masquer ce qui a été envoyé"
+    },
+    "badge": {
+      "tooltip": "Langue du client : {language}"
+    },
+    "menu": {
+      "translateConversation": "Traduire cette conversation",
+      "showOriginals": "Afficher le texte original"
+    },
+    "composer": {
+      "hintUnknown": "La langue du client n'est pas encore connue : le message sera envoyé tel quel",
+      "hintDetecting": "Détection de la langue du client…",
+      "chip": {
+        "aria": "Langue de traduction",
+        "target": "→ {language}",
+        "sameLanguage": "Même langue que l'espace de travail",
+        "unknown": "Langue inconnue",
+        "hasFiles": "Les messages avec fichiers ne sont pas traduits",
+        "off": "Traduction désactivée"
+      },
+      "popover": {
+        "customerLanguage": "Langue du client",
+        "chooseLanguage": "Choisir une langue",
+        "preview": "Aperçu de la traduction",
+        "turnOn": "Activer la traduction pour cette conversation",
+        "turnOff": "Désactiver la traduction pour cette conversation"
+      },
+      "preview": {
+        "title": "Envoyé au client · {language}",
+        "translating": "Traduction en cours…",
+        "needsRetranslate": "À traduire de nouveau",
+        "retranslate": "Traduire à nouveau",
+        "failed": "Traduction impossible : une nouvelle tentative aura lieu à l'envoi"
+      }
+    },
+    "toast": {
+      "fallback": "Traduction trop lente : le message original a été envoyé"
+    }
+  },
   "states": {
     "success": "Réussite",
     "error": "Erreur",

@@ -22,6 +22,8 @@ export const HEAVY_WORKSPACE_TABLES = [
   "FlowRun",
   "FlowVersion",
   "ContactOnSmartDelay",
+  // Child of Conversation (cascade), so it drains before it.
+  "MessageTranslation",
   "Conversation",
   "Contact",
 ] as const

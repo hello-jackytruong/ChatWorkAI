@@ -1689,6 +1689,93 @@
       }
     }
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "對話翻譯",
+      "description": "在收件匣中，為團隊翻譯客戶的訊息，並為客戶翻譯你的回覆。",
+      "saved": "翻譯設定已儲存",
+      "readOnly": "只有工作區管理員可以變更這些設定。",
+      "languageHint": "也是開啟對話翻譯後，客戶訊息所翻譯成的語言。",
+      "alert": {
+        "needsReconfiguration": "需要重新設定：AI 整合已被移除或已關閉。",
+        "noIntegration": "請先連接 AI 整合以使用翻譯。",
+        "connect": "連接 AI"
+      },
+      "enabled": {
+        "label": "翻譯對話",
+        "description": "只有在有人開啟對話時才會翻譯客戶訊息。聊天文字會傳送給你選擇的 AI 供應商，並依你的 AI 金鑰計費。"
+      },
+      "integration": {
+        "label": "AI 整合",
+        "description": "僅列出已連接的 AI 供應商。"
+      },
+      "test": {
+        "label": "測試連線",
+        "button": "測試",
+        "result": "耗時 {seconds} 秒：「{sample}」→「{translated}」",
+        "slow": "此模型較慢：送出的訊息可能來不及翻譯，並將依原文傳送。",
+        "failed": "測試失敗。"
+      },
+      "confirmDialog": {
+        "title": "要將聊天文字傳送給你的 AI 供應商嗎？",
+        "description": "對話文字將傳送給你選擇的 AI 供應商進行翻譯。較早的訊息在你開啟對話或向上捲動查看時也會被翻譯。",
+        "confirm": "開啟"
+      }
+    },
+    "message": {
+      "translating": "翻譯中…",
+      "stillWaiting": "仍在等待翻譯",
+      "requestAgain": "重新請求",
+      "failed": "無法翻譯",
+      "retry": "重試",
+      "original": "原文 · {language}",
+      "originalNoLanguage": "原文",
+      "sent": "已傳送 · {language}",
+      "sentNoLanguage": "已傳送",
+      "translatedFrom": "譯自{language}。顯示原文",
+      "translatedFromNoLanguage": "已翻譯。顯示原文",
+      "sentIn": "以{language}傳送。顯示已傳送內容",
+      "sentInNoLanguage": "已翻譯傳送。顯示已傳送內容",
+      "hideOriginal": "隱藏原文",
+      "hideSent": "隱藏已傳送內容"
+    },
+    "badge": {
+      "tooltip": "客戶語言：{language}"
+    },
+    "menu": {
+      "translateConversation": "翻譯此對話",
+      "showOriginals": "顯示原文"
+    },
+    "composer": {
+      "hintUnknown": "尚不清楚客戶的語言——訊息將依原文傳送",
+      "hintDetecting": "正在辨識客戶的語言…",
+      "chip": {
+        "aria": "翻譯語言",
+        "target": "→ {language}",
+        "sameLanguage": "與工作區語言相同",
+        "unknown": "語言未知",
+        "hasFiles": "含檔案的訊息不會被翻譯",
+        "off": "翻譯已關閉"
+      },
+      "popover": {
+        "customerLanguage": "客戶語言",
+        "chooseLanguage": "選擇語言",
+        "preview": "預覽翻譯",
+        "turnOn": "為此對話開啟翻譯",
+        "turnOff": "為此對話關閉翻譯"
+      },
+      "preview": {
+        "title": "傳送給客戶 · {language}",
+        "translating": "翻譯中…",
+        "needsRetranslate": "需要重新翻譯",
+        "retranslate": "重新翻譯",
+        "failed": "無法翻譯——傳送時會再次嘗試"
+      }
+    },
+    "toast": {
+      "fallback": "未能及時翻譯——已傳送原訊息"
+    }
+  },
   "messages": {
     "timeAgo": {
       "now": "剛剛",

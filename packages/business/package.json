@@ -73,6 +73,8 @@
     "./sequence": "./src/sequence/index.ts",
     "./system-field": "./src/system-field/index.ts",
     "./utils": "./src/utils.ts",
+    "./translation/language-policy": "./src/translation/language-policy.ts",
+    "./translation/noise-filter": "./src/translation/noise-filter.ts",
     "./workspace": "./src/workspace/index.ts",
     "./workspace-api-token/credentials": "./src/workspace-api-token/credentials.ts",
     "./workspace-lifecycle/predicates": "./src/workspace-lifecycle/predicates.ts",

@@ -162,6 +162,93 @@
   "errors": {
     "superAdminRequired": "Sie müssen Super-Administrator des Arbeitsbereichs sein, um dies zu tun."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Konversationsübersetzung",
+      "description": "Übersetzen Sie die Nachrichten Ihrer Kunden für Ihr Team und Ihre Antworten für Ihre Kunden – direkt im Posteingang.",
+      "saved": "Übersetzungseinstellungen gespeichert",
+      "readOnly": "Nur Workspace-Admins können diese Einstellungen ändern.",
+      "languageHint": "Auch die Sprache, in die Kundennachrichten übersetzt werden, wenn die Konversationsübersetzung aktiv ist.",
+      "alert": {
+        "needsReconfiguration": "Neukonfiguration erforderlich: Die KI-Integration wurde entfernt oder deaktiviert.",
+        "noIntegration": "Verbinden Sie zuerst eine KI-Integration, um die Übersetzung zu nutzen.",
+        "connect": "KI verbinden"
+      },
+      "enabled": {
+        "label": "Konversationen übersetzen",
+        "description": "Kundennachrichten werden nur übersetzt, wenn jemand die Konversation öffnet. Der Chat-Text wird an den gewählten KI-Anbieter gesendet und über Ihren KI-Schlüssel abgerechnet."
+      },
+      "integration": {
+        "label": "KI-Integration",
+        "description": "Es werden nur verbundene KI-Anbieter angezeigt."
+      },
+      "test": {
+        "label": "Verbindung testen",
+        "button": "Testen",
+        "result": "Fertig in {seconds} s: „{sample}“ → „{translated}“",
+        "slow": "Dieses Modell ist langsam: Ausgehende Nachrichten werden eventuell nicht rechtzeitig übersetzt und unverändert gesendet.",
+        "failed": "Der Test ist fehlgeschlagen."
+      },
+      "confirmDialog": {
+        "title": "Chat-Text an Ihren KI-Anbieter senden?",
+        "description": "Der Konversationstext wird zur Übersetzung an den gewählten KI-Anbieter gesendet. Ältere Nachrichten werden ebenfalls übersetzt, wenn du die Konversation öffnest oder zu ihnen zurückscrollst.",
+        "confirm": "Aktivieren"
+      }
+    },
+    "message": {
+      "translating": "Wird übersetzt…",
+      "stillWaiting": "Warte weiterhin auf die Übersetzung",
+      "requestAgain": "Erneut anfordern",
+      "failed": "Übersetzung nicht möglich",
+      "retry": "Erneut versuchen",
+      "original": "Original · {language}",
+      "originalNoLanguage": "Original",
+      "sent": "Gesendet · {language}",
+      "sentNoLanguage": "Gesendet",
+      "translatedFrom": "Aus {language} übersetzt. Original anzeigen",
+      "translatedFromNoLanguage": "Übersetzt. Original anzeigen",
+      "sentIn": "Auf {language} gesendet. Gesendeten Text anzeigen",
+      "sentInNoLanguage": "Übersetzt gesendet. Gesendeten Text anzeigen",
+      "hideOriginal": "Original ausblenden",
+      "hideSent": "Gesendeten Text ausblenden"
+    },
+    "badge": {
+      "tooltip": "Sprache des Kunden: {language}"
+    },
+    "menu": {
+      "translateConversation": "Diese Konversation übersetzen",
+      "showOriginals": "Originaltext anzeigen"
+    },
+    "composer": {
+      "hintUnknown": "Die Sprache des Kunden ist noch nicht bekannt – die Nachricht wird unverändert gesendet",
+      "hintDetecting": "Sprache des Kunden wird erkannt…",
+      "chip": {
+        "aria": "Übersetzungssprache",
+        "target": "→ {language}",
+        "sameLanguage": "Gleiche Sprache wie der Workspace",
+        "unknown": "Sprache unbekannt",
+        "hasFiles": "Nachrichten mit Dateien werden nicht übersetzt",
+        "off": "Übersetzung aus"
+      },
+      "popover": {
+        "customerLanguage": "Sprache des Kunden",
+        "chooseLanguage": "Sprache wählen",
+        "preview": "Übersetzung vorab ansehen",
+        "turnOn": "Übersetzung für diese Konversation aktivieren",
+        "turnOff": "Übersetzung für diese Konversation deaktivieren"
+      },
+      "preview": {
+        "title": "An den Kunden gesendet · {language}",
+        "translating": "Wird übersetzt…",
+        "needsRetranslate": "Muss erneut übersetzt werden",
+        "retranslate": "Erneut übersetzen",
+        "failed": "Übersetzung nicht möglich – beim Senden wird es erneut versucht"
+      }
+    },
+    "toast": {
+      "fallback": "Nicht rechtzeitig übersetzt – die Originalnachricht wurde gesendet"
+    }
+  },
   "states": {
     "success": "Erfolg",
     "error": "Fehler",

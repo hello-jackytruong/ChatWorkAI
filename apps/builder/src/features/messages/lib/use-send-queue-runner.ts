@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useWorkspaceId } from "@/hooks/routing"
 import { useChatStore } from "../../chat/store/chat-store-provider"
+import { readSentTranslation } from "../../translation/lib/sent-translation"
 import { createMessageAction } from "../actions/create-message.action"
 import type { CreateMessageWithRoutingBypassRequest } from "../schema/mutation"
 import {
@@ -37,6 +38,9 @@ export const useSendQueueRunner = (props: {
   const sendQueues = useChatStore((state) => state.sendQueues)
   const updateSendQueue = useChatStore((state) => state.updateSendQueue)
   const markMessageFailed = useChatStore((state) => state.markMessageFailed)
+  const attachSentTranslation = useChatStore(
+    (state) => state.attachSentTranslation,
+  )
   // Bumped by a timer to re-evaluate the queues when a gap or deadline passes.
   const [tick, setTick] = useState(0)
 
@@ -88,6 +92,20 @@ export const useSendQueueRunner = (props: {
           )
           return
         }
+        // A translated send answers with the translation (the agent's own
+        // sentence): keep it on the row so the bubble does not flicker, and say
+        // so when the original had to go out instead.
+        const sent = readSentTranslation(result?.data)
+        if (sent?.translation) {
+          attachSentTranslation({
+            messageId: sent.messageId,
+            clientId: item.clientId,
+            translation: sent.translation,
+          })
+        }
+        if (sent?.warnFallback) {
+          toast.warning(t("inboxTranslation.toast.fallback"))
+        }
         onSubmitted(conversationId)
       } catch (error) {
         fail(
@@ -95,7 +113,14 @@ export const useSendQueueRunner = (props: {
         )
       }
     },
-    [markMessageFailed, onSubmitted, t, updateSendQueue, workspaceId],
+    [
+      attachSentTranslation,
+      markMessageFailed,
+      onSubmitted,
+      t,
+      updateSendQueue,
+      workspaceId,
+    ],
   )
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` re-runs the evaluation when a timer fires

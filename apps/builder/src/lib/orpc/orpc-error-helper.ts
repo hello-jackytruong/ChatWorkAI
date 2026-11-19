@@ -8,6 +8,7 @@ import {
 } from "@chatbotx.io/database/partials"
 import type { ErrorMap } from "@orpc/server"
 import { z } from "zod"
+import { TRANSLATION_API_ERRORS } from "@/features/translation/schema/errors"
 import { DENIAL_MESSAGES } from "@/lib/workspace/authorize-workspace-access"
 
 const notFound = {
@@ -452,6 +453,24 @@ export const possibleErrorsOnGeneratingCallSummary = {
     message: "A summary is already being generated for this call.",
     status: 409,
   },
+  ...possibleIdempotencyErrors,
+} satisfies ErrorMap
+
+/**
+ * Inbox translation: every way a translation can be refused or fail, each with
+ * its own code so an agent can branch on it (`translation<Name>`). Declared on
+ * the operations that surface them instead of falling back (settings, test,
+ * preview); a send with `translate: true` never throws them, it reports the
+ * reason in `translationFallback`.
+ */
+export const possibleErrorsOnTranslating = {
+  notFound,
+  businessError,
+  ...Object.fromEntries(
+    Object.values(TRANSLATION_API_ERRORS).map(
+      ({ code, status, message }) => [code, { message, status }] as const,
+    ),
+  ),
   ...possibleIdempotencyErrors,
 } satisfies ErrorMap
 

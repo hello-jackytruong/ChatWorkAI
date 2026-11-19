@@ -10,6 +10,8 @@ import { listMessages } from "@/features/messages/queries"
 import { createMessageRequest } from "@/features/messages/schema/mutation"
 import { listMessagesResponse } from "@/features/messages/schema/query"
 import { messageResourceWithRelations } from "@/features/messages/schema/resource"
+import { withMessageTranslations } from "@/features/translation/lib/message-translations"
+import { sendOutgoing } from "@/features/translation/lib/send-outgoing"
 import { mcpSpec } from "@/lib/orpc/mcp-annotations"
 import {
   possibleErrorsOnFindingResource,
@@ -64,7 +66,8 @@ export const contactsMessagesPublicRouter = {
         "flowId" in input ? input.flowId : undefined,
       )
       const user = resolveSenderForCaller(context)
-      await messageService.createOutgoing({
+      await sendOutgoing({
+        workspaceId: context.workspace.id,
         conversation,
         contactInbox,
         input,
@@ -115,13 +118,16 @@ export const contactsMessagesPublicRouter = {
       if (!conversation) {
         throw notFoundException("Conversation not found")
       }
-      return await listMessages({
-        workspaceId: context.workspace.id,
-        conversationId: conversation.id,
-        contactInboxId: input.contactInboxId,
-        perPage: input.perPage,
-        cursor: input.cursor,
-      })
+      return await listMessages(
+        {
+          workspaceId: context.workspace.id,
+          conversationId: conversation.id,
+          contactInboxId: input.contactInboxId,
+          perPage: input.perPage,
+          cursor: input.cursor,
+        },
+        { includeTranslation: true },
+      )
     }),
 
   getMessage: inboxScopedTokenAuthAPI
@@ -150,11 +156,16 @@ export const contactsMessagesPublicRouter = {
       if (!conversation) {
         throw notFoundException("Conversation not found")
       }
-      return await messageService.findForContact({
+      const message = await messageService.findForContact({
         messageId: input.messageId,
         conversationId: conversation.id,
         workspaceId: context.workspace.id,
       })
+      const [withTranslation] = await withMessageTranslations(
+        context.workspace.id,
+        [message],
+      )
+      return withTranslation
     }),
 
   triggerAutoReply: automationScopedTokenAuthAPI

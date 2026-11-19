@@ -162,6 +162,93 @@
   "errors": {
     "superAdminRequired": "You need to be a workspace super admin to do this."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Conversation translation",
+      "description": "Translate customers' messages for your team, and your replies for your customers, inside the Inbox.",
+      "saved": "Translation settings saved",
+      "readOnly": "Only workspace admins can change these settings.",
+      "languageHint": "Also the language customers' messages are translated into when conversation translation is on.",
+      "alert": {
+        "needsReconfiguration": "Reconfiguration needed: the AI integration was removed or turned off.",
+        "noIntegration": "Connect an AI integration first to use translation.",
+        "connect": "Connect AI"
+      },
+      "enabled": {
+        "label": "Translate conversations",
+        "description": "Customer messages are translated only when someone opens the conversation. Chat text is sent to the AI provider you choose and billed to your AI key."
+      },
+      "integration": {
+        "label": "AI integration",
+        "description": "Only connected AI providers are listed."
+      },
+      "test": {
+        "label": "Test connection",
+        "button": "Test",
+        "result": "Done in {seconds} s: \"{sample}\" → \"{translated}\"",
+        "slow": "This model is slow: outgoing messages may not be translated in time and will be sent as written.",
+        "failed": "The test failed."
+      },
+      "confirmDialog": {
+        "title": "Send chat text to your AI provider?",
+        "description": "Conversation text will be sent to the AI provider you chose to be translated. Older messages are translated too when you open a conversation or scroll back to them.",
+        "confirm": "Turn on"
+      }
+    },
+    "message": {
+      "translating": "Translating…",
+      "stillWaiting": "Still waiting for the translation",
+      "requestAgain": "Request again",
+      "failed": "Could not translate",
+      "retry": "Retry",
+      "original": "Original · {language}",
+      "originalNoLanguage": "Original",
+      "sent": "Sent · {language}",
+      "sentNoLanguage": "Sent",
+      "translatedFrom": "Translated from {language}. Show original",
+      "translatedFromNoLanguage": "Translated. Show original",
+      "sentIn": "Sent in {language}. Show what was sent",
+      "sentInNoLanguage": "Sent translated. Show what was sent",
+      "hideOriginal": "Hide original",
+      "hideSent": "Hide what was sent"
+    },
+    "badge": {
+      "tooltip": "Customer language: {language}"
+    },
+    "menu": {
+      "translateConversation": "Translate this conversation",
+      "showOriginals": "Show original text"
+    },
+    "composer": {
+      "hintUnknown": "The customer's language is not known yet — the message will be sent as written",
+      "hintDetecting": "Detecting the customer's language…",
+      "chip": {
+        "aria": "Translation language",
+        "target": "→ {language}",
+        "sameLanguage": "Same language as workspace",
+        "unknown": "Language unknown",
+        "hasFiles": "Messages with files are not translated",
+        "off": "Translation off"
+      },
+      "popover": {
+        "customerLanguage": "Customer language",
+        "chooseLanguage": "Choose a language",
+        "preview": "Preview translation",
+        "turnOn": "Turn on translation for this conversation",
+        "turnOff": "Turn off translation for this conversation"
+      },
+      "preview": {
+        "title": "Sent to the customer · {language}",
+        "translating": "Translating…",
+        "needsRetranslate": "Needs translating again",
+        "retranslate": "Translate again",
+        "failed": "Could not translate — it will be tried again when you send"
+      }
+    },
+    "toast": {
+      "fallback": "Could not translate in time — the original message was sent"
+    }
+  },
   "states": {
     "success": "Success",
     "error": "Error",

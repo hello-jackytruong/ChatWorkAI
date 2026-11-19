@@ -162,6 +162,93 @@
   "errors": {
     "superAdminRequired": "Anda harus menjadi super admin workspace untuk melakukan ini."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Terjemahan percakapan",
+      "description": "Terjemahkan pesan pelanggan untuk tim Anda, dan balasan Anda untuk pelanggan, langsung di Kotak Masuk.",
+      "saved": "Pengaturan terjemahan disimpan",
+      "readOnly": "Hanya admin workspace yang dapat mengubah pengaturan ini.",
+      "languageHint": "Juga bahasa tujuan terjemahan pesan pelanggan saat terjemahan percakapan aktif.",
+      "alert": {
+        "needsReconfiguration": "Perlu dikonfigurasi ulang: integrasi AI telah dihapus atau dimatikan.",
+        "noIntegration": "Hubungkan integrasi AI terlebih dahulu untuk menggunakan terjemahan.",
+        "connect": "Hubungkan AI"
+      },
+      "enabled": {
+        "label": "Terjemahkan percakapan",
+        "description": "Pesan pelanggan hanya diterjemahkan saat seseorang membuka percakapan. Teks chat dikirim ke penyedia AI yang Anda pilih dan ditagihkan ke kunci AI Anda."
+      },
+      "integration": {
+        "label": "Integrasi AI",
+        "description": "Hanya penyedia AI yang terhubung yang ditampilkan."
+      },
+      "test": {
+        "label": "Uji koneksi",
+        "button": "Uji",
+        "result": "Selesai dalam {seconds} dtk: \"{sample}\" → \"{translated}\"",
+        "slow": "Model ini lambat: pesan keluar mungkin tidak sempat diterjemahkan dan akan dikirim apa adanya.",
+        "failed": "Pengujian gagal."
+      },
+      "confirmDialog": {
+        "title": "Kirim teks chat ke penyedia AI Anda?",
+        "description": "Teks percakapan akan dikirim ke penyedia AI yang Anda pilih untuk diterjemahkan. Pesan lama juga diterjemahkan saat Anda membuka percakapan atau menggulir kembali ke pesan tersebut.",
+        "confirm": "Aktifkan"
+      }
+    },
+    "message": {
+      "translating": "Menerjemahkan…",
+      "stillWaiting": "Masih menunggu terjemahan",
+      "requestAgain": "Minta lagi",
+      "failed": "Tidak dapat diterjemahkan",
+      "retry": "Coba lagi",
+      "original": "Asli · {language}",
+      "originalNoLanguage": "Asli",
+      "sent": "Terkirim · {language}",
+      "sentNoLanguage": "Terkirim",
+      "translatedFrom": "Diterjemahkan dari {language}. Tampilkan asli",
+      "translatedFromNoLanguage": "Diterjemahkan. Tampilkan asli",
+      "sentIn": "Dikirim dalam {language}. Tampilkan yang dikirim",
+      "sentInNoLanguage": "Dikirim terjemahan. Tampilkan yang dikirim",
+      "hideOriginal": "Sembunyikan asli",
+      "hideSent": "Sembunyikan yang dikirim"
+    },
+    "badge": {
+      "tooltip": "Bahasa pelanggan: {language}"
+    },
+    "menu": {
+      "translateConversation": "Terjemahkan percakapan ini",
+      "showOriginals": "Tampilkan teks asli"
+    },
+    "composer": {
+      "hintUnknown": "Bahasa pelanggan belum diketahui — pesan akan dikirim apa adanya",
+      "hintDetecting": "Mendeteksi bahasa pelanggan…",
+      "chip": {
+        "aria": "Bahasa terjemahan",
+        "target": "→ {language}",
+        "sameLanguage": "Bahasa yang sama dengan workspace",
+        "unknown": "Bahasa tidak diketahui",
+        "hasFiles": "Pesan dengan file tidak diterjemahkan",
+        "off": "Terjemahan mati"
+      },
+      "popover": {
+        "customerLanguage": "Bahasa pelanggan",
+        "chooseLanguage": "Pilih bahasa",
+        "preview": "Pratinjau terjemahan",
+        "turnOn": "Aktifkan terjemahan untuk percakapan ini",
+        "turnOff": "Matikan terjemahan untuk percakapan ini"
+      },
+      "preview": {
+        "title": "Dikirim ke pelanggan · {language}",
+        "translating": "Menerjemahkan…",
+        "needsRetranslate": "Perlu diterjemahkan ulang",
+        "retranslate": "Terjemahkan lagi",
+        "failed": "Tidak dapat diterjemahkan — akan dicoba lagi saat Anda mengirim"
+      }
+    },
+    "toast": {
+      "fallback": "Tidak sempat diterjemahkan — pesan asli telah dikirim"
+    }
+  },
   "states": {
     "success": "Berhasil",
     "error": "Kesalahan",

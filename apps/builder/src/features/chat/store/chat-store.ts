@@ -3,6 +3,7 @@ import type {
   ConversationBotCategory,
   ConversationStatus,
 } from "@chatbotx.io/database/partials"
+import type { MessageTranslationUpdatedData } from "@chatbotx.io/realtime-protocol"
 import { resolveMessagingWindowOpenedAt } from "@chatbotx.io/sdk"
 import { createStore } from "zustand/vanilla"
 import type { ContactFilterRequest } from "@/features/contact-filter/schema"
@@ -34,6 +35,11 @@ import type {
   MessageResource,
   MessageResourceWithRelations,
 } from "@/features/messages/schema/resource"
+import {
+  readConversationTranslation,
+  withConversationTranslation,
+} from "@/features/translation/lib/conversation-translation"
+import type { MessageTranslationResource } from "@/features/translation/schema/resource"
 import { logger } from "@/lib/log"
 import { client } from "@/lib/orpc/orpc"
 export const INBOX_CONVERSATIONS_PER_PAGE = 20
@@ -341,6 +347,26 @@ export type ChatActions = {
     messageId: string,
     attributes: { liked: boolean; hidden: boolean },
   ) => void
+  /**
+   * Inbox translation results pushed by `messageTranslationUpdated`: sets or
+   * (`removed`) drops each loaded message's translation, and records a
+   * conversation language that was just set or changed.
+   */
+  applyMessageTranslations: (
+    conversationId: string,
+    items: MessageTranslationUpdatedData["items"],
+    conversationLanguage?: string,
+  ) => void
+  /**
+   * The translation the server returned for a message this tab just sent. Looked
+   * up by `clientId` as well, because the realtime `messageCreated` may already
+   * have swapped the optimistic row for the real one (or not yet).
+   */
+  attachSentTranslation: (props: {
+    messageId?: string
+    clientId?: string
+    translation: MessageTranslationResource
+  }) => void
   updateMessageText: (
     messageId: string,
     newText: string,
@@ -1191,6 +1217,86 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
       // transcript arriving after the recording message) — a full replace, not a
       // deep merge, matching how the worker always sends the entity's complete
       // shape.
+      applyMessageTranslations: (
+        conversationId,
+        items,
+        conversationLanguage,
+      ) => {
+        if (items.length > 0) {
+          const byMessageId = new Map(
+            items.map((item) => [item.messageId, item]),
+          )
+          set((state) => {
+            let changed = false
+            const messages = state.messages.map((message) => {
+              const item = byMessageId.get(message.id)
+              if (!item || message.conversationId !== conversationId) {
+                return message
+              }
+              changed = true
+              if (item.removed) {
+                return { ...message, translation: undefined }
+              }
+              return {
+                ...message,
+                translation: {
+                  direction:
+                    message.messageType === "outgoing"
+                      ? ("outbound" as const)
+                      : ("inbound" as const),
+                  status: item.status,
+                  displayText: item.displayText ?? null,
+                  sourceLanguage: item.sourceLanguage ?? null,
+                  targetLanguage:
+                    item.targetLanguage ??
+                    message.translation?.targetLanguage ??
+                    "",
+                  failureCode: null,
+                },
+              }
+            })
+            return changed ? { messages } : state
+          })
+        }
+
+        if (conversationLanguage) {
+          const conversation = get().conversations.find(
+            (candidate) => candidate.id === conversationId,
+          )
+          if (conversation) {
+            const current = readConversationTranslation(conversation)
+            get().updateConversation(conversationId, {
+              additionalAttributes: withConversationTranslation(
+                conversation.additionalAttributes,
+                {
+                  ...(current.enabledOverride === null
+                    ? {}
+                    : { enabledOverride: current.enabledOverride }),
+                  language: conversationLanguage,
+                  languageSource: current.languageSource ?? "auto",
+                },
+              ),
+            })
+          }
+        }
+      },
+
+      attachSentTranslation: ({ messageId, clientId, translation }) => {
+        set((state) => {
+          const index = state.messages.findIndex(
+            (message) =>
+              (messageId !== undefined && message.id === messageId) ||
+              (clientId !== undefined && message.clientId === clientId),
+          )
+          if (index === -1) {
+            return state
+          }
+          const messages = [...state.messages]
+          messages[index] = { ...messages[index], translation }
+          return { messages }
+        })
+      },
+
       updateMessageContentAttributes: (messageId, contentAttributes) => {
         set(
           (state) =>
@@ -1352,7 +1458,9 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
         set(
           (state) =>
             replaceMessageById(state.messages, messageId, (message) => {
-              const base = { ...message, text: newText }
+              // A new text makes the old translation wrong: drop it here; the
+              // worker also deletes its row, and the inbox asks again.
+              const base = { ...message, text: newText, translation: undefined }
               if (!attachmentUpdate) {
                 return base
               }

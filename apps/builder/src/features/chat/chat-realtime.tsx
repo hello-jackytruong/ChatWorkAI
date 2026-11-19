@@ -32,6 +32,7 @@ export function ChatRealtime() {
 
   const {
     applyAgentLastReadAt,
+    applyMessageTranslations,
     assignMessageCommentId,
     bubbleConversationToTop,
     handleNewMessages,
@@ -50,6 +51,7 @@ export function ChatRealtime() {
   } = useChatStore(
     useShallow((state) => ({
       applyAgentLastReadAt: state.applyAgentLastReadAt,
+      applyMessageTranslations: state.applyMessageTranslations,
       assignMessageCommentId: state.assignMessageCommentId,
       bubbleConversationToTop: state.bubbleConversationToTop,
       handleNewMessages: state.handleNewMessages,
@@ -249,6 +251,11 @@ export function ChatRealtime() {
         newAttachmentHeight: data.newAttachmentHeight,
         removedAttachment: data.removedAttachment ?? false,
       })
+    },
+    messageTranslationUpdated: (event) => {
+      flushPendingCreatedMessages()
+      const { conversationId, items, conversationLanguage } = event.data
+      applyMessageTranslations(conversationId, items, conversationLanguage)
     },
     messageContentUpdated: (event) => {
       flushPendingCreatedMessages()

@@ -3,6 +3,7 @@ import { sendProductsContentSchema } from "@chatbotx.io/flow-config"
 import { zodBigintAsString } from "@chatbotx.io/utils"
 import { z } from "zod"
 import { zodGuestConversationId } from "@/features/integration-webchat/lib/guest-conversation-id"
+import { translationLanguage } from "@/features/translation/schema/resource"
 
 const MAX_FILE_SIZE = 5 * 1000 * 1000
 
@@ -157,8 +158,56 @@ export const createMessageRequest = z
         .describe(
           "When true, sends as a comment-anchored private reply DM instead of a public comment reply.",
         ),
+      translate: z
+        .boolean()
+        .optional()
+        .describe(
+          "Inbox translation: translate `text` into the customer's language before sending. Only for a plain text message (no files, media, products, flow, reply or private reply). The customer's language must be known (`translation.getConversationState`). Waits at most 3 s for the translation; if translation is off, the language is unknown, or the model is slow or fails, the original text is sent and the response says why in `translationFallback`. The stored message is what the customer received; `translation.displayText` is what you wrote.",
+        ),
+      editedTranslation: z
+        .object({
+          text: z.string().trim().min(1).max(1000),
+          targetLanguage: translationLanguage,
+        })
+        .optional()
+        .describe(
+          "A translation you reviewed or edited (from `translation.previewText`), sent as is instead of translating again. Used only when `targetLanguage` still matches the conversation's language; otherwise it is discarded, the text is translated again, and the response sets `editedTranslationDiscarded`. Requires `translate: true`.",
+        ),
     }),
   )
+  .superRefine((request, context) => {
+    const wantsTranslation =
+      request.translate === true || request.editedTranslation !== undefined
+    if (!wantsTranslation) {
+      return
+    }
+    if (request.translate !== true) {
+      context.addIssue({
+        code: "custom",
+        path: ["translate"],
+        message: "`editedTranslation` requires `translate: true`",
+      })
+    }
+    const asRecord: Record<string, unknown> = request
+    const notPlainText = [
+      "files",
+      "mediaFile",
+      "mediaFileId",
+      "mediaFileIds",
+      "products",
+      "flowId",
+      "replyToMessageId",
+      "isPrivateReply",
+    ].some((field) => asRecord[field] != null)
+    if (notPlainText || typeof asRecord.text !== "string") {
+      context.addIssue({
+        code: "custom",
+        path: ["translate"],
+        message:
+          "`translate` only applies to a plain text message: no files, media, products, flow, reply or private reply",
+      })
+    }
+  })
 export type CreateMessageRequest = z.infer<typeof createMessageRequest>
 
 /**

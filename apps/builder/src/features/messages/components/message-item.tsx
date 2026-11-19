@@ -123,6 +123,20 @@ type MessageItemProps = {
    * chat store, which the guest webchat view does not have.
    */
   renderResend?: (message: MessageItemProps["message"]) => ReactNode
+  /** Inbox only: omitted means the bubble renders exactly as before. */
+  translation?: MessageItemTranslation
+}
+
+/**
+ * Inbox translation for one bubble, computed by the inbox (never by the guest
+ * view). `mainText` replaces the text shown first (the translation of a
+ * customer message, or what the agent typed); `footer` is rendered under it.
+ */
+export type MessageItemTranslation = {
+  mainText?: string
+  footer: ReactNode
+  /** Rendered inline, after the last word of the text (the "show original" icon). */
+  inlineAction?: ReactNode
 }
 
 export const MessageItem = (props: MessageItemProps) => {
@@ -138,6 +152,7 @@ export const MessageItem = (props: MessageItemProps) => {
     renderResend,
     onDelete,
     onEdit,
+    translation,
   } = props
   const t = useTranslations("messages")
   const tRouting = useTranslations("conversationRouting")
@@ -307,15 +322,20 @@ export const MessageItem = (props: MessageItemProps) => {
                   {emailSubject && !isDeleted && (
                     <p className="mb-1 font-semibold text-xs">{emailSubject}</p>
                   )}
-                  <pre className="wrap-break-word whitespace-pre-line font-sans">
+                  <pre
+                    className="wrap-break-word whitespace-pre-line font-sans"
+                    dir={translation ? "auto" : undefined}
+                  >
                     {isDeleted ? (
                       <span className="text-xs italic">
                         {t("messageDeleted")}
                       </span>
                     ) : (
-                      message.text
+                      (translation?.mainText ?? message.text)
                     )}
+                    {!isDeleted && translation?.inlineAction}
                   </pre>
+                  {!isDeleted && translation?.footer}
                 </div>
               )}
             {!isDeleted && hasAttachments && !whatsappCall && !flowResponse && (
