@@ -317,6 +317,24 @@ export const tagChannelRepository = {
     })
   },
 
+  async listByIntegration(
+    input: {
+      workspaceId: string
+      channelType: string
+      integrationId: string
+    },
+    tx: DatabaseClient = db,
+  ): Promise<Pick<TagChannelModel, "id" | "tagId" | "externalLabelId">[]> {
+    return await tx.query.tagChannelModel.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        channelType: input.channelType,
+        integrationId: input.integrationId,
+      },
+      columns: { id: true, tagId: true, externalLabelId: true },
+    })
+  },
+
   async deleteById(
     input: { id: string },
     tx: DatabaseClient = db,

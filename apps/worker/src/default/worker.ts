@@ -137,7 +137,7 @@ function startDefaultWorker() {
         case DefaultJobAction.syncTag: {
           const { type, data } = job.data
           await runGuardedJob(data, { source: `default:${type}` }, () =>
-            handleSyncTag(data),
+            handleSyncTag(data, String(job.id ?? crypto.randomUUID())),
           )
           return
         }

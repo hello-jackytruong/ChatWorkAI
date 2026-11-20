@@ -17,6 +17,7 @@ export type ConnectionStrategy =
   | "token"
   | "api_key"
   | "self_serve"
+  | "qr_device"
 
 export type {
   ConnectionConfigField,
@@ -110,6 +111,27 @@ type SelfServeStrategy<IAuth extends AuthValue, ICreds> = {
   fromCredentials?: Handler<ICreds, IAuth>
 }
 
+type QrDeviceStrategy = {
+  strategy: Extract<ConnectionStrategy, "qr_device">
+  acceptsTrustedDeviceAuthorization?: boolean
+  authorizeUrl?: never
+  exchangeCode?: never
+  fromCredentials?: never
+  startDeviceAuthorization: Handler<
+    {
+      sessionId: string
+      workspaceId: string
+      purpose: "connect" | "reconnect"
+      targetConnectionId: string | null
+    },
+    void
+  >
+  cancelDeviceAuthorization?: Handler<
+    { sessionId: string; workspaceId: string },
+    void
+  >
+}
+
 type MultiAccount<IAuth extends AuthValue> = {
   multiAccount: true
   listCandidates: Handler<{ auth: IAuth }, ConnectionCandidate<IAuth>[]>
@@ -128,5 +150,6 @@ export type ConnectionProvider<
     | OAuthStrategy<IAuth, ICreds>
     | CredentialStrategy<IAuth, ICreds>
     | SelfServeStrategy<IAuth, ICreds>
+    | QrDeviceStrategy
   ) &
   (MultiAccount<IAuth> | SingleAccount)

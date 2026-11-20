@@ -9,7 +9,8 @@ import { beforeEach, expect, test, vi } from "vitest"
 // runtime), so the relation definitions are the only executable source of
 // "which integrations an inbox can actually carry". `packages/business`'s
 // `inbox-with-integrations-relations.test.ts` pins that set to be exactly what
-// `InboxService.withIntegrations` eager-loads.
+// `InboxService.withIntegrations` eager-loads, except explicitly secret,
+// reserved provider relations.
 import { inboxRelations } from "../../database/src/relations/inbox"
 
 /**
@@ -19,8 +20,9 @@ import { inboxRelations } from "../../database/src/relations/inbox"
  * `me` link cannot be built and `{{page_user_name}}` renders empty — with no
  * compile error and no runtime warning.
  *
- * The matrix is derived from the inbox relation definitions, not hardcoded, so
- * a channel added without threading it through both switches fails here.
+ * The matrix is derived from inbox relations whose suffix is a current
+ * `ChannelType`. Reserved provider relations must be explicitly allow-listed
+ * until they join the channel cascade.
  *
  * `api` is out of scope by construction: it has no `integration*` relation on
  * `inboxModel`, so `InboxWithIntegrations` never carries an `integrationApi`
@@ -96,10 +98,14 @@ const toChannel = (relation: string): string => {
   return `${suffix.charAt(0).toLowerCase()}${suffix.slice(1)}`
 }
 
-const channelsWithInboxIntegration = Object.keys(
+const reservedNonChannelIntegrationRelations = new Set<string>()
+
+const integrationRelations = Object.keys(
   (inboxRelations as unknown as RelationsPart).inboxModel.relations,
-)
-  .filter((relation) => relation.startsWith("integration"))
+).filter((relation) => relation.startsWith("integration"))
+
+const channelsWithInboxIntegration = integrationRelations
+  .filter((relation) => !reservedNonChannelIntegrationRelations.has(relation))
   .map((relation) => ({ channel: toChannel(relation), property: relation }))
   .sort((a, b) => a.channel.localeCompare(b.channel))
 
@@ -134,6 +140,15 @@ test("the derived channel matrix is non-empty and only contains real channels", 
     expect(channelTypes.options, `${channel} is not a ChannelType`).toContain(
       channel,
     )
+  }
+})
+
+test("reserved integration relations are explicit and are not current channels", () => {
+  expect([...reservedNonChannelIntegrationRelations]).toEqual([])
+
+  for (const relation of reservedNonChannelIntegrationRelations) {
+    expect(integrationRelations).toContain(relation)
+    expect(channelTypes.options).not.toContain(toChannel(relation))
   }
 })
 

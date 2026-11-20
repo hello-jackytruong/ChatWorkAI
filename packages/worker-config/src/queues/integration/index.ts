@@ -25,6 +25,7 @@ import type {
   CommentAnchor,
   MessageInboundOrderEntity,
   OutgoingMessage,
+  ZaloAccountTransportRoute,
 } from "@chatbotx.io/sdk"
 import type { SendFrom } from "@chatbotx.io/utils/send-from"
 import { type JobsOptions, Queue } from "bullmq"
@@ -124,6 +125,9 @@ export const IntegrationJobAction = {
   // Follow/unfollow, group join/leave, group messages and the bot's own group
   // membership — audience events that are not 1:1 messages (leaderboard scoring).
   channelAudienceEvent: "channelAudienceEvent",
+  // Provider-scoped Zalo group activity. This refreshes group metadata only
+  // and must never enter direct-message or generic audience processing.
+  zaloAccountGroupRefresh: "zaloAccountGroupRefresh",
 } as const
 
 type IntegrationJobActionValue =
@@ -135,6 +139,8 @@ export type IntegrationJobReceiveMessage = {
     integrationType: string
     integrationIdentifier: string
     payload: unknown
+    workspaceId?: string
+    zaloAccountRoute?: Extract<ZaloAccountTransportRoute, { kind: "account" }>
   }
 }
 
@@ -299,6 +305,8 @@ export type IntegrationJobDeleteIncomingMessage = {
     integrationType: string
     integrationIdentifier: string
     messageId: string
+    workspaceId?: string
+    zaloAccountRoute?: Extract<ZaloAccountTransportRoute, { kind: "account" }>
   } & IncomingMessageChangeOptions
 }
 
@@ -328,6 +336,16 @@ export type IntegrationJobMessageReaction = {
 export type IntegrationJobChannelAudienceEvent = {
   type: typeof IntegrationJobAction.channelAudienceEvent
   data: ChannelAudienceEventJobData
+}
+
+export type IntegrationJobZaloAccountGroupRefresh = {
+  type: typeof IntegrationJobAction.zaloAccountGroupRefresh
+  data: {
+    workspaceId: string
+    accountId: string
+    providerGroupId: string
+    commandId: string
+  }
 }
 
 /**
@@ -360,7 +378,10 @@ export type IntegrationJobMessageStatus = {
       status: "delivered" | "failed" | "read"
       timestamp: string
       error?: unknown
+      recipientId?: string
     }
+    workspaceId?: string
+    zaloAccountRoute?: Extract<ZaloAccountTransportRoute, { kind: "account" }>
     /**
      * Set at ingress when the message this status belongs to can continue a
      * flow (a template whose Delivered/Failed button is wired to another
@@ -1591,6 +1612,7 @@ export type IntegrationJobData =
   | IntegrationJobAiHandoverBulkToggle
   | IntegrationJobContactSync
   | IntegrationJobChannelAudienceEvent
+  | IntegrationJobZaloAccountGroupRefresh
 
 export const integrationQueue = isNoRedisEnv()
   ? fakeQueue

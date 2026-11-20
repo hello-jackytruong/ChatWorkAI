@@ -159,6 +159,8 @@ export type MessageHandlers<
         metadata?: MetadataPayload
         richResponse?: RichResponseContentAttributes
         sendFrom?: SendFrom
+        /** Stable persisted send identity used by transports with command dedupe. */
+        idempotencyKey?: string
         /** See {@link ChannelSendFlowStepProps}. */
         commentAnchor?: CommentAnchor
         /** See {@link ChannelSendFlowStepProps}. */

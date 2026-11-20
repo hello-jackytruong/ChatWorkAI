@@ -59,6 +59,7 @@ import { createId } from "@chatbotx.io/utils"
 import { connectFailureCauseOf } from "@chatbotx.io/utils/connection"
 import { failSession } from "./connect-targets"
 import {
+  activateConnectionBestEffort,
   encryptedAuthorizationSchema,
   providerFailureStatus,
   resolveAdapter,
@@ -301,6 +302,14 @@ export const completeAuthorization = async (input: {
     throw rejection
   }
 
+  return await continueAuthorization(session, auth)
+}
+
+/** Continues a verified authorization regardless of how it was obtained. */
+export const continueAuthorization = async (
+  session: ConnectSessionModel,
+  auth: AuthValue,
+): Promise<ConnectSessionModel> => {
   if (isReconnectSession(session)) {
     return await completeReconnect({ session, auth })
   }
@@ -703,6 +712,11 @@ const completeReconnect = async (input: {
     await subscribeWebhookBestEffort({
       adapter,
       auth: reconnectAuth,
+      connection: updatedConnection,
+      ownerId,
+    })
+    await activateConnectionBestEffort({
+      adapter,
       connection: updatedConnection,
       ownerId,
     })

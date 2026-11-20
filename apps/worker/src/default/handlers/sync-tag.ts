@@ -8,6 +8,10 @@ import {
   logProviderError,
   logProviderErrorForChannel,
 } from "@chatbotx.io/business/error-log"
+import {
+  zaloAccountLabelService,
+  zaloAccountService,
+} from "@chatbotx.io/business/zalo-account"
 import { channelTypes } from "@chatbotx.io/database/partials"
 import {
   contactInboxRepository,
@@ -37,16 +41,19 @@ type TagWithName = { id: string; name: string; workspaceId: string }
  * the operation: create the channel labels for a new tag, attach/detach a tag
  * on a contact, or delete a tag end-to-end.
  */
-export async function handleSyncTag(data: JobSyncTag["data"]): Promise<void> {
+export async function handleSyncTag(
+  data: JobSyncTag["data"],
+  commandId: string = crypto.randomUUID(),
+): Promise<void> {
   switch (data.action) {
     case "create":
       await syncTagCreate(data)
       return
     case "attach":
-      await syncTagAttach(data)
+      await syncTagAttach({ ...data, commandId })
       return
     case "detach":
-      await syncTagDetach(data)
+      await syncTagDetach({ ...data, commandId })
       return
     case "delete":
       await syncTagDelete(data)
@@ -172,6 +179,7 @@ async function syncTagAttach(props: {
   workspaceId: string
   contactId: string
   tagId: string
+  commandId: string
 }): Promise<void> {
   const { workspaceId, contactId, tagId } = props
 
@@ -190,8 +198,39 @@ async function syncTagAttach(props: {
       await attachOnMessenger({ workspaceId, tag, contactInbox })
     } else if (contactInbox.channel === channelTypes.enum.zalo) {
       await attachOnZalo({ workspaceId, tag, contactInbox })
+    } else if (contactInbox.channel === channelTypes.enum.zaloAccount) {
+      await attachOnZaloAccount({
+        workspaceId,
+        tag,
+        contactInbox,
+        commandId: props.commandId,
+      })
     }
   }
+}
+
+async function attachOnZaloAccount(props: {
+  workspaceId: string
+  tag: TagWithName
+  contactInbox: ContactInboxModel
+  commandId: string
+}): Promise<void> {
+  const account = await zaloAccountService.findByInboxId({
+    workspaceId: props.workspaceId,
+    inboxId: props.contactInbox.inboxId,
+  })
+  if (!account) {
+    return
+  }
+  await zaloAccountLabelService.mutateAssignment({
+    workspaceId: props.workspaceId,
+    accountId: account.id,
+    contactInboxId: props.contactInbox.id,
+    sourceId: props.contactInbox.sourceId,
+    tagId: props.tag.id,
+    assigned: true,
+    commandId: `${props.commandId}:zalo-account:attach`,
+  })
 }
 
 async function attachOnMessenger(props: {
@@ -312,6 +351,7 @@ async function syncTagDetach(props: {
   workspaceId: string
   contactId: string
   tagId: string
+  commandId: string
 }): Promise<void> {
   const { workspaceId, contactId, tagId } = props
 
@@ -322,7 +362,12 @@ async function syncTagDetach(props: {
 
   for (const row of rows) {
     try {
-      await unassignOnChannel({ workspaceId, row })
+      await unassignOnChannel({
+        workspaceId,
+        tagId,
+        commandId: props.commandId,
+        row,
+      })
     } catch (error) {
       logger.warn(
         { row, error },
@@ -345,7 +390,11 @@ async function syncTagDetach(props: {
 
 async function unassignOnChannel(props: {
   workspaceId: string
+  tagId: string
+  commandId: string
   row: {
+    contactInboxId: string
+    tagChannelId: string
     channelType: string
     integrationId: string
     externalLabelId: string
@@ -381,6 +430,26 @@ async function unassignOnChannel(props: {
       ctx,
       userId: row.sourceId,
       tagName: row.externalLabelId,
+    })
+    return
+  }
+
+  if (row.channelType === channelTypes.enum.zaloAccount) {
+    const account = await zaloAccountService.findById({
+      workspaceId,
+      id: row.integrationId,
+    })
+    if (!account) {
+      return
+    }
+    await zaloAccountLabelService.mutateAssignment({
+      workspaceId,
+      accountId: account.id,
+      contactInboxId: row.contactInboxId,
+      sourceId: row.sourceId,
+      tagId: props.tagId,
+      assigned: false,
+      commandId: `${props.commandId}:zalo-account:detach`,
     })
   }
 }

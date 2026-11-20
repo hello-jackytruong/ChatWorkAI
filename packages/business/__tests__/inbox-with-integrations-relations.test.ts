@@ -15,8 +15,9 @@ import { inboxRelations } from "../../database/src/relations/inbox"
  * `TypeError: Cannot read properties of undefined (reading 'targetTable')`,
  * taking down every page that loads an inbox with its integrations.
  *
- * Both sides are read from their real definitions (no hardcoded channel list),
- * so adding a channel to one without the other fails here.
+ * Both sides are read from their real definitions. Relations that hold secret
+ * provider state must be explicitly allow-listed instead of being loaded into
+ * responses just to make the matrices equal.
  */
 
 const findManyMock = vi.fn()
@@ -67,6 +68,8 @@ const definedInboxRelations = new Set(
     (inboxRelations as unknown as RelationsPart).inboxModel.relations,
   ),
 )
+
+const secretIntegrationRelations = new Set(["integrationZaloAccount"])
 
 const captureWithClause = async (
   call: (service: {
@@ -119,7 +122,7 @@ test("every relation findWithIntegrationsById eager-loads is defined on inboxMod
   expect(undefinedRelations).toEqual([])
 })
 
-test("withIntegrations covers every integration relation inboxModel defines", async () => {
+test("withIntegrations covers every client-safe integration relation inboxModel defines", async () => {
   // Reverse direction: without this, dropping a channel from
   // `withIntegrations` would silently shrink the matrices that
   // `workspace-lifecycle.channel-switch-exhaustive.test.ts` derives from it,
@@ -130,7 +133,11 @@ test("withIntegrations covers every integration relation inboxModel defines", as
   )
 
   const definedIntegrationRelations = [...definedInboxRelations]
-    .filter((relation) => relation.startsWith("integration"))
+    .filter(
+      (relation) =>
+        relation.startsWith("integration") &&
+        !secretIntegrationRelations.has(relation),
+    )
     .sort()
 
   expect(definedIntegrationRelations).toEqual(
@@ -138,4 +145,17 @@ test("withIntegrations covers every integration relation inboxModel defines", as
       .filter((relation) => relation.startsWith("integration"))
       .sort(),
   )
+})
+
+test("secret integration relations are never eager-loaded into inbox responses", async () => {
+  const withClause = await captureWithClause(
+    (service) => service.listWithIntegrationsByWorkspace("workspace-1"),
+    findManyMock,
+  )
+
+  expect([...secretIntegrationRelations]).toEqual(["integrationZaloAccount"])
+  for (const relation of secretIntegrationRelations) {
+    expect(definedInboxRelations).toContain(relation)
+    expect(withClause).not.toHaveProperty(relation)
+  }
 })

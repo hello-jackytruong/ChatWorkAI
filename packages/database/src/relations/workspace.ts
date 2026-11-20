@@ -24,5 +24,9 @@ export const workspaceRelations = defineRelationsPart(schema, (r) => ({
       from: r.workspaceModel.id,
       to: r.workspaceApiTokenModel.workspaceId,
     }),
+    integrationZaloAccounts: r.many.integrationZaloAccountModel({
+      from: r.workspaceModel.id,
+      to: r.integrationZaloAccountModel.workspaceId,
+    }),
   },
 }))

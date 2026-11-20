@@ -1,10 +1,12 @@
 import {
   buildContext,
+  buildContextWithAuthStore,
   type IntegrationContext,
   inboxService,
   integrationThreadsService,
   workspaceService,
 } from "@chatbotx.io/business"
+import { zaloAccountService } from "@chatbotx.io/business/zalo-account"
 import { findOrFail } from "@chatbotx.io/database/client"
 import type { IntegrationType } from "@chatbotx.io/database/partials"
 import { integrationLookupRepository } from "@chatbotx.io/database/repositories"
@@ -39,6 +41,7 @@ import { integration as integrationTiktok } from "@chatbotx.io/integration-tikto
 import { integration as integrationWebchat } from "@chatbotx.io/integration-webchat"
 import { integration as integrationWhatsapp } from "@chatbotx.io/integration-whatsapp"
 import { integration as integrationZalo } from "@chatbotx.io/integration-zalo"
+import { integration as integrationZaloAccount } from "@chatbotx.io/integration-zalo-account"
 import {
   type AuthValue,
   type BaseConfig,
@@ -46,7 +49,9 @@ import {
   ChannelErrorCategory,
   type Integration,
   type IntegrationDefinition,
+  type NoneAuthConfig,
   SdkException,
+  type ZaloAccountTransportRoute,
 } from "@chatbotx.io/sdk"
 import { IntegrationNotFoundError } from "./errors"
 
@@ -78,6 +83,7 @@ export const integrations = {
   webchat: integrationWebchat,
   whatsapp: integrationWhatsapp,
   zalo: integrationZalo,
+  zaloAccount: integrationZaloAccount,
 } as const
 
 export type IntegrationKey = keyof typeof integrations
@@ -110,11 +116,79 @@ export type IntegrationRow = {
   [key: string]: unknown
 }
 
+const zaloAccountRow = (
+  account: NonNullable<Awaited<ReturnType<typeof zaloAccountService.findById>>>,
+): IntegrationRow => ({
+  ...account,
+  auth: { authType: "none" },
+  accountId: account.id,
+  displayName: account.name,
+})
+
+const zaloAccountAuthStore = (auth: NoneAuthConfig) => ({
+  load: async () => auth,
+  save: () =>
+    Promise.reject(
+      new Error("Zalo Account authorization is owned by the gateway"),
+    ),
+})
+
+export const buildIntegrationContext = async (args: {
+  workspaceId: string
+  integrationType: string
+  integrationRow: IntegrationRow
+}): Promise<IntegrationContext> => {
+  const auth = args.integrationRow.auth
+  if (args.integrationType === "zaloAccount" && auth.authType === "none") {
+    return (await buildContextWithAuthStore({
+      workspaceId: args.workspaceId,
+      auth,
+      authStore: zaloAccountAuthStore(auth),
+      integrationDetail: args.integrationRow,
+      media: {
+        channel: "zaloAccount",
+        integrationId: args.integrationRow.id,
+      },
+    })) as unknown as IntegrationContext
+  }
+  return await buildContext({
+    workspaceId: args.workspaceId,
+    integrationType: args.integrationType,
+    integration: args.integrationRow,
+  })
+}
+
 export function isInstagramViaFacebook(row: IntegrationRow): boolean {
   return row.type === "facebook"
 }
 
 export const integrationService = {
+  identifyZaloAccountFromRoute: async (
+    route: Extract<ZaloAccountTransportRoute, { kind: "account" }>,
+  ): Promise<{
+    workspace: WorkspaceModel
+    inbox: InboxModel
+    integrationRow: IntegrationRow
+  }> => {
+    const account = await zaloAccountService.findById({
+      workspaceId: route.workspaceId,
+      id: route.accountId,
+    })
+    if (!account || account.inboxId !== route.inboxId) {
+      throw new IntegrationNotFoundError("zaloAccount", route.accountId)
+    }
+    const [workspace, inbox] = await Promise.all([
+      workspaceService.findById({ id: route.workspaceId }),
+      inboxService.find({
+        where: { id: route.inboxId, workspaceId: route.workspaceId },
+      }),
+    ])
+    if (inbox?.channel !== "zaloAccount") {
+      throw new IntegrationNotFoundError("zaloAccount", route.accountId)
+    }
+    return { workspace, inbox, integrationRow: zaloAccountRow(account) }
+  },
+
   identifyInboxAndIntegrationAuthFromIdentifier: async (
     integrationType: IntegrationType,
     integrationIdentifier: string,
@@ -243,6 +317,27 @@ export const integrationService = {
   getIntegrationFromContactInbox: async (
     contactInbox: ContactInboxRoute,
   ): Promise<IntegrationRow> => {
+    if (contactInbox.channel === "zaloAccount") {
+      if (!contactInbox.workspaceId) {
+        throw new ChannelError(
+          "Zalo Account route requires a workspace",
+          ChannelErrorCategory.AUTH_FAILED,
+          { code: "integration_scope_missing" },
+        )
+      }
+      const account = await zaloAccountService.findByInboxId({
+        workspaceId: contactInbox.workspaceId,
+        inboxId: contactInbox.inboxId,
+      })
+      if (!account) {
+        throw new ChannelError(
+          "Unable to find Zalo Account integration",
+          ChannelErrorCategory.AUTH_FAILED,
+          { code: "integration_auth_missing" },
+        )
+      }
+      return zaloAccountRow(account)
+    }
     if (contactInbox.channel === "threads") {
       const integrationRow = await integrationThreadsService.findByInboxId(
         contactInbox.inboxId,
@@ -300,8 +395,13 @@ export const integrationService = {
   },
 }
 
-/** What locates a contact's integration: its channel and inbox, nothing else. */
-export type ContactInboxRoute = Pick<ContactInboxModel, "channel" | "inboxId">
+/** Channel and inbox locate the integration; workspace scopes tenant-owned routes. */
+export type ContactInboxRoute = Pick<
+  ContactInboxModel,
+  "channel" | "inboxId"
+> & {
+  workspaceId?: string
+}
 
 export type ResolvedIntegrationContext = {
   integration: ResolvedIntegration
@@ -323,7 +423,10 @@ export async function resolveIntegrationContextFromContactInbox(args: {
   }
 
   const integrationRow =
-    await integrationService.getIntegrationFromContactInbox(args.contactInbox)
+    await integrationService.getIntegrationFromContactInbox({
+      ...args.contactInbox,
+      workspaceId: args.workspaceId,
+    })
 
   if (
     args.contactInbox.channel === "instagram" &&
@@ -335,10 +438,10 @@ export async function resolveIntegrationContextFromContactInbox(args: {
   return {
     integration,
     integrationRow,
-    ctx: await buildContext({
+    ctx: await buildIntegrationContext({
       workspaceId: args.workspaceId,
       integrationType: args.contactInbox.channel,
-      integration: integrationRow,
+      integrationRow,
     }),
   }
 }

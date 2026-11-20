@@ -29,8 +29,11 @@ import {
   integrationTiktokModel,
   integrationWebchatModel,
   integrationWhatsappModel,
+  integrationZaloAccountModel,
   integrationZaloModel,
 } from "@chatbotx.io/database/schema"
+import { zaloAccountAuthSchema } from "@chatbotx.io/sdk"
+import { zaloAccountChannelAuthCodec } from "../zalo-account/auth"
 import type {
   ConnectionStoreBinding,
   makeChannelBinding,
@@ -434,5 +437,21 @@ export const buildConnectionStoreBindings = (
     tableName: "IntegrationZalo",
     identityColumn: "oaId",
     onDisconnect: "keep_row",
+  }),
+  zaloAccount: makeChannelBinding({
+    table: integrationZaloAccountModel,
+    tableName: "IntegrationZaloAccount",
+    authColumn: "encryptedAuth",
+    authCodec: zaloAccountChannelAuthCodec,
+    identityColumn: "zaloUid",
+    onDisconnect: "keep_row",
+    duplicateConstraint: "IntegrationZaloAccount_workspaceId_zaloUid_key",
+    valuesFromAuth: (auth) => {
+      const validated = zaloAccountAuthSchema.parse(auth)
+      return {
+        zaloUid: validated.zaloUid,
+        sessionVerifiedAt: new Date(),
+      }
+    },
   }),
 })

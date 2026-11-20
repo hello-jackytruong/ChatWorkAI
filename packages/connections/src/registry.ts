@@ -41,8 +41,12 @@ import { integration as integrationTiktok } from "@chatbotx.io/integration-tikto
 import { integration as integrationWebchat } from "@chatbotx.io/integration-webchat"
 import { integration as integrationWhatsapp } from "@chatbotx.io/integration-whatsapp"
 import { integration as integrationZalo } from "@chatbotx.io/integration-zalo"
+import { integration as integrationZaloAccount } from "@chatbotx.io/integration-zalo-account"
 import type { Integration, IntegrationDefinition } from "@chatbotx.io/sdk"
 import { messengerConnectionTeardownHook } from "./messenger-teardown"
+import { zaloAccountConnectionProvider } from "./zalo-account-provider"
+import { activateZaloAccountRuntime } from "./zalo-account-runtime"
+import { zaloAccountConnectionTeardownHook } from "./zalo-account-teardown"
 
 type StoreBindingKey = keyof typeof CONNECTION_STORE_BINDINGS
 
@@ -212,4 +216,13 @@ export const CONNECTION_REGISTRY: StoreBoundConnectionRegistry = {
   },
   whatsapp: fromIntegration(integrationWhatsapp, "whatsapp", "whatsapp"),
   zalo: fromIntegration(integrationZalo, "zalo", "zalo"),
+  zaloAccount: {
+    integration: integrationZaloAccount,
+    provider: zaloAccountConnectionProvider,
+    store: CONNECTION_STORE_BINDINGS.zaloAccount ?? undefined,
+    storeKey: "zaloAccount",
+    teardown: zaloAccountConnectionTeardownHook,
+    teardownMustSucceed: true,
+    activated: activateZaloAccountRuntime,
+  },
 }

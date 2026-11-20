@@ -221,6 +221,7 @@ describe("channel policy", () => {
       webchat: stepSupport.unsupported,
       whatsapp: stepSupport.full,
       zalo: stepSupport.unsupported,
+      zaloAccount: stepSupport.unsupported,
       line: stepSupport.unsupported,
     })
   })

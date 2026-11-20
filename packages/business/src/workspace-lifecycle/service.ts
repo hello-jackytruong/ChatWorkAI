@@ -32,6 +32,7 @@ import {
   integrationTiktokModel,
   integrationWebchatModel,
   integrationWhatsappModel,
+  integrationZaloAccountModel,
   integrationZaloModel,
   tagChannelModel,
   whatsappCoexistStagingModel,
@@ -76,6 +77,8 @@ import { logger } from "../logger"
 import { shopifyIntegrationService } from "../shopify/integration.service"
 import { userQuotaService } from "../user-quota/service"
 import { wooCommerceIntegrationService } from "../woocommerce/integration.service"
+import { zaloAccountService } from "../zalo-account/service"
+import { zaloAccountCommandTransportService } from "../zalo-account/transport.service"
 import {
   cancelInFlightBroadcastsForWorkspace,
   completeActiveSequenceEnrollmentBatch,
@@ -706,6 +709,29 @@ class WorkspaceLifecycleService extends BaseService {
     )
 
     switch (inbox.channel) {
+      case channelTypes.enum.zaloAccount: {
+        const account = await zaloAccountService.findByInboxId({
+          workspaceId: inbox.workspaceId,
+          inboxId: inbox.id,
+        })
+        if (account) {
+          await zaloAccountCommandTransportService.stopAndWait({
+            commandId: `teardown:${teardownLevel}:${inbox.id}`,
+            workspaceId: inbox.workspaceId,
+            accountId: account.id,
+            inboxId: inbox.id,
+            ttlMs: 30_000,
+            waitTimeoutMs: 10_000,
+          })
+          if (removeIntegrationRow) {
+            await tx
+              .delete(integrationZaloAccountModel)
+              .where(eq(integrationZaloAccountModel.id, account.id))
+          }
+        }
+        await finish()
+        return
+      }
       case channelTypes.enum.messenger: {
         if (removeIntegrationRow && inbox.integrationMessenger) {
           await tx

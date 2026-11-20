@@ -24,6 +24,10 @@ export type ConnectionTeardownHook = (input: {
   auth: AuthValue
 }) => Promise<ConnectionTeardownResult>
 
+export type ConnectionActivatedHook = (input: {
+  connection: ConnectionModel
+}) => Promise<void>
+
 export type { SelfServeSecret } from "@chatbotx.io/utils/connection"
 
 export type SelfServeConnectActor =
@@ -87,6 +91,17 @@ export type ConnectionAdapter = {
    * `MetaCapiEvent`/tag rows the generic store binding doesn't know about.
    */
   teardown?: ConnectionTeardownHook
+  /**
+   * Socket-owning local providers must prove the current runtime was stopped
+   * before durable state or encrypted authorization is removed.
+   */
+  teardownMustSucceed?: boolean
+  /**
+   * Runs after a connect/reconnect transaction commits. Providers with a
+   * durable local runtime use this hook to enqueue its activation without
+   * coupling the generic connection engine to a provider name.
+   */
+  activated?: ConnectionActivatedHook
   /**
    * Provisions the channel rows for a `self_serve` provider from its parsed
    * `config`, returning a one-time `secret` when the channel mints one.

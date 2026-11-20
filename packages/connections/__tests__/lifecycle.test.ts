@@ -202,6 +202,27 @@ describe("disconnect", () => {
     )
   })
 
+  test("fails closed before local mutation when a socket-owning adapter cannot confirm teardown", async () => {
+    mocks.resolveAdapter.mockReturnValue({
+      integration: { disconnect: mocks.integrationDisconnect },
+      provider: {},
+      store: {
+        loadAuthByForeignKey: mocks.loadAuthByForeignKey,
+        deleteRowByForeignKey: mocks.deleteRowByForeignKey,
+      },
+      teardown: mocks.teardown,
+      teardownMustSucceed: true,
+    })
+    mocks.teardown.mockRejectedValueOnce(new Error("socket stop timeout"))
+
+    await expect(
+      disconnect({ connectionId: "conn-1", workspaceId: "ws-1" }),
+    ).rejects.toThrow("socket stop timeout")
+
+    expect(mocks.transition).not.toHaveBeenCalled()
+    expect(mocks.deleteRowByForeignKey).not.toHaveBeenCalled()
+  })
+
   test("sanitizes a provider-side teardown failure before persisting it as Connection.lastError", async () => {
     // Exercises the generic `adapter.integration.disconnect` teardown step
     // (needs `skipGenericRemoteTeardown: false` so it actually runs).

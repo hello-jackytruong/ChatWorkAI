@@ -1181,6 +1181,40 @@ class TagService extends BaseService {
     })
   }
 
+  async syncNameFromChannel(props: {
+    workspaceId: string
+    id: string
+    name: string
+  }): Promise<boolean> {
+    const existing = await db.query.tagModel.findFirst({
+      where: {
+        workspaceId: props.workspaceId,
+        name: props.name,
+        deletedAt: { isNull: true as const },
+        id: { ne: props.id },
+      },
+      columns: { id: true },
+    })
+    if (existing) {
+      return false
+    }
+    const [updated] = await db
+      .update(tagModel)
+      .set({ name: props.name, updatedAt: new Date() })
+      .where(
+        and(
+          eq(tagModel.id, props.id),
+          eq(tagModel.workspaceId, props.workspaceId),
+          isNull(tagModel.deletedAt),
+        ),
+      )
+      .returning({ id: tagModel.id })
+    if (updated) {
+      await this.invalidateCacheTags(tagCacheTags(props.workspaceId))
+    }
+    return Boolean(updated)
+  }
+
   /**
    * Workspace-scoped tag name lookup used by the webhook payload builder.
    * Tag ids are globally unique, so an id-only lookup would leak another

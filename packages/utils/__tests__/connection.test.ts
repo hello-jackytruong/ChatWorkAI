@@ -80,6 +80,52 @@ describe("connectSessionNextActionSchema", () => {
       connectSessionNextActionSchema.safeParse({ type: "redirect" }).success,
     ).toBe(false)
   })
+
+  test("accepts a bounded raster QR image action", () => {
+    expect(
+      connectSessionNextActionSchema.parse({
+        type: "show_qr",
+        imageDataUrl: "data:image/png;base64,QUJD",
+        expiresAt: "2026-11-19T09:00:00.000Z",
+      }),
+    ).toEqual({
+      type: "show_qr",
+      imageDataUrl: "data:image/png;base64,QUJD",
+      expiresAt: "2026-11-19T09:00:00.000Z",
+    })
+  })
+
+  test.each([
+    "https://example.com/qr.png",
+    "data:image/svg+xml;base64,QUJD",
+    "data:text/plain;base64,QUJD",
+    "data:image/png;base64,not base64",
+  ])("rejects unsafe QR image payload %s", (imageDataUrl) => {
+    expect(
+      connectSessionNextActionSchema.safeParse({
+        type: "show_qr",
+        imageDataUrl,
+        expiresAt: "2026-11-19T09:00:00.000Z",
+      }).success,
+    ).toBe(false)
+  })
+
+  test("rejects invalid QR expiry and oversized payloads", () => {
+    expect(
+      connectSessionNextActionSchema.safeParse({
+        type: "show_qr",
+        imageDataUrl: "data:image/png;base64,QUJD",
+        expiresAt: "tomorrow",
+      }).success,
+    ).toBe(false)
+    expect(
+      connectSessionNextActionSchema.safeParse({
+        type: "show_qr",
+        imageDataUrl: `data:image/png;base64,${"A".repeat(256_001)}`,
+        expiresAt: "2026-11-19T09:00:00.000Z",
+      }).success,
+    ).toBe(false)
+  })
 })
 
 describe("appendConnectError", () => {

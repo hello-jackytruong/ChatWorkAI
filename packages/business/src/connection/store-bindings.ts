@@ -146,21 +146,36 @@ const pickAllowed = <TColumn extends string>(
 
 /**
  * Channel-satellite binding: a table with `id`, `workspaceId`, `inboxId`,
- * `auth`, `name`, and (usually) one natural external identity column. Covers
- * api/messenger/whatsapp/zalo/smtp/telegram/tiktok/webchat and the
- * instagram/instagramFacebook split over `IntegrationInstagram`.
+ * `name`, a configurable auth column, and (usually) one natural external
+ * identity column. Covers api/messenger/whatsapp/zalo/smtp/telegram/tiktok/
+ * webchat and the instagram/instagramFacebook split over
+ * `IntegrationInstagram`.
  */
 type ChannelSatelliteTable = PgTable & {
   id: AnyPgColumn
-  auth: AnyPgColumn
   name: AnyPgColumn
   workspaceId: AnyPgColumn
   inboxId: AnyPgColumn
 }
 
+export type ChannelAuthCodec = {
+  encode: (
+    auth: AuthValue,
+    workspaceId: string,
+    inboxId: string,
+  ) => Promise<unknown>
+  decode: (
+    stored: unknown,
+    workspaceId: string,
+    inboxId: string,
+  ) => Promise<AuthValue>
+}
+
 export const makeChannelBinding = <TTable extends ChannelSatelliteTable>(opts: {
   table: TTable
   tableName: string
+  authColumn?: "auth" | "encryptedAuth"
+  authCodec?: ChannelAuthCodec
   identityColumn: (Extract<keyof TTable, string> & string) | null
   onDisconnect: "delete_row" | "keep_row"
   duplicateConstraint?: string
@@ -184,6 +199,28 @@ export const makeChannelBinding = <TTable extends ChannelSatelliteTable>(opts: {
   // spanning 15 distinct tables cannot express) — upcast once here; column
   // references below stay on the narrowed `table` for real type checking.
   const rawTable: PgTable = table
+  const authColumnName = opts.authColumn ?? "auth"
+  const authColumn = table[
+    authColumnName as keyof TTable
+  ] as unknown as AnyPgColumn
+  const encodeAuth = async (
+    auth: AuthValue,
+    workspaceId: string,
+    inboxId: string,
+  ) =>
+    opts.authCodec
+      ? await opts.authCodec.encode(auth, workspaceId, inboxId)
+      : auth
+  const decodeAuth = async (
+    stored: unknown,
+    workspaceId: string,
+    inboxId: string,
+  ) =>
+    asAuthValue(
+      opts.authCodec
+        ? await opts.authCodec.decode(stored, workspaceId, inboxId)
+        : stored,
+    )
   // `identityColumn`, when set, is asserted to name a real text column on
   // `table`; there is no generic way to encode this across 15 distinct table
   // shapes, so the lookup uses a single documented cast.
@@ -208,7 +245,7 @@ export const makeChannelBinding = <TTable extends ChannelSatelliteTable>(opts: {
   return {
     loadAuthByForeignKey: async (inboxId, workspaceId, tx = db) => {
       const [row] = await tx
-        .select({ auth: table.auth })
+        .select({ auth: authColumn })
         .from(rawTable)
         .where(withExtraWhere(eq(table.inboxId, inboxId), workspaceId))
         .limit(1)
@@ -217,7 +254,7 @@ export const makeChannelBinding = <TTable extends ChannelSatelliteTable>(opts: {
           `Unable to load auth for ${opts.tableName} inbox ${inboxId}`,
         )
       }
-      return asAuthValue(row.auth)
+      return await decodeAuth(row.auth, workspaceId, inboxId)
     },
     saveAuthByForeignKey: async (
       inboxId,
@@ -230,12 +267,13 @@ export const makeChannelBinding = <TTable extends ChannelSatelliteTable>(opts: {
         config,
         opts.configColumns,
       )
+      const storedAuth = await encodeAuth(auth, workspaceId, inboxId)
       const updated = await tx
         .update(table)
         .set({
           ...safeConfig,
           ...opts.valuesFromAuth?.(auth),
-          auth,
+          [authColumnName]: storedAuth,
         } as InferInsertModel<TTable>)
         .where(withExtraWhere(eq(table.inboxId, inboxId), workspaceId))
         .returning({ id: table.id })
@@ -252,6 +290,11 @@ export const makeChannelBinding = <TTable extends ChannelSatelliteTable>(opts: {
         input.config,
         opts.configColumns,
       )
+      const storedAuth = await encodeAuth(
+        input.auth,
+        input.workspaceId,
+        input.inboxId,
+      )
       // `safeConfig` spreads first so no client-controlled key can clobber
       // the system columns set below — see `ConnectionStoreBinding.configColumns`.
       const values = {
@@ -260,7 +303,7 @@ export const makeChannelBinding = <TTable extends ChannelSatelliteTable>(opts: {
         ...opts.valuesFromAuth?.(input.auth),
         workspaceId: input.workspaceId,
         inboxId: input.inboxId,
-        auth: input.auth,
+        [authColumnName]: storedAuth,
         name: input.descriptor.displayName,
         ...identityValues,
       }

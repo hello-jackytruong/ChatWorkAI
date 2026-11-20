@@ -26,6 +26,7 @@ export * from "./error-log"
 export * from "./event-bus"
 export * from "./flow"
 export * from "./message"
+export * from "./zalo-account"
 
 export type EventMap = MessageEventMap &
   FlowEventMap &

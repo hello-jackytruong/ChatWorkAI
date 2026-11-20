@@ -4,6 +4,19 @@ import { describe, expect, it } from "vitest"
 import { CONNECTION_REGISTRY } from "../src/registry"
 
 describe("CONNECTION_REGISTRY", () => {
+  it("registers zaloAccount as a QR-device channel without a credential form", () => {
+    const adapter = CONNECTION_REGISTRY.zaloAccount
+    expect(adapter?.provider).toMatchObject({
+      kind: "channel",
+      strategy: "qr_device",
+      multiAccount: false,
+      acceptsTrustedDeviceAuthorization: true,
+      configFields: [],
+    })
+    expect(adapter?.integration?.name).toBe("zaloAccount")
+    expect(adapter?.store).toBeDefined()
+  })
+
   it("has an entry (possibly null) for every IntegrationType", () => {
     for (const type of integrationTypes.options) {
       expect(Object.hasOwn(CONNECTION_REGISTRY, type)).toBe(true)

@@ -140,6 +140,7 @@ import { LOCK_CONTENTION_POLICY } from "../../lib/lock-contention-deferral"
 import { logger } from "../../lib/logger"
 import {
   allIntegrations,
+  buildIntegrationContext,
   integrationService,
   isInstagramViaFacebook,
   resolveIntegrationContextFromContactInbox,
@@ -343,10 +344,22 @@ export const receiveMessage = async (
   }
 
   const dbIntegration =
-    await integrationService.identifyInboxAndIntegrationAuthFromIdentifier(
-      integrationType as IntegrationType,
-      integrationIdentifier,
-    )
+    integrationType === "zaloAccount"
+      ? await (async () => {
+          if (
+            !props.zaloAccountRoute ||
+            props.zaloAccountRoute.accountId !== integrationIdentifier
+          ) {
+            throw new Error("Zalo Account message route is missing or invalid")
+          }
+          return await integrationService.identifyZaloAccountFromRoute(
+            props.zaloAccountRoute,
+          )
+        })()
+      : await integrationService.identifyInboxAndIntegrationAuthFromIdentifier(
+          integrationType as IntegrationType,
+          integrationIdentifier,
+        )
   const { inbox, integrationRow } = dbIntegration
   let integration = allIntegrations[integrationType]
   if (!integration) {
@@ -368,10 +381,10 @@ export const receiveMessage = async (
   const { storageUrl } = await resolveTenantSettings({
     workspaceId: inbox.workspaceId,
   })
-  const ctx = await buildContext({
+  const ctx = await buildIntegrationContext({
     workspaceId: inbox.workspaceId,
     integrationType,
-    integration: integrationRow,
+    integrationRow,
   })
 
   const parsedMessage =

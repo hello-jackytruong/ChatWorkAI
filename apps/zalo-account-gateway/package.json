@@ -1,0 +1,34 @@
+{
+  "name": "zalo-account-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "check-types": "tsc --noEmit",
+    "dev": "dotenv -e ../../.env -- tsx --watch src/main.ts",
+    "start": "node dist/main.mjs",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@chatbotx.io/business": "workspace:*",
+    "@chatbotx.io/encryption": "workspace:*",
+    "@chatbotx.io/logger": "workspace:*",
+    "@chatbotx.io/redis": "workspace:*",
+    "@chatbotx.io/sdk": "workspace:*",
+    "@t3-oss/env-core": "catalog:",
+    "zca-js": "2.1.2",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@chatbotx.io/typescript-config": "workspace:*",
+    "@chatbotx.io/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "dotenv-cli": "catalog:",
+    "tsdown": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

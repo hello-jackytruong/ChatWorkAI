@@ -68,6 +68,11 @@ type BroadcastInboxStrategy = (
 ) => Promise<string[] | null>
 
 class InboxService extends BaseService {
+  /**
+   * Client-safe channel integrations only. `integrationZaloAccount` is
+   * deliberately excluded: its row contains encrypted device authorization
+   * and the reserved provider is not a `ChannelType` yet.
+   */
   static readonly withIntegrations = {
     integrationWhatsapp: true,
     integrationWebchat: true,

@@ -16,8 +16,9 @@ import { inboxRelations } from "../../database/src/relations/inbox"
  * workspace deletion and trial-expiry teardown (`inboxService.disconnect` only
  * flips `Inbox.status`, it never deletes the inbox row, so nothing cascades).
  *
- * The matrix is derived, never hardcoded: every `integration*` relation defined
- * on `inboxModel` must have a case that deletes the matching schema model.
+ * The matrix is derived from relations whose suffix is a current `ChannelType`.
+ * Reserved provider relations must be explicitly allow-listed until they join
+ * the channel cascade; their rows remain protected by database cascades.
  *
  * Not covered here, deliberately: `api`. `IntegrationApi` has an `inboxId` like
  * the others, but it has no `integration*` relation on `inboxModel` and is not
@@ -30,6 +31,8 @@ const listWithIntegrationsByWorkspaceMock = vi.fn()
 const disconnectInboxMock = vi.fn()
 const findByInboxIdMock = vi.fn()
 const connectionTransitionMock = vi.fn()
+const findZaloAccountByInboxIdMock = vi.fn()
+const stopZaloAccountRuntimeMock = vi.fn()
 
 vi.mock("@chatbotx.io/database/client", () => ({
   and: vi.fn((...args: unknown[]) => ({ and: args })),
@@ -88,6 +91,16 @@ vi.mock("../src/coexist/service", () => ({
   },
 }))
 
+vi.mock("../src/zalo-account/service", () => ({
+  zaloAccountService: { findByInboxId: findZaloAccountByInboxIdMock },
+}))
+
+vi.mock("../src/zalo-account/transport.service", () => ({
+  zaloAccountCommandTransportService: {
+    stopAndWait: stopZaloAccountRuntimeMock,
+  },
+}))
+
 vi.mock("../src/logger", () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }))
@@ -99,10 +112,14 @@ const toChannel = (relation: string): string => {
   return `${suffix.charAt(0).toLowerCase()}${suffix.slice(1)}`
 }
 
-const channelsWithInboxIntegration = Object.keys(
+const reservedNonChannelIntegrationRelations = new Set<string>()
+
+const integrationRelations = Object.keys(
   (inboxRelations as unknown as RelationsPart).inboxModel.relations,
-)
-  .filter((relation) => relation.startsWith("integration"))
+).filter((relation) => relation.startsWith("integration"))
+
+const channelsWithInboxIntegration = integrationRelations
+  .filter((relation) => !reservedNonChannelIntegrationRelations.has(relation))
   .map((relation) => ({
     channel: toChannel(relation),
     modelName: `${relation}Model`,
@@ -119,6 +136,16 @@ beforeEach(() => {
   disconnectInboxMock.mockResolvedValue(undefined)
   findByInboxIdMock.mockResolvedValue(undefined)
   connectionTransitionMock.mockResolvedValue(undefined)
+  findZaloAccountByInboxIdMock.mockImplementation(
+    async ({ inboxId }: { inboxId: string }) =>
+      inboxId === "inbox-zaloAccount"
+        ? { id: "integration-zaloAccount" }
+        : null,
+  )
+  stopZaloAccountRuntimeMock.mockResolvedValue({
+    status: "applied",
+    result: { status: "stopped" },
+  })
 })
 
 test("the derived channel matrix is non-empty and only contains real channels", () => {
@@ -186,4 +213,33 @@ test.each(
   expect(disconnectInboxMock).toHaveBeenCalledWith(
     expect.objectContaining({ inboxId: `inbox-${channel}` }),
   )
+})
+
+test("zaloAccount teardown confirms runtime stop before mutating durable state", async () => {
+  const deleteMock = vi.fn()
+  listWithIntegrationsByWorkspaceMock.mockResolvedValue([
+    {
+      id: "inbox-zaloAccount",
+      channel: "zaloAccount",
+      workspaceId: "workspace-1",
+    },
+  ])
+  findByInboxIdMock.mockResolvedValue({ id: "connection-1" })
+  stopZaloAccountRuntimeMock.mockRejectedValue(new Error("stop timed out"))
+
+  const { workspaceLifecycleService } = await import(
+    "../src/workspace-lifecycle/service"
+  )
+  await expect(
+    workspaceLifecycleService.disconnectWorkspaceChannels({
+      workspaceId: "workspace-1",
+      ownerId: "owner-1",
+      teardownLevel: "disconnect",
+      tx: { delete: deleteMock } as never,
+    }),
+  ).rejects.toThrow("stop timed out")
+
+  expect(connectionTransitionMock).not.toHaveBeenCalled()
+  expect(disconnectInboxMock).not.toHaveBeenCalled()
+  expect(deleteMock).not.toHaveBeenCalled()
 })

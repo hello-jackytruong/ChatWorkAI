@@ -184,6 +184,36 @@ export const connectSessionRepository = {
     return row ? parseConnectSession(row) : undefined
   },
 
+  /** Advances a provider-defined step with one guarded compare-and-set. */
+  async advanceStep(
+    input: {
+      id: string
+      workspaceId: string
+      provider: IntegrationType
+      statuses: ConnectSessionStatus[]
+      expectedSteps: string[]
+      step: string
+      nextAction: ConnectSessionModel["nextAction"]
+    },
+    tx: DatabaseClient = db,
+  ): Promise<ConnectSessionModel | undefined> {
+    const [row] = await tx
+      .update(connectSessionModel)
+      .set({ step: input.step, nextAction: input.nextAction })
+      .where(
+        and(
+          eq(connectSessionModel.id, input.id),
+          eq(connectSessionModel.workspaceId, input.workspaceId),
+          eq(connectSessionModel.provider, input.provider),
+          inArray(connectSessionModel.status, input.statuses),
+          inArray(connectSessionModel.step, input.expectedSteps),
+          gt(connectSessionModel.expiresAt, sql`now()`),
+        ),
+      )
+      .returning()
+    return row ? parseConnectSession(row) : undefined
+  },
+
   /**
    * Cancels a workspace's abandoned `pending` sessions of one provider — a
    * session still `pending` never got an OAuth callback (closed tab, failed
@@ -201,6 +231,7 @@ export const connectSessionRepository = {
         status: "cancelled",
         consumedAt: sql`now()`,
         encryptedAuth: null,
+        nextAction: null,
       })
       .where(
         and(
@@ -224,6 +255,7 @@ export const connectSessionRepository = {
         status: "expired",
         consumedAt: sql`now()`,
         encryptedAuth: null,
+        nextAction: null,
       })
       .where(
         and(
@@ -360,6 +392,7 @@ export const connectSessionRepository = {
         step: sql`CASE WHEN ${isComplete} THEN 'done' ELSE ${connectSessionModel.step} END`,
         consumedAt: sql`CASE WHEN ${isComplete} THEN now() ELSE ${connectSessionModel.consumedAt} END`,
         encryptedAuth: sql`CASE WHEN ${isComplete} THEN NULL ELSE ${connectSessionModel.encryptedAuth} END`,
+        nextAction: sql`CASE WHEN ${isComplete} THEN NULL ELSE ${connectSessionModel.nextAction} END`,
       })
       .where(
         and(
@@ -391,6 +424,7 @@ export const connectSessionRepository = {
         step: "done",
         consumedAt: sql`now()`,
         encryptedAuth: null,
+        nextAction: null,
       })
       .where(
         and(

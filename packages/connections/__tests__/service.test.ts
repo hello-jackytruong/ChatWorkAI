@@ -81,6 +81,7 @@ const mocks = vi.hoisted(() => ({
   })),
   loggerError: vi.fn(),
   recordAuthorization: vi.fn(async () => undefined),
+  activated: vi.fn(async () => undefined),
 }))
 
 vi.mock("@chatbotx.io/database/repositories", () => ({
@@ -514,6 +515,7 @@ vi.mock("@chatbotx.io/business/errors", () => {
 let refreshAuthHandler: unknown = vi.fn()
 
 const mockAdapter = {
+  activated: mocks.activated,
   provider: {
     kind: "channel",
     strategy: "api_key",
@@ -2928,12 +2930,49 @@ describe("ConnectionService.connectTargets", () => {
       { targetId: "page-1", status: "connected", connectionId: "conn-new" },
     ])
     expect(result.connections).toHaveLength(1)
+    expect(mocks.activated).toHaveBeenCalledWith({
+      connection: expect.objectContaining({ id: "conn-new" }),
+    })
     expect(mocks.recordResults).toHaveBeenCalledWith({
       id: "session-1",
       workspaceId: "ws-1",
       results: result.outcomes,
       resultConnectionIds: ["conn-new"],
     })
+  })
+
+  it("keeps the committed connection and marks it degraded when runtime activation fails", async () => {
+    mocks.activated.mockRejectedValueOnce(new Error("gateway unavailable"))
+    mocks.transition.mockImplementation(async (input) =>
+      input.event === "refresh.transient_failure"
+        ? baseConnection({ id: "conn-new", status: "degraded" })
+        : baseConnection({ id: String(input.connectionId) }),
+    )
+
+    const result = await connectionService.connectTargets({
+      sessionId: "session-1",
+      workspaceId: "ws-1",
+      targetIds: ["page-1"],
+    })
+
+    expect(mocks.transition).toHaveBeenCalledWith({
+      connectionId: "conn-new",
+      event: "refresh.transient_failure",
+      reason: "refresh_failed",
+      ownerId: "owner-1",
+    })
+    expect(result.connections).toEqual([
+      expect.objectContaining({ id: "conn-new", status: "degraded" }),
+    ])
+    expect(result.outcomes).toEqual([
+      {
+        targetId: "page-1",
+        status: "connected",
+        connectionId: "conn-new",
+        detail:
+          'Connected, but provider setup did not complete — the matching entry in `connections[]` shows `status: "degraded"`; retry from the connection\'s settings.',
+      },
+    ])
   })
 
   it("reports an in-progress target without taking over its live claim", async () => {

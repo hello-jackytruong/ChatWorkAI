@@ -21,6 +21,7 @@ type FakeRedis = Redis & {
   xack: ReturnType<typeof vi.fn>
   xadd: ReturnType<typeof vi.fn>
   xautoclaim: ReturnType<typeof vi.fn>
+  xdel: ReturnType<typeof vi.fn>
   xgroup: ReturnType<typeof vi.fn>
 }
 
@@ -39,6 +40,7 @@ function createFakeRedis(): FakeRedis {
     xack: vi.fn().mockResolvedValue(1),
     xadd: vi.fn().mockResolvedValue("1-0"),
     xautoclaim: vi.fn().mockResolvedValue(["0-0", [], []]),
+    xdel: vi.fn().mockResolvedValue(1),
     xgroup: vi.fn().mockResolvedValue("OK"),
   } as unknown as FakeRedis
 }
@@ -77,6 +79,44 @@ describe("BaseEventBus consumer reliability", () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  test("moves malformed payloads to a redacted DLQ and acknowledges them", async () => {
+    const redis = createFakeRedis()
+    redis.call.mockResolvedValue([
+      [
+        "events:test",
+        [["poison-1", ["type", "test:event", "payload", "{secret-value"]]],
+      ],
+    ])
+    const bus = createBus(redis, {
+      claimIntervalMs: Number.POSITIVE_INFINITY,
+      deadLetterMaxLen: 10,
+      deleteAfterAck: true,
+    })
+
+    await bus.consumeOnceForTest()
+
+    expect(redis.xadd).toHaveBeenCalledWith(
+      "events:test:dead",
+      "MAXLEN",
+      "~",
+      10,
+      "*",
+      "originalId",
+      "poison-1",
+      "error",
+      expect.any(String),
+      "timestamp",
+      expect.any(String),
+    )
+    expect(JSON.stringify(redis.xadd.mock.calls)).not.toContain("secret-value")
+    expect(redis.xack).toHaveBeenCalledWith(
+      "events:test",
+      "test-group",
+      "poison-1",
+    )
+    expect(redis.xdel).toHaveBeenCalledWith("events:test", "poison-1")
   })
 
   test("uses a dedicated duplicate connection for blocking reads and closes it on deregister", async () => {

@@ -856,6 +856,9 @@ importers:
       '@chatbotx.io/channel-registry':
         specifier: workspace:*
         version: link:../../packages/channel-registry
+      '@chatbotx.io/connections':
+        specifier: workspace:*
+        version: link:../../packages/connections
       '@chatbotx.io/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -1106,6 +1109,58 @@ importers:
       tsx:
         specifier: 'catalog:'
         version: 4.23.0
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.0(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(@vitest/coverage-v8@5.1.0)(jsdom@25.0.1)(msw@2.14.6(@types/node@24.13.1)(typescript@5.9.3))(vite@7.3.5(@types/node@24.13.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0))
+
+  apps/zalo-account-gateway:
+    dependencies:
+      '@chatbotx.io/business':
+        specifier: workspace:*
+        version: link:../../packages/business
+      '@chatbotx.io/encryption':
+        specifier: workspace:*
+        version: link:../../packages/encryption
+      '@chatbotx.io/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@chatbotx.io/redis':
+        specifier: workspace:*
+        version: link:../../packages/redis
+      '@chatbotx.io/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@t3-oss/env-core':
+        specifier: 'catalog:'
+        version: 0.13.11(typescript@5.9.3)(valibot@1.5.0(typescript@5.9.3))(zod@4.6.7)
+      zca-js:
+        specifier: 2.1.2
+        version: 2.1.2
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@chatbotx.io/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@chatbotx.io/vitest-config':
+        specifier: workspace:*
+        version: link:../../packages/vitest-config
+      '@types/node':
+        specifier: 24.x
+        version: 24.13.1
+      dotenv-cli:
+        specifier: 'catalog:'
+        version: 11.0.0
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.3(oxc-resolver@11.21.3)(tsx@4.23.0)(typescript@5.9.3)(unrun@0.2.39)
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.0
+      typescript:
+        specifier: ^5
+        version: 5.9.3
       vitest:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(@vitest/coverage-v8@5.1.0)(jsdom@25.0.1)(msw@2.14.6(@types/node@24.13.1)(typescript@5.9.3))(vite@7.3.5(@types/node@24.13.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0))
@@ -2266,6 +2321,28 @@ importers:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(@vitest/coverage-v8@5.1.0)(jsdom@25.0.1)(msw@2.14.6(@types/node@24.13.1)(typescript@5.9.3))(vite@7.3.5(@types/node@24.13.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0))
 
+  integrations/zalo-account:
+    dependencies:
+      '@chatbotx.io/business':
+        specifier: workspace:*
+        version: link:../../packages/business
+      '@chatbotx.io/flow-config':
+        specifier: workspace:*
+        version: link:../../packages/flow-config
+      '@chatbotx.io/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+    devDependencies:
+      '@chatbotx.io/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.0(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(@vitest/coverage-v8@5.1.0)(jsdom@25.0.1)(msw@2.14.6(@types/node@24.13.1)(typescript@5.9.3))(vite@7.3.5(@types/node@24.13.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0))
+
   packages/ai:
     dependencies:
       '@ai-sdk/anthropic':
@@ -2838,6 +2915,9 @@ importers:
       '@chatbotx.io/integration-zalo':
         specifier: workspace:*
         version: link:../../integrations/zalo
+      '@chatbotx.io/integration-zalo-account':
+        specifier: workspace:*
+        version: link:../../integrations/zalo-account
       '@chatbotx.io/logger':
         specifier: workspace:*
         version: link:../logger
@@ -2959,6 +3039,9 @@ importers:
       '@chatbotx.io/integration-zalo':
         specifier: workspace:*
         version: link:../../integrations/zalo
+      '@chatbotx.io/integration-zalo-account':
+        specifier: workspace:*
+        version: link:../../integrations/zalo-account
       '@chatbotx.io/logger':
         specifier: workspace:*
         version: link:../logger
@@ -3122,6 +3205,9 @@ importers:
       '@chatbotx.io/redis':
         specifier: workspace:*
         version: link:../redis
+      '@chatbotx.io/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@chatbotx.io/worker-config':
         specifier: workspace:*
         version: link:../worker-config
@@ -7988,6 +8074,10 @@ packages:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
 
+  crypto-js@4.2.0:
+    resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
+    deprecated: Active development of CryptoJS has been discontinued. This library is no longer maintained.
+
   css-declaration-sorter@7.4.0:
     resolution: {integrity: sha512-LTuzjPoyA2vMGKKcaOqKSp7Ub2eGrNfKiZH4LpezxpNrsICGCSFvsQOI29psISxNZtaXibkC2CXzrQ5enMeGGw==}
     engines: {node: ^14 || ^16 || >=18}
@@ -10099,6 +10189,9 @@ packages:
   pako@1.0.11:
     resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
 
+  pako@2.2.0:
+    resolution: {integrity: sha512-zJq6RP/5q+TO2OpFV3FHzlPnFjmkb7Nc99a5SNjJE+uu/PkpChs+NIZSSzbBoD+6kjiISXjfYdwj1ZRQ81dz/w==}
+
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
@@ -11052,6 +11145,9 @@ packages:
     resolution: {integrity: sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g==}
     engines: {node: '>=0.10.0'}
 
+  spark-md5@3.0.2:
+    resolution: {integrity: sha512-wcFzz9cDfbuqe0FZzfi2or1sgyIrsDwmPwfZC4hiNidPdPINjeUwNfv5kldczoEAcjl9Y1L3SM7Uz2PUEQzxQw==}
+
   split2@4.2.0:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
@@ -11817,6 +11913,10 @@ packages:
   yocto-queue@1.2.2:
     resolution: {integrity: sha512-4LCcse/U2MHZ63HAJVE+v71o7yOdIe4cZ70Wpf8D/IyjDKYQLV5GD46B+hSTjJsvV5PztjvHoU580EftxjDZFQ==}
     engines: {node: '>=12.20'}
+
+  zca-js@2.1.2:
+    resolution: {integrity: sha512-82+zCqoIXnXEF6C9YuN3Kf7WKlyyujY/6Ejl2n8PkwazYkBK0k7kiPd8S7nHvC5Wl7vjwGRhDYeAM8zTHyoRxQ==}
+    engines: {node: '>=18.0.0'}
 
   zip-stream@4.1.1:
     resolution: {integrity: sha512-9qv4rlDiopXg4E69k+vMHjNN63YFMe9sZMrdlvKnCjlCRWeCBswPPMPUfx+ipsAWq1LXHe70RcbaHdJJpS6hyQ==}
@@ -13993,7 +14093,7 @@ snapshots:
       detect-libc: 2.1.2
       is-glob: 4.0.3
       node-addon-api: 7.1.1
-      picomatch: 4.0.5
+      picomatch: 4.0.7
     optionalDependencies:
       '@parcel/watcher-android-arm64': 2.5.6
       '@parcel/watcher-darwin-arm64': 2.5.6
@@ -15562,6 +15662,8 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  crypto-js@4.2.0: {}
 
   css-declaration-sorter@7.4.0(postcss@8.5.32):
     dependencies:
@@ -18024,6 +18126,8 @@ snapshots:
 
   pako@1.0.11: {}
 
+  pako@2.2.0: {}
+
   parent-module@1.0.1:
     dependencies:
       callsites: 3.1.0
@@ -19069,6 +19173,8 @@ snapshots:
 
   source-map@0.6.1: {}
 
+  spark-md5@3.0.2: {}
+
   split2@4.2.0: {}
 
   sprintf-js@1.0.3: {}
@@ -19719,6 +19825,20 @@ snapshots:
       yargs-parser: 22.0.0
 
   yocto-queue@1.2.2: {}
+
+  zca-js@2.1.2:
+    dependencies:
+      crypto-js: 4.2.0
+      form-data: 4.0.5
+      json-bigint: 1.0.0
+      pako: 2.2.0
+      semver: 7.8.5
+      spark-md5: 3.0.2
+      tough-cookie: 5.1.2
+      ws: 8.21.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   zip-stream@4.1.1:
     dependencies:

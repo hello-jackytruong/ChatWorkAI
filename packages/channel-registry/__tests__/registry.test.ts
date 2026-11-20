@@ -6,10 +6,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   buildContext: vi.fn(),
+  buildContextWithAuthStore: vi.fn(),
 }))
 
 vi.mock("@chatbotx.io/business", () => ({
   buildContext: mocks.buildContext,
+  buildContextWithAuthStore: mocks.buildContextWithAuthStore,
   inboxService: { find: vi.fn() },
   integrationThreadsService: {
     findByInboxId: vi.fn(),
@@ -29,6 +31,9 @@ describe("resolveIntegrationContextFromContactInbox", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.buildContext.mockResolvedValue({ storagePrefix: "workspace-1" })
+    mocks.buildContextWithAuthStore.mockResolvedValue({
+      storagePrefix: "workspace-1",
+    })
   })
 
   test("selects the Instagram integration matching the stored integration type", async () => {
@@ -75,6 +80,33 @@ describe("resolveIntegrationContextFromContactInbox", () => {
       workspaceId: "workspace-1",
       integrationType: "instagram",
       integration: nativeRow,
+    })
+  })
+
+  test("passes workspace scope to workspace-scoped integration lookups", async () => {
+    const contactInbox = {
+      channel: "zaloAccount",
+      inboxId: "inbox-1",
+    } as never
+    const integrationRow = {
+      id: "zalo-account-1",
+      inboxId: "inbox-1",
+      type: "zaloAccount",
+      auth: { authType: "none" as const },
+    }
+    const lookup = vi
+      .spyOn(integrationService, "getIntegrationFromContactInbox")
+      .mockResolvedValue(integrationRow)
+
+    await resolveIntegrationContextFromContactInbox({
+      workspaceId: "workspace-1",
+      contactInbox,
+    })
+
+    expect(lookup).toHaveBeenCalledWith({
+      channel: "zaloAccount",
+      inboxId: "inbox-1",
+      workspaceId: "workspace-1",
     })
   })
 })

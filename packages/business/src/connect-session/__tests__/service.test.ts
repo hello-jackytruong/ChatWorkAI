@@ -273,7 +273,7 @@ describe("connectSessionService.create", () => {
 })
 
 describe("expiry rule", () => {
-  it("lazily flips an active session past expiresAt to expired, guarded and clearing consumedAt/encryptedAuth", async () => {
+  it("lazily flips an active session past expiresAt to expired and clears secrets and actions", async () => {
     mocks.findByIdForWorkspace.mockResolvedValue(
       baseSession({ expiresAt: PAST, status: "pending" }),
     )
@@ -296,6 +296,7 @@ describe("expiry rule", () => {
           status: "expired",
           consumedAt: expect.any(Date),
           encryptedAuth: null,
+          nextAction: null,
         }),
       }),
     )
@@ -542,6 +543,7 @@ describe("connectSessionService.completeSelection", () => {
         step: "done",
         consumedAt: expect.any(Date),
         encryptedAuth: null,
+        nextAction: null,
       },
     })
     expect(result.status).toBe("completed")
@@ -642,6 +644,7 @@ describe("connectSessionService.fail / cancel", () => {
           "authorized",
           "awaiting_selection",
         ]),
+        values: expect.objectContaining({ nextAction: null }),
       }),
     )
   })
@@ -674,6 +677,11 @@ describe("connectSessionService.fail / cancel", () => {
       workspaceId: "ws-1",
     })
     expect(result.status).toBe("cancelled")
+    expect(mocks.updateWhereStatusIn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        values: expect.objectContaining({ nextAction: null }),
+      }),
+    )
   })
 
   it("cancel does not flip an already-terminal session", async () => {

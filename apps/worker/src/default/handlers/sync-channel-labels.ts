@@ -4,6 +4,7 @@ import {
   zaloIntegrationService,
 } from "@chatbotx.io/business"
 import { logProviderError } from "@chatbotx.io/business/error-log"
+import { zaloAccountLabelService } from "@chatbotx.io/business/zalo-account"
 import { type ChannelType, channelTypes } from "@chatbotx.io/database/partials"
 import {
   contactInboxRepository,
@@ -65,6 +66,14 @@ export async function handleSyncChannelLabels(
     }
 
     await runZaloScan({ workspaceId, integration })
+  }
+
+  if (channelType === channelTypes.enum.zaloAccount) {
+    await zaloAccountLabelService.sync({
+      workspaceId,
+      accountId: integrationId,
+      commandId: crypto.randomUUID(),
+    })
   }
 }
 

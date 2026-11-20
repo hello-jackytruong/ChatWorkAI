@@ -92,6 +92,9 @@ export const disconnect = async (input: {
           skipGenericRemoteTeardown = result.skipGenericRemoteTeardown
           teardownErrors.push(...(result.remoteErrors ?? []))
         } catch (err) {
+          if (adapter.teardownMustSucceed) {
+            throw err
+          }
           teardownErrors.push(
             toPublicErrorMessage(err, "Provider-side teardown failed"),
           )

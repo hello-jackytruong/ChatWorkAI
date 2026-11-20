@@ -5,6 +5,14 @@ import {
 } from "./connect-session-flow"
 import { connectTargets } from "./connect-targets"
 import { connectFromCredentials, reconnect } from "./credentials"
+import {
+  cancelDeviceSession,
+  completeDeviceAuthorization,
+  completeTrustedDeviceAuthorization,
+  markDeviceQrScanned,
+  publishDeviceQr,
+  startDeviceSession,
+} from "./device-session-flow"
 import { attachIntegrationConnectionRow } from "./internal"
 import { disconnect, refresh, verify } from "./lifecycle"
 import { connectSelfServeChannel } from "./self-serve"
@@ -44,4 +52,10 @@ export const connectionService = {
   listAndAttachCandidates,
   connectTargets,
   attachIntegrationConnectionRow,
+  startDeviceSession,
+  publishDeviceQr,
+  markDeviceQrScanned,
+  completeDeviceAuthorization,
+  completeTrustedDeviceAuthorization,
+  cancelDeviceSession,
 }

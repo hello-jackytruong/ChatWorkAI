@@ -4,6 +4,8 @@ import { CONNECTION_STORE_BINDINGS } from "../store-bindings"
 const mocks = vi.hoisted(() => ({
   and: vi.fn((...conditions) => conditions),
   eq: vi.fn((column, value) => ({ column, value })),
+  decryptObject: vi.fn(),
+  encryptObject: vi.fn(),
   transaction: vi.fn(),
 }))
 
@@ -11,6 +13,14 @@ vi.mock("@chatbotx.io/database/client", () => ({
   and: mocks.and,
   db: { transaction: mocks.transaction },
   eq: mocks.eq,
+}))
+
+vi.mock("@chatbotx.io/encryption", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@chatbotx.io/encryption")>()),
+  encryptUtils: {
+    decryptObject: mocks.decryptObject,
+    encryptObject: mocks.encryptObject,
+  },
 }))
 
 const makeTx = () => {
@@ -59,6 +69,13 @@ const bindingOrThrow = (provider: keyof typeof CONNECTION_STORE_BINDINGS) => {
 describe("CONNECTION_STORE_BINDINGS", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.decryptObject.mockResolvedValue(auth)
+    mocks.encryptObject.mockResolvedValue({
+      v: 1,
+      iv: "0".repeat(24),
+      text: "00",
+      tag: "0".repeat(32),
+    })
   })
 
   it("loads, updates, and deletes a channel row by inbox foreign key, scoped by workspaceId", async () => {
@@ -224,5 +241,68 @@ describe("CONNECTION_STORE_BINDINGS", () => {
   it("has no duplicateConstraint for Zalo — IntegrationZalo.oaId has no unique constraint in the DB today, unlike every other channel identity column (store-bindings.ts's zalo comment, backfill-connections.ts's duplicate_source_inbox report)", () => {
     const binding = bindingOrThrow("zalo")
     expect(binding.duplicateConstraint).toBeUndefined()
+  })
+
+  it("encrypts Zalo Account channel auth with workspace/inbox-bound AAD while leaving plain channel bindings unchanged", async () => {
+    const zaloAccount = bindingOrThrow("zaloAccount")
+    const encryptedFixture = makeTx()
+    const encrypted = {
+      v: 1,
+      iv: "0".repeat(24),
+      text: "00",
+      tag: "0".repeat(32),
+    }
+    encryptedFixture.loadLimit.mockResolvedValue([{ auth: encrypted }])
+    const zaloAuth = {
+      authType: "custom" as const,
+      cookie: [{ key: "zpw_sek", value: "secret" }],
+      imei: "imei-1",
+      userAgent: "agent-1",
+      zaloUid: "uid-1",
+    }
+    mocks.decryptObject.mockResolvedValueOnce(zaloAuth)
+
+    await zaloAccount.insertRow(
+      {
+        kind: "channel",
+        workspaceId: "workspace-1",
+        inboxId: "inbox-1",
+        auth: zaloAuth,
+        descriptor: { sourceId: "uid-1", displayName: "Personal Zalo" },
+      },
+      encryptedFixture.tx as never,
+    )
+    await expect(
+      zaloAccount.loadAuthByForeignKey(
+        "inbox-1",
+        "workspace-1",
+        encryptedFixture.tx as never,
+      ),
+    ).resolves.toEqual(zaloAuth)
+
+    const aad = "zalo-account:workspace-1:inbox-1:authorization"
+    expect(mocks.encryptObject).toHaveBeenCalledWith(zaloAuth, aad)
+    expect(mocks.decryptObject).toHaveBeenCalledWith(
+      encrypted,
+      expect.anything(),
+      aad,
+    )
+    expect(encryptedFixture.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        encryptedAuth: encrypted,
+        zaloUid: "uid-1",
+      }),
+    )
+
+    const messenger = bindingOrThrow("messenger")
+    const plainFixture = makeTx()
+    await messenger.saveAuthByForeignKey(
+      "inbox-2",
+      "workspace-1",
+      auth,
+      undefined,
+      plainFixture.tx as never,
+    )
+    expect(plainFixture.updateSet).toHaveBeenCalledWith({ auth })
   })
 })

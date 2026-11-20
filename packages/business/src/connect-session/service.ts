@@ -146,6 +146,7 @@ class ConnectSessionService extends BaseService {
       workspaceId: string
       provider: IntegrationType
       purpose: ConnectSessionPurpose
+      initialStep?: string
       nextAction?: (nonce: string) => ConnectSessionModel["nextAction"]
       targetConnectionId?: string | null
       platformOwnerId?: string | null
@@ -182,7 +183,7 @@ class ConnectSessionService extends BaseService {
         returnUrl,
         stateNonceHash,
         status: "pending",
-        step: "authorize",
+        step: input.initialStep ?? "authorize",
         // The schema declares `.default(sql\`[]\`)` for these four columns, but
         // drizzle-kit never inlines a `sql` default into the generated
         // migration (see `schema-default-parity.test.ts`) — the physical
@@ -309,6 +310,7 @@ class ConnectSessionService extends BaseService {
       values: {
         status: "awaiting_selection",
         step: "select",
+        nextAction: null,
         encryptedAuth: input.encryptedAuth,
         targets: input.targets,
         expiresAt: new Date(Date.now() + AUTHORIZED_TTL_MS),
@@ -338,6 +340,25 @@ class ConnectSessionService extends BaseService {
       requireUnexpired: true,
       values: { status: "authorized" },
     })
+    if (updated) {
+      return updated
+    }
+    throw connectSessionExpiredException(
+      "This connect session is no longer active.",
+    )
+  }
+
+  /** Advances a provider-defined step without permitting stale events to revive it. */
+  async advanceStep(input: {
+    id: string
+    workspaceId: string
+    provider: IntegrationType
+    statuses: ConnectSessionStatus[]
+    expectedSteps: string[]
+    step: string
+    nextAction: ConnectSessionModel["nextAction"]
+  }): Promise<ConnectSessionModel> {
+    const updated = await connectSessionRepository.advanceStep(input)
     if (updated) {
       return updated
     }
@@ -416,6 +437,7 @@ class ConnectSessionService extends BaseService {
         step: "done",
         consumedAt: new Date(),
         encryptedAuth: null,
+        nextAction: null,
       },
     })
     if (updated) {
@@ -539,6 +561,7 @@ class ConnectSessionService extends BaseService {
         errorCode: input.errorCode,
         consumedAt: new Date(),
         encryptedAuth: null,
+        nextAction: null,
       },
     })
     if (updated) {
@@ -568,6 +591,7 @@ class ConnectSessionService extends BaseService {
         status: "cancelled",
         consumedAt: new Date(),
         encryptedAuth: null,
+        nextAction: null,
       },
     })
     return updated ?? existing
@@ -652,6 +676,7 @@ class ConnectSessionService extends BaseService {
         status: "expired",
         consumedAt: new Date(),
         encryptedAuth: null,
+        nextAction: null,
       },
     })
     if (updated) {

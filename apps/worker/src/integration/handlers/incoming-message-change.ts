@@ -211,10 +211,22 @@ export const deleteIncomingMessage = async (
   const action = "deleteIncomingMessage"
 
   const { inbox } =
-    await integrationService.identifyInboxAndIntegrationAuthFromIdentifier(
-      integrationType as IntegrationType,
-      integrationIdentifier,
-    )
+    integrationType === "zaloAccount"
+      ? await (async () => {
+          if (
+            !props.zaloAccountRoute ||
+            props.zaloAccountRoute.accountId !== integrationIdentifier
+          ) {
+            throw new Error("Zalo Account undo route is missing or invalid")
+          }
+          return await integrationService.identifyZaloAccountFromRoute(
+            props.zaloAccountRoute,
+          )
+        })()
+      : await integrationService.identifyInboxAndIntegrationAuthFromIdentifier(
+          integrationType as IntegrationType,
+          integrationIdentifier,
+        )
 
   const deleted = await messageService.deleteBySourceId({
     sourceId: messageId,

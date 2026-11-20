@@ -44,6 +44,7 @@ import {
   parseSdkError,
   type ResolvedProductMessage,
   type SendFlowStepData,
+  zaloAccountQuoteSchema,
 } from "@chatbotx.io/sdk"
 import { resolveStackFrames } from "@chatbotx.io/utils/error-log"
 import { isManualSend, type SendFrom } from "@chatbotx.io/utils/send-from"
@@ -376,6 +377,46 @@ export async function sendMessageToChannel(
               : undefined) ??
             message.contentAttributes?.postId ??
             null,
+        },
+      }
+    }
+
+    if (
+      !isComment &&
+      contactInbox.channel === channelTypes.enum.zaloAccount &&
+      message.parentId &&
+      message.parentCreatedAt
+    ) {
+      const parentMsg = await messageService.findWithAttachments({
+        id: message.parentId,
+        createdAt: new Date(message.parentCreatedAt),
+        workspaceId: conversation.workspaceId,
+      })
+      const parentAttributes = parentMsg?.contentAttributes?.zaloAccount
+      const providerQuote =
+        parentAttributes && typeof parentAttributes === "object"
+          ? (parentAttributes as Record<string, unknown>)
+          : undefined
+      const quote = zaloAccountQuoteSchema.safeParse(
+        providerQuote
+          ? {
+              providerMessageId: providerQuote.providerMessageId,
+              clientMessageId: providerQuote.clientMessageId,
+              senderId: providerQuote.senderId,
+              msgType: providerQuote.msgType,
+              timestampMs: providerQuote.timestampMs,
+              text: parentMsg?.text ?? undefined,
+            }
+          : undefined,
+      )
+      if (!quote.success) {
+        throw new Error("Zalo Account reply target has no provider quote data")
+      }
+      handlerMessage = {
+        ...handlerMessage,
+        contentAttributes: {
+          ...handlerMessage.contentAttributes,
+          zaloAccountQuote: quote.data,
         },
       }
     }
@@ -1563,6 +1604,7 @@ export async function sendFlowStepToChannel({
         metadata,
         richResponse,
         sendFrom,
+        idempotencyKey: messageId,
         commentAnchor,
         emailThread,
       },

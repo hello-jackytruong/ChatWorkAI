@@ -58,7 +58,7 @@ const collectIssues = (value: SendMessageNodeSchema) => {
   return issues
 }
 
-/** Step / card button limits every channel had before LINE's 5; LINE is the only change. */
+/** Step / card button limits declared by every channel policy. */
 const EXPECTED_LIMITS = {
   api: [3, 3],
   instagram: [3, 3],
@@ -72,6 +72,7 @@ const EXPECTED_LIMITS = {
   webchat: [3, 3],
   whatsapp: [3, 3],
   zalo: [3, 3],
+  zaloAccount: [0, 0],
 } as const
 
 describe("button limits", () => {

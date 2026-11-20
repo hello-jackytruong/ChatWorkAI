@@ -4,6 +4,7 @@ import { analyticsDashboardEvents } from "./analytics"
 import errorLogEventListener from "./error-log"
 import flowEventListener from "./flow"
 import messageEventListener from "./message"
+import zaloAccountEventListener from "./zalo-account"
 
 async function startEventWorker() {
   await startWorker([
@@ -11,6 +12,7 @@ async function startEventWorker() {
     flowEventListener,
     analyticsDashboardEvents,
     errorLogEventListener,
+    zaloAccountEventListener,
   ])
 
   // A shutdown that began mid-startup ran `stopWorker` on a partial set.

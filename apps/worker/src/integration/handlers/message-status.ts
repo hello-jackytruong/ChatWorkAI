@@ -1,4 +1,4 @@
-import { buildContext, conversationService } from "@chatbotx.io/business"
+import { conversationService } from "@chatbotx.io/business"
 import type { IntegrationType } from "@chatbotx.io/database/partials"
 import {
   contactInboxRepository,
@@ -26,6 +26,7 @@ import { settleFailedOutgoingMessage } from "../../chat/handlers/send-message"
 import { logger } from "../../lib/logger"
 import {
   allIntegrations,
+  buildIntegrationContext,
   integrationService,
 } from "../../services/integrations"
 import { normalizeEpochTimestamp } from "../utils/message"
@@ -70,10 +71,22 @@ export const handleMessageStatus = async (
   const { integrationType, integrationIdentifier, payload } = job
 
   const dbIntegration =
-    await integrationService.identifyInboxAndIntegrationAuthFromIdentifier(
-      integrationType as IntegrationType,
-      integrationIdentifier,
-    )
+    integrationType === "zaloAccount"
+      ? await (async () => {
+          if (
+            !job.zaloAccountRoute ||
+            job.zaloAccountRoute.accountId !== integrationIdentifier
+          ) {
+            throw new Error("Zalo Account status route is missing or invalid")
+          }
+          return await integrationService.identifyZaloAccountFromRoute(
+            job.zaloAccountRoute,
+          )
+        })()
+      : await integrationService.identifyInboxAndIntegrationAuthFromIdentifier(
+          integrationType as IntegrationType,
+          integrationIdentifier,
+        )
   const { inbox, integrationRow } = dbIntegration
   const integration = allIntegrations[integrationType]
   if (!integration) {
@@ -82,10 +95,10 @@ export const handleMessageStatus = async (
     )
   }
 
-  const ctx = await buildContext({
+  const ctx = await buildIntegrationContext({
     workspaceId: inbox.workspaceId,
     integrationType,
-    integration: integrationRow,
+    integrationRow,
   })
 
   const parsedMessage = await integration.runChannelHandler(

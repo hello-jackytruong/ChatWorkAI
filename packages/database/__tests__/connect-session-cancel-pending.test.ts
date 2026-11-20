@@ -89,6 +89,7 @@ describe("connectSessionRepository.cancelPendingByProvider", () => {
       status: "cancelled",
       consumedAt: "now()",
       encryptedAuth: null,
+      nextAction: null,
     })
   })
 })

@@ -123,6 +123,15 @@ export type WhatsappBusinessAccountModel =
   typeof schema.whatsappBusinessAccountModel.$inferSelect
 export type IntegrationZaloModel =
   typeof schema.integrationZaloModel.$inferSelect
+type IntegrationZaloAccountRow =
+  typeof schema.integrationZaloAccountModel.$inferSelect
+/** Public-safe Zalo Account metadata; encrypted device authorization is internal. */
+export type IntegrationZaloAccountPublicModel = Omit<
+  IntegrationZaloAccountRow,
+  "encryptedAuth"
+>
+export type IntegrationZaloAccountGroupModel =
+  typeof schema.integrationZaloAccountGroupModel.$inferSelect
 export type IntegrationLineModel =
   typeof schema.integrationLineModel.$inferSelect
 export type IntegrationTelegramModel =
@@ -313,6 +322,7 @@ export type InboxWithIntegrations = InboxModel & {
   integrationWebchat?: IntegrationWebchatModel | null
   integrationWhatsapp?: IntegrationWhatsappModel | null
   integrationZalo?: IntegrationZaloModel | null
+  integrationZaloAccount?: IntegrationZaloAccountRow | null
   integrationLine?: IntegrationLineModel | null
   integrationSmtp?: IntegrationSmtpModel | null
   integrationTiktok?: IntegrationTiktokModel | null

@@ -25,6 +25,7 @@ import type { ConnectionCandidate } from "@chatbotx.io/sdk"
 import { ConnectionProviderRejectedError } from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import {
+  activateConnectionBestEffort,
   connectAndPersist,
   encryptedCandidatesSchema,
   resolveAdapter,
@@ -293,13 +294,18 @@ export const connectTargets = async (input: {
       }
 
       try {
-        const connection = await connectCandidate({
+        const persistedConnection = await connectCandidate({
           adapter,
           provider: session.provider,
           workspaceId: input.workspaceId,
           candidate,
           ownerId,
           actorUserId: input.actorUserId,
+        })
+        const connection = await activateConnectionBestEffort({
+          adapter,
+          connection: persistedConnection,
+          ownerId,
         })
         connections.push(connection)
         outcomes.push(
@@ -309,7 +315,7 @@ export const connectTargets = async (input: {
                 status: "connected",
                 connectionId: connection.id,
                 detail:
-                  'Connected, but the provider webhook subscription failed — the matching entry in `connections[]` shows `status: "degraded"`; retry from the connection\'s settings.',
+                  'Connected, but provider setup did not complete — the matching entry in `connections[]` shows `status: "degraded"`; retry from the connection\'s settings.',
               }
             : { targetId, status: "connected", connectionId: connection.id },
         )

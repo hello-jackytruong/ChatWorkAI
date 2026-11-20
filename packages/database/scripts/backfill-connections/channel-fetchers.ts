@@ -13,6 +13,7 @@ import {
   integrationTiktokModel,
   integrationWebchatModel,
   integrationWhatsappModel,
+  integrationZaloAccountModel,
   integrationZaloModel,
 } from "../../src/schema"
 import { metadataString, parseOauth2Auth, toChannelCandidate } from "./status"
@@ -343,6 +344,7 @@ export const CHANNEL_SATELLITE_TABLE: Partial<
   telegram: integrationTelegramModel,
   tiktok: integrationTiktokModel,
   zalo: integrationZaloModel,
+  zaloAccount: integrationZaloAccountModel,
   line: integrationLineModel,
   threads: integrationThreadsModel,
   api: integrationApiModel,

@@ -36,6 +36,9 @@ import { CONNECTION_REGISTRY } from "./registry"
 export const isCredentialStrategy = (strategy: ConnectionStrategy): boolean =>
   strategy === "token" || strategy === "api_key" || strategy === "self_serve"
 
+export const isDeviceStrategy = (strategy: ConnectionStrategy): boolean =>
+  strategy === "qr_device"
+
 /**
  * What a session's `encryptedAuth` blob actually holds once
  * `completeAuthorization` lists candidates: the full `ConnectionCandidate[]`
@@ -299,6 +302,52 @@ export const subscribeWebhookBestEffort = async (input: {
           provider: input.connection.provider,
         },
         "connect: failed to mark connection degraded after a webhook subscribe failure",
+      )
+      throw transitionErr
+    }
+  }
+}
+
+/**
+ * Starts provider-owned durable runtime work after the connection transaction
+ * commits. A failed activation cannot roll the committed Connection/Inbox back,
+ * so preserve the active row and mark it degraded for an explicit retry.
+ */
+export const activateConnectionBestEffort = async (input: {
+  adapter: ConnectionAdapter
+  connection: ConnectionModel
+  ownerId: string | undefined
+}): Promise<ConnectionModel> => {
+  if (!input.adapter.activated) {
+    return input.connection
+  }
+  try {
+    await input.adapter.activated({ connection: input.connection })
+    return input.connection
+  } catch (err) {
+    logger.warn(
+      {
+        err,
+        connectionId: input.connection.id,
+        provider: input.connection.provider,
+      },
+      "connect: provider runtime activation failed, marking connection degraded",
+    )
+    try {
+      return await connectionStateService.transition({
+        connectionId: input.connection.id,
+        event: "refresh.transient_failure",
+        reason: "refresh_failed",
+        ownerId: input.ownerId,
+      })
+    } catch (transitionErr) {
+      logger.error(
+        {
+          err: transitionErr,
+          connectionId: input.connection.id,
+          provider: input.connection.provider,
+        },
+        "connect: failed to mark connection degraded after provider runtime activation failure",
       )
       throw transitionErr
     }

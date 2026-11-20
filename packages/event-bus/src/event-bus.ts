@@ -16,9 +16,11 @@ export interface EventBusConfig<TEventMap extends EventMap> {
   consumerGroup: string
   deadLetterMaxLen?: number
   deadLetterStreamKey?: string
+  deleteAfterAck?: boolean
   enableSelectiveRetry?: boolean
   maxDeliveries?: number
   maxLen?: number
+  maxPayloadBytes?: number
   processTimeoutMs?: number
   readBatchSize?: number
   schemas: { [K in keyof TEventMap]: z.ZodType<TEventMap[K]> }
@@ -219,11 +221,10 @@ export class BaseEventBus<
     }
 
     for (const [, messages] of results) {
-      const parsedMessages = messages.map(([messageId, fields]) => ({
-        messageId,
-        ...this.parseStreamMessage(fields),
-      }))
-      await this.processAndAck(parsedMessages, listeners)
+      const parsedMessages = await this.parseEntries(messages)
+      if (parsedMessages.length > 0) {
+        await this.processAndAck(parsedMessages, listeners)
+      }
 
       // XDEL intentionally omitted: stream entries are retained until
       // evicted by MAXLEN so multiple consumer groups can read each message.
@@ -418,7 +419,37 @@ export class BaseEventBus<
       data[fields[i]] = fields[i + 1]
     }
 
-    return { type: data.type, payload: JSON.parse(data.payload) }
+    if (!(data.type && data.payload)) {
+      throw new Error("Event stream entry is missing type or payload")
+    }
+    const payloadBytes = Buffer.byteLength(data.payload)
+    if (payloadBytes > (this.config.maxPayloadBytes ?? 1024 * 1024)) {
+      throw new Error("Event stream payload exceeds the configured limit")
+    }
+    const payload: unknown = JSON.parse(data.payload)
+    const schema = this.config.schemas[data.type as keyof TEventMap]
+    if (schema) {
+      const result = schema.safeParse(payload)
+      if (!result.success) {
+        throw new Error("Event stream payload failed schema validation")
+      }
+      return { type: data.type, payload: result.data }
+    }
+    return { type: data.type, payload }
+  }
+
+  private async parseEntries(
+    entries: [messageId: string, fields: string[]][],
+  ): Promise<StreamMessage[]> {
+    const parsed: StreamMessage[] = []
+    for (const [messageId, fields] of entries) {
+      try {
+        parsed.push({ messageId, ...this.parseStreamMessage(fields) })
+      } catch (error) {
+        await this.movePoisonToDeadLetter(messageId, error)
+      }
+    }
+    return parsed
   }
 
   private async processAndAck(
@@ -464,11 +495,15 @@ export class BaseEventBus<
         : messages.map((message) => message.messageId)
 
       if (ackMessageIds.length > 0) {
-        await (this.blockingRedis ?? this.redis).xack(
+        const redis = this.blockingRedis ?? this.redis
+        await redis.xack(
           this.config.streamKey,
           this.config.consumerGroup,
           ...ackMessageIds,
         )
+        if (this.config.deleteAfterAck) {
+          await redis.xdel(this.config.streamKey, ...ackMessageIds)
+        }
         this.forgetProcessingErrors(ackMessageIds)
       }
 
@@ -534,10 +569,7 @@ export class BaseEventBus<
         return
       }
 
-      const parsedMessages = claimed.map(([messageId, fields]) => ({
-        messageId,
-        ...this.parseStreamMessage(fields),
-      }))
+      const parsedMessages = await this.parseEntries(claimed)
       const retryableMessages: StreamMessage[] = []
       for (const message of parsedMessages) {
         const deliveryCount = await this.getDeliveryCount(
@@ -624,6 +656,9 @@ export class BaseEventBus<
       this.config.consumerGroup,
       message.messageId,
     )
+    if (this.config.deleteAfterAck) {
+      await this.redis.xdel(this.config.streamKey, message.messageId)
+    }
     this.forgetProcessingErrors([message.messageId])
 
     deadLetterLogger.error(
@@ -634,6 +669,44 @@ export class BaseEventBus<
         stream: this.config.streamKey,
       },
       "[EventBus] moved message to dead-letter stream",
+    )
+  }
+
+  private async movePoisonToDeadLetter(
+    messageId: string,
+    error: unknown,
+  ): Promise<void> {
+    const deadLetterStreamKey =
+      this.config.deadLetterStreamKey ?? `${this.config.streamKey}:dead`
+    const errorMessage = getErrorMessage(error)
+    await this.redis.xadd(
+      deadLetterStreamKey,
+      "MAXLEN",
+      "~",
+      this.config.deadLetterMaxLen ?? 100_000,
+      "*",
+      "originalId",
+      messageId,
+      "error",
+      errorMessage,
+      "timestamp",
+      Date.now().toString(),
+    )
+    await this.redis.xack(
+      this.config.streamKey,
+      this.config.consumerGroup,
+      messageId,
+    )
+    if (this.config.deleteAfterAck) {
+      await this.redis.xdel(this.config.streamKey, messageId)
+    }
+    deadLetterLogger.error(
+      {
+        deadLetterStreamKey,
+        messageId,
+        stream: this.config.streamKey,
+      },
+      "[EventBus] moved poison message to dead-letter stream",
     )
   }
 

@@ -405,6 +405,12 @@ export const zodToConfigFields = (
   )
 }
 
+export const MAX_QR_IMAGE_DATA_URL_LENGTH = 256_000
+export const qrImageDataUrlSchema = z
+  .string()
+  .max(MAX_QR_IMAGE_DATA_URL_LENGTH)
+  .regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/)
+
 export const connectSessionNextActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("open_url"), url: z.string() }),
   z.object({
@@ -412,6 +418,11 @@ export const connectSessionNextActionSchema = z.discriminatedUnion("type", [
     inputFields: z.array(connectionConfigFieldSchema),
   }),
   z.object({ type: z.literal("wait") }),
+  z.object({
+    type: z.literal("show_qr"),
+    imageDataUrl: qrImageDataUrlSchema,
+    expiresAt: z.string().datetime(),
+  }),
 ])
 export type ConnectSessionNextAction = z.infer<
   typeof connectSessionNextActionSchema
