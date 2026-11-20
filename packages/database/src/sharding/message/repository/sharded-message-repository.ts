@@ -13,6 +13,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  ne,
   or,
   type SQL,
   sql,
@@ -55,6 +56,8 @@ import type {
   OutgoingBotMessage,
   PaginatedMessages,
   PaginationCursor,
+  ReconcileOutgoingSourceIdParams,
+  ReconcileOutgoingSourceIdResult,
   UpdateAttachmentParams,
 } from "../../../repositories/message/message-repository"
 import type { RichResponseContentAttributes } from "../../../schema"
@@ -875,6 +878,105 @@ export class ShardedMessageRepository implements IMessageRepository {
       "updateSourceId",
       createdAt,
     )
+  }
+
+  async reconcileOutgoingSourceId(
+    params: ReconcileOutgoingSourceIdParams,
+  ): Promise<ReconcileOutgoingSourceIdResult> {
+    const lockKey = this.buildLockKey(params.conversationId, params.sourceId)
+
+    return await this.executeWithLock(lockKey, async () => {
+      const shardDb = await this.shardManager.getShardForWrite(
+        params.workspaceId,
+      )
+
+      return await shardDb.transaction(async (tx) => {
+        const echoRows = await tx
+          .select({
+            contentAttributes: messageModel.contentAttributes,
+            createdAt: messageModel.createdAt,
+            id: messageModel.id,
+          })
+          .from(messageModel)
+          .where(
+            and(
+              eq(messageModel.workspaceId, params.workspaceId),
+              eq(messageModel.contactInboxId, params.contactInboxId),
+              eq(messageModel.conversationId, params.conversationId),
+              eq(messageModel.sourceId, params.sourceId),
+              ne(messageModel.id, params.id),
+              isNull(messageModel.deletedAt),
+            ),
+          )
+
+        const contentAttributesOverlay = Object.assign(
+          {},
+          ...echoRows.flatMap((row) =>
+            row.contentAttributes ? [row.contentAttributes] : [],
+          ),
+          params.contentAttributesOverlay ?? {},
+        ) as Record<string, unknown>
+        const hasContentAttributesOverlay =
+          Object.keys(contentAttributesOverlay).length > 0
+
+        const [message] = await tx
+          .update(messageModel)
+          .set({
+            sourceId: params.sourceId,
+            ...(hasContentAttributesOverlay
+              ? {
+                  contentAttributes: sql`COALESCE(${messageModel.contentAttributes}, '{}'::jsonb) || ${JSON.stringify(contentAttributesOverlay)}::jsonb`,
+                }
+              : {}),
+          })
+          .where(
+            and(
+              eq(messageModel.workspaceId, params.workspaceId),
+              eq(messageModel.id, params.id),
+              matchesCreatedAt(messageModel.createdAt, params.createdAt),
+            ),
+          )
+          .returning({ id: messageModel.id })
+
+        if (!message) {
+          return { message: null, removedEchoes: [] }
+        }
+
+        const echoIds = echoRows.map((row) => row.id)
+        if (echoIds.length === 0) {
+          return { message, removedEchoes: [] }
+        }
+
+        await tx
+          .delete(attachmentModel)
+          .where(
+            and(
+              eq(attachmentModel.workspaceId, params.workspaceId),
+              inArray(attachmentModel.messageId, echoIds),
+            ),
+          )
+        const removed = await tx
+          .delete(messageModel)
+          .where(
+            and(
+              eq(messageModel.workspaceId, params.workspaceId),
+              eq(messageModel.contactInboxId, params.contactInboxId),
+              eq(messageModel.conversationId, params.conversationId),
+              eq(messageModel.sourceId, params.sourceId),
+              inArray(messageModel.id, echoIds),
+            ),
+          )
+          .returning({ id: messageModel.id })
+        const removedIds = new Set(removed.map((row) => row.id))
+
+        return {
+          message,
+          removedEchoes: echoRows
+            .filter((row) => removedIds.has(row.id))
+            .map(({ id, createdAt }) => ({ id, createdAt })),
+        }
+      })
+    })
   }
 
   updateSourceIdAndEmail(

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     findLastByConversation: vi.fn(),
     hardDeleteAllByContactInbox: vi.fn(),
     listIncomingTextsByContactInbox: vi.fn(),
+    reconcileOutgoingSourceId: vi.fn(),
     updateMessageText: vi.fn(),
     updateTextBySourceId: vi.fn(),
     updateSendError: vi.fn(),
@@ -267,6 +268,40 @@ describe("messageService", () => {
       "ws-1",
       createdAt,
     )
+  })
+
+  test("reconciles an outgoing provider echo through the message repository", async () => {
+    const createdAt = new Date("2026-11-20T14:21:25.510Z")
+    const result = {
+      message: { id: "message-1" },
+      removedEchoes: [
+        {
+          id: "echo-1",
+          createdAt: new Date("2026-11-20T14:21:25.623Z"),
+        },
+      ],
+    }
+    mocks.repo.reconcileOutgoingSourceId.mockResolvedValue(result)
+
+    await expect(
+      messageService.reconcileOutgoingSourceId({
+        id: "message-1",
+        contactInboxId: "contact-inbox-1",
+        conversationId: "conversation-1",
+        sourceId: "provider-1",
+        workspaceId: "workspace-1",
+        createdAt,
+      }),
+    ).resolves.toEqual(result)
+
+    expect(mocks.repo.reconcileOutgoingSourceId).toHaveBeenCalledWith({
+      id: "message-1",
+      contactInboxId: "contact-inbox-1",
+      conversationId: "conversation-1",
+      sourceId: "provider-1",
+      workspaceId: "workspace-1",
+      createdAt,
+    })
   })
 
   test("preserves attachment replacement timestamps and skips an empty insert", async () => {

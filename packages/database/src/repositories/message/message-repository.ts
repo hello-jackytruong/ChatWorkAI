@@ -30,6 +30,21 @@ export interface CreateMessageResult {
   message: MessageModel
 }
 
+export interface ReconcileOutgoingSourceIdParams {
+  contactInboxId: string
+  contentAttributesOverlay?: Record<string, unknown>
+  conversationId: string
+  createdAt: Date
+  id: string
+  sourceId: string
+  workspaceId: string
+}
+
+export interface ReconcileOutgoingSourceIdResult {
+  message: { id: string } | null
+  removedEchoes: Array<{ id: string; createdAt: Date }>
+}
+
 export interface CreateAttachmentInput {
   conversationId: string
   createdAt?: Date
@@ -478,6 +493,16 @@ export interface IMessageRepository {
     id: string
     contentAttributes: Record<string, unknown> | null
   } | null>
+
+  /**
+   * Assigns the provider id to the local outgoing row while holding the same
+   * dedup lock used by incoming echoes. If the provider echo won the race and
+   * was already stored, its provider attributes are merged into the local row
+   * and the redundant echo row is removed in the same shard transaction.
+   */
+  reconcileOutgoingSourceId(
+    params: ReconcileOutgoingSourceIdParams,
+  ): Promise<ReconcileOutgoingSourceIdResult>
 
   /**
    * Returns how many rows were updated: 0 means no row matched, so callers

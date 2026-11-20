@@ -29,6 +29,8 @@ export type {
   PaginatedMessages,
   Pagination,
   PaginationCursor,
+  ReconcileOutgoingSourceIdParams,
+  ReconcileOutgoingSourceIdResult,
   UpdateAttachmentParams,
 } from "./message-repository"
 export * from "./message-repository.factory"

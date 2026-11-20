@@ -5,6 +5,7 @@ const {
   mockResolveIntegrationContextFromContactInbox,
   mockRunChannelHandler,
   mockDbUpdate,
+  mockReconcileOutgoingSourceId,
   mockUpdateSourceId,
   mockUpdateSendError,
   mockCreateMessageRepository,
@@ -26,6 +27,10 @@ const {
   }
 
   const updateSourceId = vi.fn().mockResolvedValue(undefined)
+  const reconcileOutgoingSourceId = vi.fn().mockResolvedValue({
+    message: { id: "msg-1" },
+    removedEchoes: [],
+  })
   const updateSendError = vi.fn().mockResolvedValue(undefined)
 
   return {
@@ -35,6 +40,7 @@ const {
       .fn()
       .mockResolvedValue({ messageIds: ["mid-1"], sentCount: 1 }),
     mockDbUpdate: vi.fn().mockReturnValue(updateChain),
+    mockReconcileOutgoingSourceId: reconcileOutgoingSourceId,
     mockUpdateSourceId: updateSourceId,
     mockUpdateSendError: updateSendError,
     mockCreateMessageRepository: vi.fn().mockResolvedValue({
@@ -87,6 +93,7 @@ vi.mock("@chatbotx.io/business", () => ({
   messageService: {
     findWithAttachments: vi.fn().mockResolvedValue(null),
     hardDelete: mockHardDelete,
+    reconcileOutgoingSourceId: mockReconcileOutgoingSourceId,
     updateAttributes: vi.fn().mockResolvedValue(undefined),
     updateSendError: (input: {
       createdAt: Date
@@ -131,9 +138,12 @@ vi.mock("@chatbotx.io/database/client", () => ({
   eq: vi.fn((col: unknown, val: unknown) => ({ __eq: [col, val] })),
 }))
 
-vi.mock("@chatbotx.io/database/schema", () => {
+vi.mock("@chatbotx.io/database/schema", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@chatbotx.io/database/schema")>()
   const schema = { pick: vi.fn(() => schema) }
   return {
+    ...actual,
     createSelectSchema: vi.fn(() => schema),
     integrationWebchatModel: {},
     messageModel: { id: "id", sourceId: "sourceId" },
@@ -167,7 +177,8 @@ vi.mock("../src/services/integrations", () => ({
     mockResolveIntegrationContextFromContactInbox,
 }))
 
-vi.mock("@chatbotx.io/worker-config", () => ({
+vi.mock("@chatbotx.io/worker-config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@chatbotx.io/worker-config")>()),
   chatQueue: { add: mockChatQueueAdd },
 }))
 
@@ -576,12 +587,14 @@ describe("chat send-message handlers", () => {
       } as never,
     })
 
-    expect(mockUpdateSourceId).toHaveBeenCalledWith(
-      "msg-bot-1",
-      "wamid.echo-1",
-      "ws-1",
+    expect(mockReconcileOutgoingSourceId).toHaveBeenCalledWith({
+      id: "msg-bot-1",
+      contactInboxId: "ci-1",
+      conversationId: "conv-1",
+      sourceId: "wamid.echo-1",
+      workspaceId: "ws-1",
       createdAt,
-    )
+    })
     expect(mockMarkReadByOutbound).toHaveBeenCalledWith({
       workspaceId: "ws-1",
       conversationId: "conv-1",
@@ -589,6 +602,48 @@ describe("chat send-message handlers", () => {
       readAt: createdAt,
       silent: false,
     })
+  })
+
+  test("removes a provider echo that arrived before the send result", async () => {
+    const createdAt = new Date("2026-11-20T14:21:25.510Z")
+    mockRunChannelHandler.mockResolvedValueOnce({
+      messageIds: ["provider-1"],
+      sentCount: 1,
+    })
+    mockReconcileOutgoingSourceId.mockResolvedValueOnce({
+      message: { id: "msg-bot-1" },
+      removedEchoes: [
+        {
+          id: "echo-1",
+          createdAt: new Date("2026-11-20T14:21:25.623Z"),
+        },
+      ],
+    })
+
+    await sendMessageToChannel({
+      conversation: conversation as never,
+      contactInbox: contactInbox as never,
+      message: {
+        id: "msg-bot-1",
+        workspaceId: "ws-1",
+        conversationId: "conv-1",
+        contactInboxId: "ci-1",
+        contentType: "text",
+        messageType: "outgoing",
+        senderType: "bot",
+        sourceId: null,
+        text: "test",
+        createdAt,
+      } as never,
+    })
+
+    expect(mockQueueWorkspaceRealtimeEvent).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        eventType: "messageRemoved",
+        data: { messageIds: ["echo-1"] },
+      }),
+    )
   })
 
   test("does not mark the conversation read when the channel accepts no messages", async () => {

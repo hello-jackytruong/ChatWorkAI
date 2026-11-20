@@ -501,6 +501,8 @@ export async function sendMessageToChannel(
         await updateMessageSourceId(
           message.id,
           conversation.workspaceId,
+          conversation.id,
+          message.contactInboxId,
           new Date(message.createdAt),
           result,
         )
@@ -1276,6 +1278,8 @@ const clearMessageSendError = async (
 async function updateMessageSourceId(
   messageId: string | undefined,
   workspaceId: string,
+  conversationId: string,
+  contactInboxId: string,
   createdAt: Date | undefined,
   result: OutgoingSendResult,
 ) {
@@ -1283,31 +1287,52 @@ async function updateMessageSourceId(
   if (!(messageId && firstMessageId && createdAt)) {
     return
   }
+  let removedEchoMessageIds: string[] = []
   try {
-    const updated = result.email
-      ? await messageService.updateSourceIdAndEmail({
-          id: messageId,
-          sourceId: firstMessageId,
-          email: result.email,
-          workspaceId,
-          createdAt,
-        })
-      : await messageService.updateSourceId({
-          id: messageId,
-          sourceId: firstMessageId,
-          workspaceId,
-          createdAt,
-        })
-    if (!updated) {
+    const reconciliation = await messageService.reconcileOutgoingSourceId({
+      id: messageId,
+      contactInboxId,
+      conversationId,
+      sourceId: firstMessageId,
+      workspaceId,
+      createdAt,
+      ...(result.email
+        ? { contentAttributesOverlay: { email: result.email } }
+        : {}),
+    })
+    if (!reconciliation.message) {
       throw new Error(
         "Sent message was not found while recording its source ID",
       )
     }
+    removedEchoMessageIds = reconciliation.removedEchoes.map((echo) => echo.id)
   } catch (err) {
     logger.error(
       { err, messageId, providerMessageId: firstMessageId, workspaceId },
       "Failed to persist sent message source ID",
     )
+    return
+  }
+
+  if (removedEchoMessageIds.length > 0) {
+    try {
+      await queueConversationScopedMessageEvent({
+        workspaceId,
+        conversationId,
+        eventType: RealtimeEventType.messageRemoved,
+        data: { messageIds: removedEchoMessageIds },
+      })
+    } catch (err) {
+      logger.warn(
+        {
+          err,
+          conversationId,
+          messageIds: removedEchoMessageIds,
+          workspaceId,
+        },
+        "Failed to publish reconciled outgoing echo removal",
+      )
+    }
   }
 }
 
@@ -1559,6 +1584,8 @@ export async function sendFlowStepToChannel({
   await updateMessageSourceId(
     messageId,
     conversation.workspaceId,
+    conversation.id,
+    contactInbox.id,
     messageCreatedAt,
     result,
   )

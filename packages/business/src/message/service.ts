@@ -9,6 +9,8 @@ import {
   type FindOutgoingBeforeParams,
   type MessageWithAttachments,
   type OutgoingBotMessage,
+  type ReconcileOutgoingSourceIdParams,
+  type ReconcileOutgoingSourceIdResult,
 } from "@chatbotx.io/database/repositories"
 import type { MessageModel } from "@chatbotx.io/database/types"
 import { withCache } from "@chatbotx.io/redis"
@@ -314,6 +316,14 @@ class MessageService extends BaseService {
       props.workspaceId,
       props.createdAt,
     )
+  }
+
+  async reconcileOutgoingSourceId(
+    props: ReconcileOutgoingSourceIdParams & { tx?: DatabaseClient },
+  ): Promise<ReconcileOutgoingSourceIdResult> {
+    const { tx = db, ...params } = props
+    const repo = await createMessageRepository(tx)
+    return await repo.reconcileOutgoingSourceId(params)
   }
 
   async updateSourceIdAndEmail(props: {

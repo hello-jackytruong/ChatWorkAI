@@ -1108,6 +1108,141 @@ describe("ShardedMessageRepository.updateSourceId", () => {
   })
 })
 
+describe("ShardedMessageRepository.reconcileOutgoingSourceId", () => {
+  const createdAt = new Date("2026-11-20T14:21:25.510Z")
+  const echoCreatedAt = new Date("2026-11-20T14:21:25.623Z")
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  test("keeps the local outgoing row and removes a provider echo atomically", async () => {
+    const echo = {
+      id: "echo-1",
+      createdAt: echoCreatedAt,
+      contentAttributes: {
+        zaloAccount: { providerMessageId: "provider-1" },
+      },
+    }
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([echo]),
+    }
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{ id: "local-1" }]),
+    }
+    const attachmentDeleteChain = {
+      where: vi.fn().mockResolvedValue(undefined),
+    }
+    const messageDeleteChain = {
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{ id: "echo-1" }]),
+    }
+    const tx = {
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+      delete: vi
+        .fn()
+        .mockReturnValueOnce(attachmentDeleteChain)
+        .mockReturnValueOnce(messageDeleteChain),
+    }
+    const shardDb = {
+      transaction: vi.fn(
+        async (fn: (client: typeof tx) => Promise<unknown>) => await fn(tx),
+      ),
+    }
+    const lock = {
+      runExclusive: vi.fn(
+        async ({ fn }: { fn: () => Promise<unknown> }) => await fn(),
+      ),
+    }
+    const repo = new ShardedMessageRepository(
+      {
+        getShardForWrite: vi.fn().mockResolvedValue(shardDb),
+      } as never,
+      lock as never,
+    )
+
+    const result = await repo.reconcileOutgoingSourceId({
+      id: "local-1",
+      contactInboxId: "ci-1",
+      conversationId: "conv-1",
+      sourceId: "provider-1",
+      workspaceId: "ws-1",
+      createdAt,
+      contentAttributesOverlay: { email: { messageId: "email-1" } },
+    })
+
+    expect(lock.runExclusive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "msg:upsert:conv-1:provider-1",
+      }),
+    )
+    expect(shardDb.transaction).toHaveBeenCalledTimes(1)
+    expect(tx.select).toHaveBeenCalledWith({
+      contentAttributes: messageModel.contentAttributes,
+      createdAt: messageModel.createdAt,
+      id: messageModel.id,
+    })
+    expect(updateChain.set).toHaveBeenCalledWith({
+      contentAttributes: expect.anything(),
+      sourceId: "provider-1",
+    })
+    expect(tx.delete).toHaveBeenNthCalledWith(1, attachmentModel)
+    expect(tx.delete).toHaveBeenNthCalledWith(2, messageModel)
+    expect(result).toEqual({
+      message: { id: "local-1" },
+      removedEchoes: [{ id: "echo-1", createdAt: echoCreatedAt }],
+    })
+  })
+
+  test("only assigns the source id when no provider echo exists", async () => {
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([]),
+    }
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{ id: "local-1" }]),
+    }
+    const tx = {
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+      delete: vi.fn(),
+    }
+    const shardDb = {
+      transaction: vi.fn(
+        async (fn: (client: typeof tx) => Promise<unknown>) => await fn(tx),
+      ),
+    }
+    const repo = new ShardedMessageRepository(
+      {
+        getShardForWrite: vi.fn().mockResolvedValue(shardDb),
+      } as never,
+      passthroughLock as never,
+    )
+
+    const result = await repo.reconcileOutgoingSourceId({
+      id: "local-1",
+      contactInboxId: "ci-1",
+      conversationId: "conv-1",
+      sourceId: "provider-1",
+      workspaceId: "ws-1",
+      createdAt,
+    })
+
+    expect(updateChain.set).toHaveBeenCalledWith({ sourceId: "provider-1" })
+    expect(tx.delete).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      message: { id: "local-1" },
+      removedEchoes: [],
+    })
+  })
+})
+
 describe("ShardedMessageRepository.claimForResend", () => {
   const createdAt = new Date("2026-01-01T00:00:00Z")
   const rangeShard = makeShardInfo("tr:range", "range")
