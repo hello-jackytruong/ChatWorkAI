@@ -50,6 +50,7 @@ yarn-error.log*
 
 test.rest
 test-webchat
+dev-tunnel/
 
 # Cursor
 .cursor/skills/

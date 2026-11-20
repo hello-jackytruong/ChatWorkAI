@@ -51,7 +51,12 @@ const nextConfig: NextConfig = {
     // per-file subpaths and its root export is not a re-export barrel, so
     // there is nothing for this optimization to rewrite.
     optimizePackageImports: ["@icons-pack/react-simple-icons"],
-    // turbopackServerFastRefresh: false,
+    // Server HMR can enter a compile -> RSC refetch -> full-page restart loop
+    // in large App Router workspaces. Client-side Fast Refresh remains enabled.
+    turbopackServerFastRefresh: false,
+    // Persistent dev cache can replay invalidations for unchanged chunks and
+    // make the HMR client restart the page indefinitely on large workspaces.
+    // turbopackFileSystemCacheForDev: false,
     // The Docker build starts from a clean layer and `.next/cache` is not
     // persisted across CI runs, so this cache is written and never read.
     turbopackFileSystemCacheForBuild: false,
