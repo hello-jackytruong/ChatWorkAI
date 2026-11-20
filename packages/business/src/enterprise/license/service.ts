@@ -4,6 +4,7 @@ import { isCloud, isEnterprise, keys } from "../../keys"
 import { logger } from "../../logger"
 import { LICENSE_ISSUER, LICENSE_PUBLIC_KEYS } from "./public-keys"
 import {
+  LICENSE_FEATURES,
   type LicenseFeature,
   type LicenseLimitKey,
   type LicenseLimits,
@@ -14,6 +15,8 @@ import {
 const LICENSE_ALGORITHM = "EdDSA"
 const LICENSE_TOKEN_TYPE = "JWT"
 const DAY_IN_MS = 24 * 60 * 60 * 1000
+
+export const LOCAL_DEVELOPMENT_LICENSE_KEY = "local-development"
 
 /**
  * Days an expired license keeps its entitlements before the deployment falls
@@ -97,6 +100,21 @@ const missingStatus = (): LicenseStatus => ({
   graceEndsAt: null,
   keyId: null,
   error: "LICENSE_KEY is not configured",
+})
+
+const localDevelopmentStatus = (): LicenseStatus => ({
+  state: "valid",
+  licenseId: LOCAL_DEVELOPMENT_LICENSE_KEY,
+  customerName: "Local Development",
+  tier: "enterprise",
+  features: [...LICENSE_FEATURES],
+  limits: emptyLimits(),
+  issuedAt: null,
+  expiresAt: null,
+  daysRemaining: null,
+  graceEndsAt: null,
+  keyId: LOCAL_DEVELOPMENT_LICENSE_KEY,
+  error: null,
 })
 
 const invalidStatus = (
@@ -279,6 +297,14 @@ const resolveLicense = async (): Promise<LicenseStatus> => {
   const envToken = keys().LICENSE_KEY?.trim()
   if (!envToken) {
     return missingStatus()
+  }
+
+  if (
+    process.env.NODE_ENV === "development" &&
+    isEnterprise() &&
+    envToken === LOCAL_DEVELOPMENT_LICENSE_KEY
+  ) {
+    return localDevelopmentStatus()
   }
 
   const allowedTiers = resolveAllowedTiers()

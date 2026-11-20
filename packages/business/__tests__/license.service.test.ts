@@ -11,6 +11,7 @@ const KID = "test-license-key"
 const NOW = new Date("2026-01-01T00:00:00.000Z")
 const NOW_SECONDS = Math.floor(NOW.getTime() / 1000)
 const DAY_SECONDS = 24 * 60 * 60
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV
 
 let privateKey: Awaited<ReturnType<typeof generateKeyPair>>["privateKey"]
 let publicKeyPem: string
@@ -85,6 +86,8 @@ describe("enterprise license verification", () => {
 
   afterEach(() => {
     delete process.env.LICENSE_KEY
+    delete process.env.NEXT_PUBLIC_EDITION
+    process.env.NODE_ENV = ORIGINAL_NODE_ENV
     vi.useRealTimers()
     vi.resetModules()
     vi.doUnmock("@chatbotx.io/database/repositories")
@@ -337,6 +340,59 @@ describe("enterprise license verification", () => {
     expect(await getLimit("maxSeats")).toBeNull()
     expect(await hasFeature("sso")).toBe(true)
     expect(await hasFeature("auditLog")).toBe(false)
+  })
+
+  test("enables every enterprise entitlement for the local development sentinel", async () => {
+    process.env.NODE_ENV = "development"
+    process.env.NEXT_PUBLIC_EDITION = "enterprise"
+    process.env.LICENSE_KEY = "local-development"
+    vi.resetModules()
+    mockLicenseRepository()
+    const { getLicenseStatus, getLimit, hasFeature } = await import(
+      "../src/enterprise/license/service"
+    )
+
+    await expect(getLicenseStatus()).resolves.toMatchObject({
+      state: "valid",
+      licenseId: "local-development",
+      customerName: "Local Development",
+      tier: "enterprise",
+      keyId: "local-development",
+    })
+    await expect(hasFeature("auditLog")).resolves.toBe(true)
+    await expect(getLimit("maxWorkspaces")).resolves.toBeNull()
+  })
+
+  test("rejects the local development sentinel outside development", async () => {
+    process.env.NODE_ENV = "production"
+    process.env.NEXT_PUBLIC_EDITION = "enterprise"
+    process.env.LICENSE_KEY = "local-development"
+    vi.resetModules()
+    mockLicenseRepository()
+    const { getLicenseStatus } = await import(
+      "../src/enterprise/license/service"
+    )
+
+    await expect(getLicenseStatus()).resolves.toMatchObject({
+      state: "invalid",
+      licenseId: null,
+    })
+  })
+
+  test("rejects the local development sentinel for cloud edition", async () => {
+    process.env.NODE_ENV = "development"
+    process.env.NEXT_PUBLIC_EDITION = "cloud"
+    process.env.LICENSE_KEY = "local-development"
+    vi.resetModules()
+    mockLicenseRepository()
+    const { getLicenseStatus } = await import(
+      "../src/enterprise/license/service"
+    )
+
+    await expect(getLicenseStatus()).resolves.toMatchObject({
+      state: "invalid",
+      licenseId: null,
+    })
   })
 
   test("keeps enterprise entitlements while inside the grace window", async () => {

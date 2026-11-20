@@ -82,6 +82,18 @@ The database `License` table stores the latest vendor-issued token and its
 `expiresAt`. It is written only by the hourly `refreshLicense` cron;
 `LICENSE_KEY` remains the deployment identity anchor.
 
+### Local Enterprise development
+
+A source checkout may use `LICENSE_KEY=local-development` while running
+`NEXT_PUBLIC_EDITION=enterprise` under `NODE_ENV=development`. The sentinel
+unlocks all Enterprise feature flags with unlimited local limits and never
+writes a token to the database. Set `LICENSE_REFRESH_ENABLED=false` so local
+workers do not send the sentinel to the vendor refresh endpoint.
+
+The sentinel is deliberately fail-closed outside this exact boundary:
+production, test, cloud, and every non-Enterprise runtime process it through
+the normal Ed25519 verifier, where it is rejected as an invalid token.
+
 ## Token shape
 
 Compact JWS, header `{ alg: "EdDSA", kid, typ: "JWT" }`. Payload
