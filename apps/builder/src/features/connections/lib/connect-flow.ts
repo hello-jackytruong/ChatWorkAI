@@ -7,6 +7,7 @@ import {
   CONNECTION_REGISTRY,
   connectionService,
   isCredentialStrategy,
+  isDeviceStrategy,
   type SelfServeSecret,
   toChannelType,
 } from "@chatbotx.io/connections"
@@ -128,6 +129,16 @@ export const startConnect = async (input: {
     return { connection, session: null, secret: null }
   }
 
+  if (isDeviceStrategy(adapter.provider.strategy)) {
+    const { session } = await connectionService.startDeviceSession({
+      workspaceId: input.workspaceId,
+      provider: input.provider,
+      purpose: "connect",
+      ...input.actor,
+    })
+    return { connection: null, session, secret: null }
+  }
+
   const resolved = await resolveOAuthCredential({
     provider: input.provider,
     ownerId: input.ownerId,
@@ -157,6 +168,20 @@ export const startReconnect = async (input: {
   ownerId: string
   actor: ConnectFlowActor
 }): Promise<{ session: ConnectSessionModel }> => {
+  const adapter = CONNECTION_REGISTRY[input.connection.provider]
+  if (!adapter) {
+    throw connectionNotConfiguredException(input.connection.provider)
+  }
+  if (isDeviceStrategy(adapter.provider.strategy)) {
+    const { session } = await connectionService.startDeviceSession({
+      workspaceId: input.workspaceId,
+      provider: input.connection.provider,
+      purpose: "reconnect",
+      targetConnectionId: input.connection.id,
+      ...input.actor,
+    })
+    return { session }
+  }
   const resolved = await resolveOAuthCredential({
     provider: input.connection.provider,
     ownerId: input.ownerId,

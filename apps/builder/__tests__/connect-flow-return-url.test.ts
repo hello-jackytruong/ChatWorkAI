@@ -23,6 +23,7 @@ vi.mock("@chatbotx.io/connections", () => ({
     reconnect: mocks.reconnect,
   },
   isCredentialStrategy: () => false,
+  isDeviceStrategy: (strategy: string) => strategy === "qr_device",
   toChannelType: (p: string) => p,
 }))
 vi.mock("@/lib/oauth-referer", () => ({

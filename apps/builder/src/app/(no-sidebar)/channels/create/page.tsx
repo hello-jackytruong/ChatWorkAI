@@ -18,6 +18,7 @@ import WhatsappCreate from "@/features/integration-whatsapp/components/whatsapp-
 import { WHATSAPP_OAUTH_CALLBACK_PATH } from "@/features/integration-whatsapp/libs/embedded-signup"
 import { generateZaloRedirectUri } from "@/features/integration-zalo/libs/zalo"
 import { continuesInstallIntent } from "@/features/templates/lib/install-intent-marker"
+import { ZaloAccountConnect } from "@/features/zalo-accounts/components/zalo-account-connect"
 import { requireWorkspacePermission } from "@/lib/auth/require-workspace-permission"
 import { getCurrentUserId } from "@/lib/auth/utils"
 import { resolvePlatformOwnerId } from "@/lib/platform-credential-owner"
@@ -96,6 +97,10 @@ export default async function CreateChannelPage(props: CreateChannelPageProps) {
 
   if (selectedChannel === "api" && isVisible("api")) {
     return <CreateApiForm autoOpen={true} workspaceId={workspaceId} />
+  }
+
+  if (selectedChannel === "zaloAccount" && isVisible("zaloAccount")) {
+    return <ZaloAccountConnect autoOpen={true} workspaceId={workspaceId} />
   }
 
   const [

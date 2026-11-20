@@ -61,6 +61,9 @@
     "zalo": {
       "label": "ZaloOA"
     },
+    "zaloAccount": {
+      "label": "Zalo Account"
+    },
     "telegram": {
       "label": "Telegram",
       "botToken": "機器人代幣",

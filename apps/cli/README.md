@@ -1630,6 +1630,30 @@ chatbotx zalo-channels tag-sync update <id> --enabled <enabled>
 
 ---
 
+### `zalo-accounts`
+
+Personal Zalo account metadata, controlled group sending, and native-label
+sync. Connection lifecycle uses the shared `connections` and
+`connect-sessions` groups with provider `zaloAccount`.
+
+```bash
+chatbotx zalo-accounts list
+chatbotx zalo-accounts get <id>
+chatbotx zalo-accounts group list <accountId>
+chatbotx zalo-accounts group get <accountId> <id>
+chatbotx zalo-accounts groups sync <accountId> --commandId <stable-id>
+chatbotx zalo-accounts labels sync <accountId> --commandId <stable-id>
+chatbotx zalo-accounts policy update <accountId> <id> --sendEnabled <true|false>
+chatbotx zalo-accounts message send <accountId> <id> --commandId <stable-id> --text <text>
+                                                     # Use --attachment <json> instead of --text for one supported image/file
+```
+
+Group sending is disabled by default and the send command fails until the
+stored group policy is enabled. Reuse the same `commandId` when retrying a
+known request; an ambiguous provider send is not replayed automatically.
+
+---
+
 ### `line-channels`
 
 ```bash

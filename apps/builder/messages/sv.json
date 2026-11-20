@@ -3856,6 +3856,9 @@
     "zalo": {
       "label": "Zalo OA"
     },
+    "zaloAccount": {
+      "label": "Zalo Account"
+    },
     "bookingCalendar": {
       "label": "Bokningskalender"
     },

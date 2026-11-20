@@ -129,6 +129,7 @@ import { wooCommercePublicRouter } from "@/features/woocommerce/api/public"
 import { workingHoursPublicRouter } from "@/features/working-hours/api/public"
 import { workspaceMembersPublicRouter } from "@/features/workspace-members/api/public"
 import { workspaceSettingsPublicRouter } from "@/features/workspaces/api/public"
+import { zaloAccountsPublicRouter } from "@/features/zalo-accounts/api/public"
 
 export const publicRouter = {
   ads: adsPublicRouter,
@@ -153,6 +154,7 @@ export const publicRouter = {
   connectionProviders: connectionProvidersPublicRouter,
   connections: connectionsPublicRouter,
   connectSessions: connectSessionsPublicRouter,
+  zaloAccounts: zaloAccountsPublicRouter,
   contactScans: contactScanPublicRouter,
   contactSyncs: contactSyncPublicRouter,
   contacts: contactsPublicRouter,

@@ -273,6 +273,8 @@ const COMMAND_NAME_OVERRIDES: Readonly<Record<string, string>> = {
   "POST /v1/marketing-messages/audiences": "marketing-messages:create-audience",
   "DELETE /v1/marketing-messages/audiences/{id}":
     "marketing-messages:delete-audience",
+  "POST /v1/zalo-accounts/{accountId}/groups/sync": "zalo-accounts:groups:sync",
+  "POST /v1/zalo-accounts/{accountId}/labels/sync": "zalo-accounts:labels:sync",
 }
 
 export function pathAndMethodToCommandName(

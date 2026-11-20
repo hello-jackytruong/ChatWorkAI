@@ -177,6 +177,23 @@ describe("pathAndMethodToCommandName — Google Ads reads", () => {
   })
 })
 
+describe("pathAndMethodToCommandName — Zalo Account resources", () => {
+  test("keeps group and label sync commands distinct", () => {
+    expect(
+      pathAndMethodToCommandName(
+        "/v1/zalo-accounts/{accountId}/groups/sync",
+        "POST",
+      ),
+    ).toBe("zalo-accounts:groups:sync")
+    expect(
+      pathAndMethodToCommandName(
+        "/v1/zalo-accounts/{accountId}/labels/sync",
+        "POST",
+      ),
+    ).toBe("zalo-accounts:labels:sync")
+  })
+})
+
 describe("pathAndMethodToCommandName — filter/variant on a collection", () => {
   test("a literal second segment with no trailing param joins as a hyphenated action", () => {
     expect(

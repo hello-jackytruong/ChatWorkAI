@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   resolveOAuthCredential: vi.fn(),
   sanitizeOptionalReturnUrl: vi.fn(async (url?: string) => url),
   startSession: vi.fn(),
+  startDeviceSession: vi.fn(),
 }))
 
 vi.mock("@chatbotx.io/connections", () => ({
@@ -28,10 +29,12 @@ vi.mock("@chatbotx.io/connections", () => ({
     connectFromCredentials: mocks.connectFromCredentials,
     connectSelfServeChannel: mocks.connectSelfServeChannel,
     startSession: mocks.startSession,
+    startDeviceSession: mocks.startDeviceSession,
     reconnect: mocks.reconnect,
   },
   isCredentialStrategy: (strategy: string) =>
     strategy === "token" || strategy === "api_key" || strategy === "self_serve",
+  isDeviceStrategy: (strategy: string) => strategy === "qr_device",
   toChannelType: (provider: string) => provider,
   CONNECTION_REGISTRY: {
     facebookAds: {
@@ -45,6 +48,9 @@ vi.mock("@chatbotx.io/connections", () => ({
     webchat: {
       provider: { strategy: "self_serve", kind: "channel" },
       connect: vi.fn(),
+    },
+    zaloAccount: {
+      provider: { strategy: "qr_device", kind: "channel" },
     },
   },
 }))
@@ -167,6 +173,43 @@ describe("startConnect — self serve", () => {
       provider: "webchat",
       config: { name: "Support" },
       actor: { actorUserId: "user-1" },
+    })
+  })
+})
+
+describe("startConnect — QR device", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.resolveChannelPolicy.mockResolvedValue(null)
+  })
+
+  test("starts a device session without resolving OAuth platform credentials", async () => {
+    mocks.startDeviceSession.mockResolvedValue({
+      session: { id: "session-qr-1" },
+    })
+
+    await expect(
+      startConnect({
+        workspaceId: "ws-1",
+        provider: "zaloAccount",
+        config: undefined,
+        redirectUrl: undefined,
+        ownerId: "owner-1",
+        actor: { actorUserId: "user-1" },
+      }),
+    ).resolves.toEqual({
+      connection: null,
+      session: { id: "session-qr-1" },
+      secret: null,
+    })
+
+    expect(mocks.resolveOAuthCredential).not.toHaveBeenCalled()
+    expect(mocks.startSession).not.toHaveBeenCalled()
+    expect(mocks.startDeviceSession).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      provider: "zaloAccount",
+      purpose: "connect",
+      actorUserId: "user-1",
     })
   })
 })

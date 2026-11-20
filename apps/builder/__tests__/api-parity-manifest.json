@@ -560,6 +560,11 @@
     "workspaces/upload-logo:updateWorkspaceLogo": "covered:workspaces",
     "contact-sync/contact-sync.action:cancelContactSyncAction": "covered:contact-sync",
     "contact-sync/contact-sync.action:saveContactSyncMappingsAction": "covered:contact-sync",
-    "contact-sync/contact-sync.action:startContactSyncAction": "covered:contact-sync"
+    "contact-sync/contact-sync.action:startContactSyncAction": "covered:contact-sync",
+    "zalo-accounts/send-group-message.action:sendZaloAccountGroupMessageAction": "covered:zalo-accounts",
+    "zalo-accounts/start-first-connect.action:startFirstZaloAccountConnectAction": "covered:zalo-accounts",
+    "zalo-accounts/sync-groups.action:syncZaloAccountGroupsAction": "covered:zalo-accounts",
+    "zalo-accounts/sync-labels.action:syncZaloAccountLabelsAction": "covered:zalo-accounts",
+    "zalo-accounts/update-group-policy.action:updateZaloAccountGroupPolicyAction": "covered:zalo-accounts"
   }
 }

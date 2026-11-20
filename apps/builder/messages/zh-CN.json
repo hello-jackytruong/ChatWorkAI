@@ -3856,6 +3856,9 @@
     "zalo": {
       "label": "ZaloOA"
     },
+    "zaloAccount": {
+      "label": "Zalo Account"
+    },
     "bookingCalendar": {
       "label": "预约日历"
     },

@@ -299,6 +299,7 @@ describe("x-mcp outbound policy", () => {
       "miniApps.publishWhatsappDraft",
       "miniApps.pushWhatsappDraft",
       "whatsappChannels.sendCapiTestEvent",
+      "zaloAccounts.sendGroupMessage",
     ])
   })
 })

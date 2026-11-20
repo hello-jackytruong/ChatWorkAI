@@ -24,6 +24,7 @@ const connectionServiceMocks = vi.hoisted(() => ({
   startSession: vi.fn(),
   reconnect: vi.fn(),
   connectTargets: vi.fn(),
+  cancelDeviceSession: vi.fn(),
 }))
 
 const connectSessionServiceMocks = vi.hoisted(() => ({
@@ -374,7 +375,7 @@ describe("real router: connections public API permission enforcement (T5)", () =
         }),
       invoke: () =>
         invoke(connectSessionsPublicRouter.cancel, { id: "sess-1" }),
-      notCalled: () => [connectSessionServiceMocks.cancel],
+      notCalled: () => [connectionServiceMocks.cancelDeviceSession],
     },
   ])("a channels-only token is denied $label on an integration-kind resource before any mutation runs", async ({
     setupLoad,

@@ -335,8 +335,8 @@ const cancelConnectSessionAPI = authorizedAPI
       sessionId: input.id,
       workspaceId: input.workspaceId,
     })
-    const session = await connectSessionService.cancel({
-      id: input.id,
+    const session = await connectionService.cancelDeviceSession({
+      sessionId: input.id,
       workspaceId: input.workspaceId,
     })
     return toConnectSessionResource(session)

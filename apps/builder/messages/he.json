@@ -6097,6 +6097,9 @@
     "zalo": {
       "label": "Zalo OA"
     },
+    "zaloAccount": {
+      "label": "Zalo Account"
+    },
     "telegram": {
       "label": "Telegram",
       "botToken": "אסימון בוט",

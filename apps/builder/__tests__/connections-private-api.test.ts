@@ -75,6 +75,7 @@ const { authorizedAPI, mocks, workspaceAuthorizedMidddleware } = vi.hoisted(
         refresh: vi.fn(),
         verify: vi.fn(),
         connectTargets: vi.fn(),
+        cancelDeviceSession: vi.fn(),
         findByIdForWorkspace: vi.fn(),
         cancel: vi.fn(),
         listConnectionProviderResources: vi.fn(),
@@ -153,9 +154,11 @@ vi.mock("@chatbotx.io/connections", () => ({
     refresh: mocks.refresh,
     verify: mocks.verify,
     connectTargets: mocks.connectTargets,
+    cancelDeviceSession: mocks.cancelDeviceSession,
   },
   isCredentialStrategy: (strategy: string) =>
     strategy === "token" || strategy === "api_key" || strategy === "self_serve",
+  isDeviceStrategy: (strategy: string) => strategy === "qr_device",
   toChannelType: (provider: string) =>
     provider === "instagramFacebook" ? "instagram" : provider,
   CONNECTION_REGISTRY: {
@@ -571,12 +574,12 @@ describe("private connectSessionsAPI.connectSessionTargetsAPI", () => {
 })
 
 describe("private connectSessionsAPI.cancelConnectSessionAPI", () => {
-  test("passes workspaceId through to connectSessionService.cancel", async () => {
+  test("passes workspaceId through to device-session cancellation", async () => {
     mocks.findByIdForWorkspace.mockResolvedValueOnce({
       id: "session-1",
       provider: "messenger",
     })
-    mocks.cancel.mockResolvedValueOnce({ id: "session-1" })
+    mocks.cancelDeviceSession.mockResolvedValueOnce({ id: "session-1" })
 
     const handler = getHandler(
       "DELETE",
@@ -587,8 +590,8 @@ describe("private connectSessionsAPI.cancelConnectSessionAPI", () => {
       input: { workspaceId: "ws-1", id: "session-1" },
     })
 
-    expect(mocks.cancel).toHaveBeenCalledWith({
-      id: "session-1",
+    expect(mocks.cancelDeviceSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
       workspaceId: "ws-1",
     })
   })

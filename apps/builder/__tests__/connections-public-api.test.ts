@@ -106,12 +106,14 @@ const connectionServiceMocks = vi.hoisted(() => ({
   startSession: vi.fn(),
   reconnect: vi.fn(),
   connectTargets: vi.fn(),
+  cancelDeviceSession: vi.fn(),
 }))
 
 vi.mock("@chatbotx.io/connections", () => ({
   connectionService: connectionServiceMocks,
   isCredentialStrategy: (strategy: string) =>
     strategy === "token" || strategy === "api_key" || strategy === "self_serve",
+  isDeviceStrategy: (strategy: string) => strategy === "qr_device",
   toChannelType: (provider: string) =>
     provider === "instagramFacebook" ? "instagram" : provider,
   CONNECTION_REGISTRY: {
@@ -715,18 +717,20 @@ describe("DELETE /v1/connect-sessions/{id}", () => {
     expect(mocks.cancelSession).not.toHaveBeenCalled()
   })
 
-  test("delegates to connectSessionService.cancel scoped to the token's workspace", async () => {
+  test("delegates to device-session cancellation in the token workspace", async () => {
     mocks.findSessionByIdForWorkspace.mockResolvedValueOnce({
       id: "session-1",
       provider: "messenger",
     })
-    mocks.cancelSession.mockResolvedValueOnce({ id: "session-1" })
+    connectionServiceMocks.cancelDeviceSession.mockResolvedValueOnce({
+      id: "session-1",
+    })
     const result = await procedure().handler?.({
       context,
       input: { id: "session-1" },
     })
-    expect(mocks.cancelSession).toHaveBeenCalledWith({
-      id: "session-1",
+    expect(connectionServiceMocks.cancelDeviceSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
       workspaceId: "workspace-1",
     })
     expect(result).toEqual({ id: "session-1", sessionResource: true })

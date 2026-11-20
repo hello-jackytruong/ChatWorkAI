@@ -26,6 +26,10 @@ export const sourceIdentityConfigByChannel = {
     labelKey: "fields.channelIdentity.zaloUserId",
     hideWhenSourceUserIdKeyed: false,
   },
+  [channelTypes.enum.zaloAccount]: {
+    labelKey: "fields.channelIdentity.zaloUserId",
+    hideWhenSourceUserIdKeyed: false,
+  },
   [channelTypes.enum.line]: {
     labelKey: "fields.channelIdentity.lineUserId",
     hideWhenSourceUserIdKeyed: false,

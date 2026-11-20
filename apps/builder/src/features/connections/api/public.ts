@@ -152,7 +152,7 @@ export const connectionsPublicRouter = {
       successStatus: 201,
       summary: "Connect channel or integration",
       description:
-        'Credential-strategy providers (`token`/`api_key`/`self_serve`) connect immediately and return `connection` (`session: null`). `webchat` and `api` are self-serve channels; API returns its bearer token once in `secret.token`, and webchat accepts its branding and behavior fields in `config` using the `POST /v1/webchats` shape. OAuth providers (`oauth_redirect`/`oauth_popup`) return `connection: null` and a `session` whose `nextAction` is `{type:"open_url", url}` — show that URL to the person connecting, then poll `connectSessions.get` until `awaiting_selection` (a multi-account provider) or `completed` (a single-account provider), then call `connectSessions.connectTargets` to finish a multi-account connect. Call `connectionProviders.list` first to find the provider key and required `config` fields. The person opening the URL must have admin rights on the account being connected: the resulting token belongs to them, so hand each person their own link — a leaked URL can only connect the opener\'s account into this workspace…',
+        'Credential-strategy providers (`token`/`api_key`/`self_serve`) connect immediately and return `connection` (`session: null`). `webchat` and `api` are self-serve channels; API returns its bearer token once in `secret.token`, and webchat accepts its branding and behavior fields in `config` using the `POST /v1/webchats` shape. OAuth providers (`oauth_redirect`/`oauth_popup`) return `connection: null` and a session whose `nextAction` is `{type:"open_url", url}`. QR-device providers return a session that starts with `{type:"wait"}` and later exposes `{type:"show_qr", imageDataUrl, expiresAt}` through `connectSessions.get`; display it only until expiry and keep polling after scan. Poll until `awaiting_selection` or `completed`, then call `connectSessions.connectTargets` when selection is required. Call `connectionProviders.list` first to find the provider key and required config fields.',
       tags: ["Connections"],
       spec: mcpSpec({ visibility: "default" }),
     })
@@ -181,7 +181,7 @@ export const connectionsPublicRouter = {
       successStatus: 201,
       summary: "Re-authorize existing connection",
       description:
-        "Starts a new OAuth authorization for this exact connection (typically after it went `needs_reauth`). The re-granted account must match the one being reconnected, or the attempt fails once the browser round trip completes. Same envelope as `connections.create`; `connection` is always `null` here — a reconnect never resolves without the round trip.",
+        "Starts OAuth or QR-device re-authorization for this exact connection (typically after it went `needs_reauth`). The re-granted account must match the one being reconnected. Same session envelope as `connections.create`; poll `connectSessions.get` and follow its nextAction.",
       tags: ["Connections"],
     })
     .input(reconnectConnectionRequest)
@@ -374,8 +374,8 @@ export const connectSessionsPublicRouter = {
     .handler(async ({ context, input }) => {
       const existing = await loadScopedSession(context, input.id)
       assertGenericProviderAllowed(existing.provider)
-      const session = await connectSessionService.cancel({
-        id: input.id,
+      const session = await connectionService.cancelDeviceSession({
+        sessionId: input.id,
         workspaceId: context.workspace.id,
       })
       return toConnectSessionResource(session)
