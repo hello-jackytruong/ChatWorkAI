@@ -1,4 +1,5 @@
 import { withBlockedOwnerGuard } from "@chatbotx.io/business"
+import { zaloAccountRuntimeStateService } from "@chatbotx.io/business/zalo-account/runtime-state"
 import { connectionService } from "@chatbotx.io/connections"
 import { encryptUtils } from "@chatbotx.io/encryption"
 import {
@@ -85,6 +86,81 @@ export const handleZaloAccountEvents = async (
 ): Promise<void> => {
   for (const event of events) {
     await withBlockedOwnerGuard(event.route.workspaceId, async () => {
+      if (
+        event.kind === "lifecycle" &&
+        event.route.kind === "account" &&
+        (event.payload.type === "connected" ||
+          event.payload.type === "closed" ||
+          event.payload.type === "reauthorization_required")
+      ) {
+        await zaloAccountRuntimeStateService.apply({
+          workspaceId: event.route.workspaceId,
+          accountId: event.route.accountId,
+          inboxId: event.route.inboxId,
+          order: {
+            fenceToken: event.fenceToken,
+            epoch: event.epoch,
+            occurredAt: event.occurredAt,
+            state: event.payload.type,
+          },
+        })
+        return
+      }
+      if (event.kind === "thread_event") {
+        const identity = await sha256Hex(
+          JSON.stringify([
+            event.route.workspaceId,
+            event.route.accountId,
+            event.payload,
+            event.accountPolicyEpoch,
+            event.groupPolicyEpoch,
+          ]),
+        )
+        await enqueueIntegrationJob(
+          {
+            type: IntegrationJobAction.zaloAccountThreadEvent,
+            data: {
+              workspaceId: event.route.workspaceId,
+              accountId: event.route.accountId,
+              inboxId: event.route.inboxId,
+              accountPolicyEpoch: event.accountPolicyEpoch,
+              groupPolicyEpoch: event.groupPolicyEpoch,
+              event: event.payload,
+            },
+          },
+          {
+            attempts: 5,
+            backoff: { type: "exponential", delay: 1000 },
+            jobId: `zalo-thread-event-${identity}`,
+          },
+        )
+        return
+      }
+      if (event.kind === "group_message") {
+        const identity = await sha256Hex(
+          [
+            event.route.workspaceId,
+            event.route.accountId,
+            event.payload.threadId,
+            event.payload.providerMessageId,
+          ].join("\n"),
+        )
+        await enqueueIntegrationJob(
+          {
+            type: IntegrationJobAction.zaloAccountGroupMessage,
+            data: {
+              workspaceId: event.route.workspaceId,
+              accountId: event.route.accountId,
+              inboxId: event.route.inboxId,
+              accountPolicyEpoch: event.accountPolicyEpoch,
+              groupPolicyEpoch: event.groupPolicyEpoch,
+              message: event.payload,
+            },
+          },
+          { jobId: `zalo-group-message-${identity}` },
+        )
+        return
+      }
       if (event.kind === "direct_message" && event.route.kind === "account") {
         const scopedMessageId = await sha256Hex(
           [

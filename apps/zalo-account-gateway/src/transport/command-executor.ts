@@ -1,8 +1,11 @@
 import {
   parseZaloAccountCommandEnvelope,
   type ZaloAccountCommandEnvelope,
+  type ZaloAccountFriendSync,
   type ZaloAccountGroup,
+  type ZaloAccountGroupSync,
   type ZaloAccountLabelSnapshot,
+  ZaloAccountPreDispatchError,
 } from "@chatbotx.io/sdk"
 import type { ZaloAccountPool } from "../runtime/zalo-account-pool"
 import type { ProviderAdmissionPort } from "./provider-admission"
@@ -11,9 +14,11 @@ type PoolPort = Pick<
   ZaloAccountPool,
   | "getLabels"
   | "listGroups"
+  | "listFriends"
   | "reconnect"
   | "sendDirect"
   | "sendGroup"
+  | "sendTyping"
   | "startQr"
   | "stop"
   | "updateLabels"
@@ -27,6 +32,8 @@ export type CommandExecutionOutcome =
         messageIds?: string[]
         sentCount?: number
         groups?: ZaloAccountGroup[]
+        groupSync?: ZaloAccountGroupSync
+        friendSync?: ZaloAccountFriendSync
         labels?: ZaloAccountLabelSnapshot
       }
     }
@@ -158,11 +165,14 @@ export class ZaloAccountCommandExecutor {
       )
       return outcome
     } catch (error) {
-      this.options.admission?.recordFailure(accountId)
+      if (!(error instanceof ZaloAccountPreDispatchError)) {
+        this.options.admission?.recordFailure(accountId)
+      }
       const outcome: CommandExecutionOutcome = {
-        ...(command.kind === "send_direct" ||
-        command.kind === "send_group" ||
-        command.kind === "update_labels"
+        ...(!(error instanceof ZaloAccountPreDispatchError) &&
+        (command.kind === "send_direct" ||
+          command.kind === "send_group" ||
+          command.kind === "update_labels")
           ? { status: "unknown" as const }
           : {
               status: "failed" as const,
@@ -188,6 +198,8 @@ export class ZaloAccountCommandExecutor {
     messageIds?: string[]
     sentCount?: number
     groups?: ZaloAccountGroup[]
+    groupSync?: ZaloAccountGroupSync
+    friendSync?: ZaloAccountFriendSync
     labels?: ZaloAccountLabelSnapshot
   }> {
     if (command.kind === "start_qr") {
@@ -223,15 +235,45 @@ export class ZaloAccountCommandExecutor {
         message: command.message,
       })
     }
+    if (command.kind === "send_typing") {
+      await this.options.pool.sendTyping({
+        ...poolCommand,
+        threadId: command.threadId,
+        threadType: command.threadType,
+        accountPolicyEpoch: command.accountPolicyEpoch,
+        groupPolicyEpoch: command.groupPolicyEpoch,
+      })
+      return { status: "typing" }
+    }
     if (command.kind === "sync_groups") {
+      const snapshot = await this.options.pool.listGroups(poolCommand)
+      const groupSync = Array.isArray(snapshot)
+        ? {
+            groups: snapshot,
+            complete: false,
+            reason: "legacy_unknown" as const,
+          }
+        : snapshot
       return {
         status: "synced",
-        groups: await this.options.pool.listGroups(poolCommand),
+        groups: groupSync.groups,
+        groupSync,
+      }
+    }
+    if (command.kind === "sync_friends") {
+      return {
+        status: "synced",
+        friendSync: await this.options.pool.listFriends({
+          ...poolCommand,
+          cursor: command.cursor,
+        }),
       }
     }
     if (command.kind === "send_group") {
       return await this.options.pool.sendGroup({
         ...poolCommand,
+        accountPolicyEpoch: command.accountPolicyEpoch,
+        groupPolicyEpoch: command.groupPolicyEpoch,
         groupId: command.groupId,
         message: command.message,
       })
@@ -247,6 +289,7 @@ export class ZaloAccountCommandExecutor {
         status: "updated",
         labels: await this.options.pool.updateLabels({
           ...poolCommand,
+          operationToken: command.operationToken,
           expectedVersion: command.expectedVersion,
           labelData: command.labelData,
         }),

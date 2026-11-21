@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountService: {},
+  zaloAccountLabelService: {},
+}))
+
 const UNKNOWN_ACTION_RE = /unknown action/
 
 // ---------------------------------------------------------------------------

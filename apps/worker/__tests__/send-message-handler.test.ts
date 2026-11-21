@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
+const mockValidateGroupAudience = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(true),
+)
+const mockRetainZaloAttempt = vi.hoisted(() => vi.fn().mockResolvedValue(false))
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountGroupService: { validateAudience: mockValidateGroupAudience },
+  zaloAccountSendAttemptService: {
+    hasUnresolvedOrAcceptedSend: mockRetainZaloAttempt,
+  },
+}))
+
 const {
   mockEmit,
   mockResolveIntegrationContextFromContactInbox,
@@ -223,6 +234,7 @@ const isBotSentDashboardCall = (call: unknown[]) => {
 describe("chat send-message handlers", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockRetainZaloAttempt.mockResolvedValue(false)
     mockRunChannelHandler.mockResolvedValue({
       messageIds: ["mid-1"],
       sentCount: 1,
@@ -240,6 +252,123 @@ describe("chat send-message handlers", () => {
     for (const key of Object.keys(mockAllIntegrations)) {
       delete mockAllIntegrations[key]
     }
+  })
+  test("group Inbox sends retain provider identity without customer bookkeeping", async () => {
+    await sendMessageToChannel({
+      conversation: conversation as never,
+      contactInbox: {
+        ...contactInbox,
+        channel: "zaloAccount",
+        contactKind: "channelGroup",
+        sourceId: "za:group:g1",
+      } as never,
+      groupAudience: {
+        workspaceId: "ws-1",
+        conversationId: "conv-1",
+        contactInboxId: "ci-1",
+      } as never,
+      message: {
+        id: "msg-1",
+        workspaceId: "ws-1",
+        conversationId: "conv-1",
+        contactInboxId: "ci-1",
+        contentType: "text",
+        messageType: "outgoing",
+        senderType: "user",
+        senderId: "admin-1",
+        text: "hello",
+        createdAt: new Date(),
+        parentId: "parent-1",
+        parentCreatedAt: new Date(),
+        contentAttributes: {
+          zaloAccountQuote: {
+            providerMessageId: "provider-parent",
+            senderId: "u1",
+            timestampMs: 100,
+            msgType: "webchat",
+          },
+        },
+      } as never,
+    })
+    expect(mockRunChannelHandler).toHaveBeenCalledTimes(1)
+    expect(mockRunChannelHandler).toHaveBeenCalledWith(
+      "message",
+      "sendMessage",
+      expect.objectContaining({
+        data: expect.objectContaining({
+          groupAudience: expect.objectContaining({
+            workspaceId: "ws-1",
+            conversationId: "conv-1",
+            contactInboxId: "ci-1",
+          }),
+        }),
+      }),
+    )
+    expect(mockReconcileOutgoingSourceId).toHaveBeenCalled()
+    expect(mockRecordOutboundMessageSent).not.toHaveBeenCalled()
+    expect(mockRecordDelivered).not.toHaveBeenCalled()
+    expect(mockContactUnblockIfBlocked).not.toHaveBeenCalled()
+    expect(mockEmit).not.toHaveBeenCalled()
+  })
+  test("stale group jobs never reach the provider", async () => {
+    mockValidateGroupAudience.mockResolvedValueOnce(false)
+    await sendMessageToChannel({
+      conversation: conversation as never,
+      contactInbox: { ...contactInbox, contactKind: "channelGroup" } as never,
+      groupAudience: {
+        workspaceId: "ws-1",
+        conversationId: "conv-1",
+        contactInboxId: "ci-1",
+      } as never,
+      message: { id: "msg-1" } as never,
+    })
+    expect(mockRunChannelHandler).not.toHaveBeenCalled()
+    expect(mockEmit).not.toHaveBeenCalled()
+  })
+  test("a failed group send retains its Inbox error without customer failure events", async () => {
+    mockRunChannelHandler.mockRejectedValueOnce(new Error("outcome unknown"))
+    await sendMessageToChannel({
+      conversation: conversation as never,
+      contactInbox: { ...contactInbox, contactKind: "channelGroup" } as never,
+      groupAudience: {
+        workspaceId: "ws-1",
+        conversationId: "conv-1",
+        contactInboxId: "ci-1",
+      } as never,
+      message: { id: "msg-1", createdAt: new Date() } as never,
+    })
+    expect(mockUpdateSendError).toHaveBeenCalled()
+    expect(mockEmit).not.toHaveBeenCalled()
+    expect(mockHardDelete).not.toHaveBeenCalled()
+  })
+  test("an ambiguous direct Zalo API send retains its canonical Message and emits no customer failure automation", async () => {
+    mockRetainZaloAttempt.mockResolvedValueOnce(true)
+    mockRunChannelHandler.mockRejectedValueOnce(
+      new Error("Zalo send outcome is unknown"),
+    )
+    await sendMessageToChannel(
+      {
+        conversation: conversation as never,
+        contactInbox: {
+          ...contactInbox,
+          channel: "zaloAccount",
+          contactKind: "person",
+          inboxId: "inbox",
+        } as never,
+        sendFrom: "api",
+        message: {
+          id: "msg-1",
+          createdAt: new Date(),
+          senderType: "api",
+          contentAttributes: { sentFromInbox: false },
+        } as never,
+      },
+      0,
+      false,
+    )
+    expect(mockUpdateSendError).toHaveBeenCalled()
+    expect(mockHardDelete).not.toHaveBeenCalled()
+    expect(mockEmit).not.toHaveBeenCalled()
   })
 
   describe("last delivered", () => {

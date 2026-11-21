@@ -1,5 +1,10 @@
 import { pathToFileURL } from "node:url"
-import { zaloAccountService } from "@chatbotx.io/business/zalo-account"
+import {
+  zaloAccountGroupService,
+  zaloAccountLabelService,
+  zaloAccountSendAttemptService,
+  zaloAccountService,
+} from "@chatbotx.io/business/zalo-account"
 import { getChildLogger } from "@chatbotx.io/logger"
 import { createRedisConnection } from "@chatbotx.io/redis"
 import type { ZaloAccountCommandEnvelope } from "@chatbotx.io/sdk"
@@ -44,9 +49,14 @@ export const main = async (): Promise<void> => {
         eventStreamKey: zaloAccountTransportKeys.eventStream,
         maxLen: 100_000,
         ownerId,
+        resolveGroupReceivePolicy: (input) =>
+          zaloAccountGroupService.resolveReceivePolicy(input),
       })
     : disabledEventSink
   const pool = new ZaloAccountPool({
+    onGroupSendResult: (input) => zaloAccountSendAttemptService.confirm(input),
+    admitLabelMutation: (input) => zaloAccountLabelService.admitMutation(input),
+    admitGroupSend: (input) => zaloAccountGroupService.admitSend(input),
     clientFactory: zcaClientFactory,
     eventSink,
     lease: leaseStore,

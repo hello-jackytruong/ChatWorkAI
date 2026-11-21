@@ -233,6 +233,7 @@ vi.mock("@chatbotx.io/business", () => ({
     invalidateTracking: mockInvalidateTracking,
   },
   conversationService: {
+    updateFlowStepState: vi.fn().mockResolvedValue(undefined),
     findByIdWithContactUnscoped: mockFindConversation,
     invalidate: mockConversationInvalidate,
     recordOutboundFlowStep: mockRecordOutboundFlowStep,
@@ -252,14 +253,25 @@ vi.mock("@chatbotx.io/business", () => ({
   resolveMediaUrl: mockResolveMediaUrl,
 }))
 
-vi.mock("@chatbotx.io/business/error-log", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@chatbotx.io/business/error-log")>()
-  return {
-    ...actual,
-    logProviderErrorForChannel: mockLogProviderErrorForChannel,
-  }
-})
+vi.mock("@chatbotx.io/business/error-log", () => ({
+  logProviderErrorForChannel: mockLogProviderErrorForChannel,
+}))
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountSendAttemptService: {
+    hasUnresolvedOrAcceptedSend: vi.fn().mockResolvedValue(false),
+  },
+  zaloAccountGroupService: {
+    validateAudience: vi.fn().mockResolvedValue(true),
+  },
+  isAllowedGroupAutomationStep: (step: string) =>
+    [
+      "sendText",
+      "sendImage",
+      "sendFile",
+      "addContactTag",
+      "removeContactTag",
+    ].includes(step),
+}))
 
 vi.mock("@chatbotx.io/encryption", () => ({
   signAppointmentWebviewToken: mockSignAppointmentWebviewToken,
@@ -349,6 +361,9 @@ vi.mock("../src/services/integrations", () => ({
 const mockSettleFailedOutgoingMessage = vi.hoisted(() =>
   vi.fn().mockResolvedValue("removed"),
 )
+vi.mock("../src/chat/handlers/channel-send-error-reconcilers", () => ({
+  reconcileChannelSendError: vi.fn().mockResolvedValue(false),
+}))
 
 vi.mock("../src/chat/handlers/send-message", async (importOriginal) => {
   const actual =
@@ -438,6 +453,43 @@ const baseParams: SendFlowStepData = {
 // ---------------------------------------------------------------------------
 
 describe("sendFlowStep", () => {
+  test("a group flow job without durable audience context cannot dispatch", async () => {
+    mockFindContactInbox.mockResolvedValue({
+      ...fakeContactInbox,
+      contactKind: "channelGroup",
+      channel: "zaloAccount",
+      sourceId: "za:group:g1",
+    })
+    await sendFlowStep(baseParams)
+    expect(mockSendFlowStepToChannel).not.toHaveBeenCalled()
+    expect(mockRepositoryCreate).not.toHaveBeenCalled()
+  })
+  test("group flow replies persist and send without customer tracking or analytics", async () => {
+    mockFindContactInbox.mockResolvedValue({
+      ...fakeContactInbox,
+      contactKind: "channelGroup",
+      channel: "zaloAccount",
+      sourceId: "za:group:g1",
+    })
+    await sendFlowStep({
+      ...baseParams,
+      groupAudience: {
+        kind: "zaloAccountGroup",
+        workspaceId: "ws-1",
+        accountId: "a1",
+        groupId: "g1",
+        providerGroupId: "g1",
+        contactInboxId: "ci-1",
+        conversationId: "conv-1",
+        accountPolicyEpoch: 1,
+        groupPolicyEpoch: 1,
+        origin: "automation",
+      },
+    })
+    expect(mockSendFlowStepToChannel).toHaveBeenCalledTimes(1)
+    expect(mockRecordOutboundFlowStep).not.toHaveBeenCalled()
+    expect(mockEmit).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     mockFindConversation.mockResolvedValue(fakeConversation)

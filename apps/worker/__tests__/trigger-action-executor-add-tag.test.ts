@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountGroupService: {},
+  zaloAccountGroupTagService: {},
+}))
+
 const mocks = vi.hoisted(() => ({
   findLatestCreatedByContact: vi.fn(),
   updateArchived: vi.fn(),

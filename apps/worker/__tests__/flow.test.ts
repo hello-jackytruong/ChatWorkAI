@@ -23,6 +23,12 @@ const resetContactForResume = vi.fn()
 const applyWhatsappFlowResponseSideEffects = vi.fn(async () => undefined)
 
 const recordContactActivity = vi.fn(async (..._args: unknown[]) => true)
+vi.mock("@chatbotx.io/business/zalo-account", async () => ({
+  ...(await import("../../../packages/business/src/zalo-account/group-policy")),
+  zaloAccountGroupService: {
+    validateAudience: vi.fn().mockResolvedValue(true),
+  },
+}))
 
 vi.mock("@chatbotx.io/business", () => ({
   contactActivityService: {
@@ -765,6 +771,26 @@ describe("MESSAGE_PRODUCING_STEP_TYPES", () => {
 })
 
 describe("executeMultipleSteps — void handler normalization", () => {
+  test("group context cannot execute a customer-only step", async () => {
+    const { flowStepHandlers } = await import(
+      "../src/integration/handlers/step"
+    )
+    const dangerous = mockSpy(
+      flowStepHandlers,
+      "autoAssignConversation",
+    ).mockResolvedValue({ status: "success", result: null })
+    const props = makeBaseProps()
+    await executeMultipleSteps({
+      ...props,
+      contactInbox: {
+        ...props.contactInbox,
+        contactKind: "channelGroup",
+      } as never,
+      steps: [makeStep("autoAssignConversation")],
+    })
+    expect(dangerous).not.toHaveBeenCalled()
+    dangerous.mockRestore()
+  })
   beforeEach(() => integrationQueueAdd.mockClear())
 
   test("void-returning handler (no states) does not trigger routing", async () => {

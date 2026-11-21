@@ -44,6 +44,9 @@ const EVERY_MINUTE_SECOND_OFFSETS = {
   // enqueueMarketingMessages (kept at :00) set. Running a few seconds later
   // lets a fast step land first; no ordering is required or guaranteed.
   dispatchMarketingMessages: 8,
+  recoverZaloGroupInbox: 12,
+  purgeZaloMessageState: 14,
+  reconcileZaloLabels: 18,
   scanAbandonedCarts: 16,
   reconcileBroadcasts: 20,
   dispatchProfileSnapshots: 24,
@@ -72,6 +75,30 @@ export const registerSchedules = async () => {
   }
 
   const isCloud = env.NEXT_PUBLIC_EDITION === "cloud"
+  await scheduleQueue.upsertJobScheduler(
+    ScheduleJobData.purgeZaloMessageState,
+    { pattern: everyMinuteAtOffset(ScheduleJobData.purgeZaloMessageState) },
+    {
+      name: ScheduleJobData.purgeZaloMessageState,
+      data: { type: ScheduleJobData.purgeZaloMessageState, data: {} },
+    },
+  )
+  await scheduleQueue.upsertJobScheduler(
+    ScheduleJobData.reconcileZaloLabels,
+    { pattern: everyMinuteAtOffset(ScheduleJobData.reconcileZaloLabels) },
+    {
+      name: ScheduleJobData.reconcileZaloLabels,
+      data: { type: ScheduleJobData.reconcileZaloLabels, data: {} },
+    },
+  )
+  await scheduleQueue.upsertJobScheduler(
+    ScheduleJobData.recoverZaloGroupInbox,
+    { pattern: everyMinuteAtOffset(ScheduleJobData.recoverZaloGroupInbox) },
+    {
+      name: ScheduleJobData.recoverZaloGroupInbox,
+      data: { type: ScheduleJobData.recoverZaloGroupInbox, data: {} },
+    },
+  )
   if (!isCloud) {
     // upsertJobScheduler persists in Redis: a scheduler registered by an
     // earlier cloud boot (or a shared Redis) keeps firing until removed.

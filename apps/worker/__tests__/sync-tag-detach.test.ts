@@ -4,6 +4,13 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 // syncTagDetach resolves mapping rows via tagChannelRepository.listContactTagChannelRows
 const listContactTagChannelRows = vi.fn()
 const unlinkContactInbox = vi.fn()
+const nativeMutation = vi.fn()
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountService: { findById: vi.fn(async () => ({ id: "account-1" })) },
+  zaloAccountLabelService: {
+    mutateAssignment: (...args: unknown[]) => nativeMutation(...args),
+  },
+}))
 
 // ── integration context resolution ────────────────────────────────────────────
 const findMessengerIntegrationById = vi.fn()
@@ -72,6 +79,25 @@ vi.mock("../src/lib/logger", () => ({
 }))
 
 const { handleSyncTag } = await import("../src/default/handlers/sync-tag")
+test("uncertain Zalo Account detach preserves the provider mapping for reconciliation", async () => {
+  listContactTagChannelRows.mockResolvedValue([
+    {
+      ...MESSENGER_ROW,
+      channelType: "zaloAccount",
+      integrationId: "account-1",
+    },
+  ])
+  nativeMutation.mockRejectedValue(new Error("outcome unknown"))
+  await expect(
+    handleSyncTag({
+      action: "detach",
+      workspaceId: WS,
+      contactId: CONTACT_ID,
+      tagId: TAG_ID,
+    } as never),
+  ).rejects.toThrow("unknown")
+  expect(unlinkContactInbox).not.toHaveBeenCalled()
+})
 
 const WS = "ws-1"
 const TAG_ID = "tag-42"

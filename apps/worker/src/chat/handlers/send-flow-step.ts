@@ -21,6 +21,11 @@ import { logProviderErrorForChannel } from "@chatbotx.io/business/error-log"
 import { wrapOpenLinkUrl } from "@chatbotx.io/business/open-link"
 import { getPublicFileUrl } from "@chatbotx.io/business/utils"
 import {
+  isAllowedGroupAutomationStep,
+  zaloAccountGroupService,
+  zaloAccountSendAttemptService,
+} from "@chatbotx.io/business/zalo-account"
+import {
   channelTypes,
   messageTypes,
   SENT_FROM_INBOX_KEY,
@@ -88,6 +93,7 @@ import { resolveStoredStepContent } from "../utils/stored-step-content"
 import {
   isDeliveredDirectMessage,
   markConversationReadAfterDelivery,
+  recordMessageSendError,
   sendFlowStepToChannel,
   sendMessageToChannel,
   settleFailedOutgoingMessage,
@@ -495,6 +501,7 @@ async function resolveProductMessageForStep(props: {
 }
 
 export async function sendFlowStep({
+  groupAudience,
   conversationId,
   contactInboxId,
   flowId,
@@ -526,6 +533,20 @@ export async function sendFlowStep({
     contactInboxId,
   })
   if (!targetContactInbox) {
+    return
+  }
+  if (targetContactInbox.contactKind === "channelGroup") {
+    if (
+      !groupAudience ||
+      groupAudience.contactInboxId !== targetContactInbox.id ||
+      groupAudience.conversationId !== conversation.id ||
+      groupAudience.workspaceId !== conversation.workspaceId ||
+      !isAllowedGroupAutomationStep(step.stepType) ||
+      !(await zaloAccountGroupService.validateAudience(groupAudience))
+    ) {
+      return
+    }
+  } else if (groupAudience) {
     return
   }
   const isBulkOutbound = isBulkOutboundMetadata(metadata, isBulkBroadcast)
@@ -1024,8 +1045,19 @@ export async function sendFlowStep({
     })
 
     const createdMessage = message
-    const trackingInvalidation =
-      await conversationService.recordOutboundFlowStep({
+    let trackingInvalidation: Awaited<
+      ReturnType<typeof conversationService.recordOutboundFlowStep>
+    > | null = null
+    if (targetContactInbox.contactKind === "channelGroup") {
+      await conversationService.updateFlowStepState({
+        workspaceId: conversation.workspaceId,
+        conversationId: conversation.id,
+        lastActivityAt: createdMessage.createdAt,
+        lastStep: conversation.currentStep,
+        currentStep: resolvedStep.id,
+      })
+    } else {
+      trackingInvalidation = await conversationService.recordOutboundFlowStep({
         workspaceId: conversation.workspaceId,
         conversationId: conversation.id,
         contactInboxId: targetContactInbox.id,
@@ -1041,6 +1073,7 @@ export async function sendFlowStep({
         lastStep: conversation.currentStep,
         currentStep: resolvedStep.id,
       })
+    }
     await Promise.all([
       trackingInvalidation
         ? contactInboxService.invalidateTracking(trackingInvalidation)
@@ -1069,6 +1102,7 @@ export async function sendFlowStep({
           true,
         )
       : sendFlowStepToChannel({
+          groupAudience,
           conversation,
           contactInbox: targetContactInbox,
           flowId,
@@ -1129,6 +1163,9 @@ export async function sendFlowStep({
 
     const [channelResult] = await Promise.all([channelSend, ...broadcasts])
     const providerMessageId = channelResult.messageIds[0]
+    if (targetContactInbox.contactKind === "channelGroup") {
+      return
+    }
 
     if (
       message &&
@@ -1190,6 +1227,31 @@ export async function sendFlowStep({
     }
   } catch (error) {
     const parsedError = await parseSdkError(error)
+    if (
+      targetContactInbox.contactKind === "channelGroup" ||
+      (targetContactInbox.channel === "zaloAccount" &&
+        message &&
+        (await zaloAccountSendAttemptService.hasUnresolvedOrAcceptedSend({
+          workspaceId: conversation.workspaceId,
+          inboxId: targetContactInbox.inboxId,
+          messageId: message.id,
+          createdAt: message.createdAt,
+        })))
+    ) {
+      logger.error(
+        { err: error, conversationId },
+        "Zalo group flow send failed",
+      )
+      await recordMessageSendError(
+        message?.id,
+        undefined,
+        conversation.workspaceId,
+        message?.createdAt,
+        parsedError.message,
+        { conversationId: conversation.id },
+      )
+      return
+    }
 
     logger.error(
       error,
@@ -1289,6 +1351,21 @@ export const sendChatMessage = async (
     )
   }
 
+  if (contactInbox.contactKind === "channelGroup") {
+    const audience = props.groupAudience
+    if (
+      !audience ||
+      audience.contactInboxId !== contactInbox.id ||
+      audience.conversationId !== conversation.id ||
+      audience.workspaceId !== conversation.workspaceId ||
+      !(await zaloAccountGroupService.validateAudience(audience))
+    ) {
+      return
+    }
+  } else if (props.groupAudience) {
+    return
+  }
+
   if (!(text || url)) {
     return
   }
@@ -1370,16 +1447,27 @@ export const sendChatMessage = async (
       storageUrl,
     })
 
-    const trackingInvalidation =
-      await conversationService.recordOutboundMessageActivity({
+    let trackingInvalidation: Awaited<
+      ReturnType<typeof conversationService.recordOutboundMessageActivity>
+    > | null = null
+    if (contactInbox.contactKind === "channelGroup") {
+      await conversationService.updateFlowStepState({
         workspaceId: conversation.workspaceId,
         conversationId: conversation.id,
-        contactInboxId: contactInbox.id,
-        contactId: contactInbox.contactId,
-        at: message.createdAt,
-        bumpActivity: !isBulkOutbound,
-        closeHumanReplyWindow: !isProactiveOutboundMetadata(metadata),
+        lastActivityAt: message.createdAt,
       })
+    } else {
+      trackingInvalidation =
+        await conversationService.recordOutboundMessageActivity({
+          workspaceId: conversation.workspaceId,
+          conversationId: conversation.id,
+          contactInboxId: contactInbox.id,
+          contactId: contactInbox.contactId,
+          at: message.createdAt,
+          bumpActivity: !isBulkOutbound,
+          closeHumanReplyWindow: !isProactiveOutboundMetadata(metadata),
+        })
+    }
     if (trackingInvalidation) {
       await contactInboxService.invalidateTracking(trackingInvalidation)
     }
@@ -1393,6 +1481,9 @@ export const sendChatMessage = async (
           quickReplies,
           metadata,
           isBulkBroadcast,
+          ...(props.groupAudience
+            ? { groupAudience: props.groupAudience }
+            : {}),
         },
         0,
         // This function catches every failure below and never rethrows, so no
@@ -1409,7 +1500,20 @@ export const sendChatMessage = async (
       )
     }
 
-    await Promise.all(promises)
+    const [sendResult] = await Promise.all(promises)
+
+    if (contactInbox.contactKind === "channelGroup") {
+      return
+    }
+    if (
+      contactInbox.channel === "zaloAccount" &&
+      (!sendResult ||
+        typeof sendResult !== "object" ||
+        !("sentCount" in sendResult) ||
+        sendResult.sentCount === 0)
+    ) {
+      return
+    }
 
     if (trackingContext) {
       await emit("analytics:dashboard", {
@@ -1444,6 +1548,9 @@ export const sendChatMessage = async (
       error,
       `sendChatMessage error for conversationId: ${conversation.id}`,
     )
+    if (contactInbox.contactKind === "channelGroup") {
+      return
+    }
 
     if (trackingContext) {
       await emit("analytics:dashboard", {

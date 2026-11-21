@@ -1,8 +1,11 @@
 import {
+  type ZaloAccountAttachment,
   type ZaloAccountAuth,
   type ZaloAccountGroup,
   type ZaloAccountOutboundMessage,
+  ZaloAccountPreDispatchError,
   zaloAccountAuthSchema,
+  zaloAccountFriendSyncSchema,
   zaloAccountLabelSnapshotSchema,
 } from "@chatbotx.io/sdk"
 import {
@@ -19,10 +22,26 @@ import type {
   ZcaClientPort,
   ZcaQrEvent,
 } from "./ports"
-import { normalizeProviderMessage } from "./provider-message"
+import {
+  normalizeProviderGroupActivity,
+  normalizeProviderMessage,
+} from "./provider-message"
+import { normalizeProviderThreadEvent } from "./provider-thread-event"
 
 const normalizeQrImage = (image: string) =>
   image.startsWith("data:image/") ? image : `data:image/png;base64,${image}`
+
+const prepareOutboundAttachment = async (attachment: ZaloAccountAttachment) => {
+  try {
+    return await downloadOutboundAttachment(attachment)
+  } catch (error) {
+    throw new ZaloAccountPreDispatchError(
+      error instanceof Error
+        ? error.message
+        : "Zalo Account attachment preparation failed",
+    )
+  }
+}
 
 const normalizeTimestampMs = (value: number): number => {
   if (value <= 0) {
@@ -46,6 +65,12 @@ const quoteOf = (quote: ZaloAccountOutboundMessage["quote"]) =>
     : undefined
 
 const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => ({
+  sendTyping: async (threadId, threadType) => {
+    await api.sendTypingEvent(
+      threadId,
+      threadType === "group" ? ThreadType.Group : ThreadType.User,
+    )
+  },
   getOwnId: async () => api.getOwnId(),
   listen: (handlers) => ({
     start: () => {
@@ -57,10 +82,22 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => ({
         } else if (normalized.kind === "group") {
           handlers.onGroupMessage(normalized)
         } else {
+          const activity = normalizeProviderGroupActivity(message)
+          if (activity) {
+            handlers.onGroupMessage(activity)
+          }
           handlers.onUnsupported(normalized.reason)
         }
       })
       api.listener.on("seen_messages", (messages) => {
+        if (handlers.onThreadEvent) {
+          for (const message of messages) {
+            for (const event of normalizeProviderThreadEvent("seen", message)) {
+              handlers.onThreadEvent(event)
+            }
+          }
+          return
+        }
         for (const message of messages) {
           if (message.type !== ThreadType.User) {
             continue
@@ -74,6 +111,17 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => ({
         }
       })
       api.listener.on("delivered_messages", (messages) => {
+        if (handlers.onThreadEvent) {
+          for (const message of messages) {
+            for (const event of normalizeProviderThreadEvent(
+              "delivered",
+              message,
+            )) {
+              handlers.onThreadEvent(event)
+            }
+          }
+          return
+        }
         for (const message of messages) {
           if (message.type !== ThreadType.User) {
             continue
@@ -88,6 +136,12 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => ({
         }
       })
       api.listener.on("undo", (undo) => {
+        if (handlers.onThreadEvent) {
+          for (const event of normalizeProviderThreadEvent("undo", undo)) {
+            handlers.onThreadEvent(event)
+          }
+          return
+        }
         if (undo.isGroup) {
           return
         }
@@ -103,6 +157,29 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => ({
           timestampMs: Number(undo.data.ts) || Date.now(),
         })
       })
+      api.listener.on("typing", (typing) => {
+        for (const event of normalizeProviderThreadEvent("typing", typing)) {
+          handlers.onThreadEvent?.(event)
+        }
+      })
+      api.listener.on("reaction", (reaction) => {
+        for (const event of normalizeProviderThreadEvent(
+          "reaction",
+          reaction,
+        )) {
+          handlers.onThreadEvent?.(event)
+        }
+      })
+      api.listener.on("old_reactions", (reactions) => {
+        for (const reaction of reactions.slice(0, 1000)) {
+          for (const event of normalizeProviderThreadEvent(
+            "reaction",
+            reaction,
+          )) {
+            handlers.onThreadEvent?.(event)
+          }
+        }
+      })
       api.listener.start({ retryOnClose: false })
     },
     stop: () => api.listener.stop(),
@@ -112,7 +189,7 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => ({
       ReturnType<typeof downloadOutboundAttachment>
     >[] = []
     for (const attachment of message.attachments) {
-      attachments.push(await downloadOutboundAttachment(attachment))
+      attachments.push(await prepareOutboundAttachment(attachment))
     }
     const result = await api.sendMessage(
       {
@@ -131,7 +208,8 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => ({
   },
   listGroups: async () => {
     const allGroups = await api.getAllGroups()
-    const groupIds = Object.keys(allGroups.gridVerMap).slice(0, 1000)
+    const allIds = Object.keys(allGroups.gridVerMap)
+    const groupIds = allIds.slice(0, 1000)
     const groups: ZaloAccountGroup[] = []
     for (let index = 0; index < groupIds.length; index += 50) {
       const chunk = groupIds.slice(index, index + 50)
@@ -152,14 +230,44 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => ({
         })
       }
     }
-    return groups
+    const complete = allIds.length <= 1000 && groups.length === allIds.length
+    return {
+      groups,
+      complete,
+      reportedTotal: allIds.length,
+      ...(complete
+        ? {}
+        : {
+            reason:
+              allIds.length > 1000
+                ? ("truncated" as const)
+                : ("missing_details" as const),
+          }),
+    }
+  },
+  listFriends: async (cursor) => {
+    const page = await api.getAllFriends(500, cursor)
+    const friends = page
+      .filter((friend) => friend.isFr === 1 && friend.isValid === 1)
+      .map((friend) => ({
+        uid: friend.userId,
+        name: friend.displayName || friend.zaloName || friend.userId,
+        ...(friend.avatar?.startsWith("https://")
+          ? { avatarUrl: friend.avatar }
+          : {}),
+      }))
+    return zaloAccountFriendSyncSchema.parse({
+      friends,
+      complete: page.length < 500,
+      ...(page.length >= 500 ? { nextCursor: cursor + 1 } : {}),
+    })
   },
   sendGroup: async (groupId, message) => {
     const attachments: Awaited<
       ReturnType<typeof downloadOutboundAttachment>
     >[] = []
     for (const attachment of message.attachments) {
-      attachments.push(await downloadOutboundAttachment(attachment))
+      attachments.push(await prepareOutboundAttachment(attachment))
     }
     const result = await api.sendMessage(
       {
@@ -177,11 +285,15 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => ({
     return { messageIds, sentCount: messageIds.length }
   },
   getLabels: async () =>
-    zaloAccountLabelSnapshotSchema.parse(await api.getLabels()),
+    zaloAccountLabelSnapshotSchema.parse({
+      ...(await api.getLabels()),
+      complete: true,
+    }),
   updateLabels: async ({ labelData, version }) =>
-    zaloAccountLabelSnapshotSchema.parse(
-      await api.updateLabels({ labelData, version }),
-    ),
+    zaloAccountLabelSnapshotSchema.parse({
+      ...(await api.updateLabels({ labelData, version })),
+      complete: true,
+    }),
 })
 
 const qrEventOf = (event: LoginQRCallbackEvent): ZcaQrEvent | undefined => {

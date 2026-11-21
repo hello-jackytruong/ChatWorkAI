@@ -53,9 +53,12 @@ import { purgeExpiredOAuthTokens } from "./handlers/purge-expired-oauth-tokens"
 import { purgeInboundWebhookRequests } from "./handlers/purge-inbound-webhook-requests"
 import { purgeWhatsappSignupSessions } from "./handlers/purge-whatsapp-signup-sessions"
 import { purgeWorkspaces } from "./handlers/purge-workspaces"
+import { purgeZaloMessageState } from "./handlers/purge-zalo-message-state"
 import { reconcileBroadcasts } from "./handlers/reconcile-broadcasts"
 import { reconcileMetaCatalogSyncs } from "./handlers/reconcile-meta-catalog-syncs"
 import { reconcileTenants } from "./handlers/reconcile-tenants"
+import { reconcileZaloLabels } from "./handlers/reconcile-zalo-labels"
+import { recoverZaloGroupInbox } from "./handlers/recover-zalo-group-inbox"
 import { redispatchInboundWebhookRequests } from "./handlers/redispatch-inbound-webhook-requests"
 import { redispatchTemplateJobs } from "./handlers/redispatch-template-jobs"
 import { refreshChannelTokens } from "./handlers/refresh-channel-tokens"
@@ -279,6 +282,15 @@ async function startScheduleWorker() {
             // default worker), so no `isBlockedJob` guard here either.
             case ScheduleJobData.redispatchInboundWebhookRequests:
               await redispatchInboundWebhookRequests()
+              return
+            case ScheduleJobData.recoverZaloGroupInbox:
+              await recoverZaloGroupInbox()
+              return
+            case ScheduleJobData.reconcileZaloLabels:
+              await reconcileZaloLabels()
+              return
+            case ScheduleJobData.purgeZaloMessageState:
+              await purgeZaloMessageState()
               return
 
             case ScheduleJobData.redispatchTemplateJobs:

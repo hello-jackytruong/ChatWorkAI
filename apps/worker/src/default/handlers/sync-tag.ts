@@ -370,7 +370,7 @@ async function syncTagDetach(props: {
       })
     } catch (error) {
       logger.warn(
-        { row, error },
+        { row, err: error },
         "syncTag(detach): skip per-row unassign error",
       )
       await logProviderErrorForChannel(row.channelType, {
@@ -379,6 +379,9 @@ async function syncTagDetach(props: {
         sourceId: row.sourceId,
         error,
       })
+      if (row.channelType === channelTypes.enum.zaloAccount) {
+        throw error
+      }
     }
     // Delete the local mapping regardless of sync state / API outcome.
     await tagSyncService.unlinkContactInbox({
@@ -442,7 +445,7 @@ async function unassignOnChannel(props: {
     if (!account) {
       return
     }
-    await zaloAccountLabelService.mutateAssignment({
+    const confirmed = await zaloAccountLabelService.mutateAssignment({
       workspaceId,
       accountId: account.id,
       contactInboxId: row.contactInboxId,
@@ -451,6 +454,9 @@ async function unassignOnChannel(props: {
       assigned: false,
       commandId: `${props.commandId}:zalo-account:detach`,
     })
+    if (!confirmed) {
+      throw new Error("Zalo Account label detach was not confirmed")
+    }
   }
 }
 

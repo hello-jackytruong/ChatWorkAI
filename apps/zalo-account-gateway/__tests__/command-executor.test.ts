@@ -3,6 +3,7 @@ import type {
   ZaloAccountGroup,
   ZaloAccountLabelSnapshot,
 } from "@chatbotx.io/sdk"
+import { ZaloAccountPreDispatchError } from "@chatbotx.io/sdk"
 import { describe, expect, it, vi } from "vitest"
 import {
   commandStateKey,
@@ -35,6 +36,7 @@ const makeHarness = (admission?: ProviderAdmissionPort) => {
       }),
     ),
     listGroups: vi.fn(async (): Promise<ZaloAccountGroup[]> => []),
+    listFriends: vi.fn(async () => ({ friends: [], complete: true })),
     reconnect: vi.fn(async () => ({ status: "started" as const })),
     sendDirect: vi.fn(async () => ({
       status: "sent" as const,
@@ -46,6 +48,7 @@ const makeHarness = (admission?: ProviderAdmissionPort) => {
       messageIds: ["provider-group-1"],
       sentCount: 1,
     })),
+    sendTyping: vi.fn(async () => undefined),
     startQr: vi.fn(async () => ({ status: "started" as const })),
     stop: vi.fn(async () => undefined),
     updateLabels: vi.fn(async ({ labelData, expectedVersion }) => ({
@@ -68,6 +71,56 @@ const makeHarness = (admission?: ProviderAdmissionPort) => {
 }
 
 describe("ZaloAccountCommandExecutor", () => {
+  it("dispatches best-effort typing with the exact group policy context", async () => {
+    const { executor, pool } = makeHarness()
+    await expect(
+      executor.execute({
+        ...reconnectCommand,
+        commandId: "typing-1",
+        kind: "send_typing",
+        threadType: "group",
+        threadId: "g1",
+        accountPolicyEpoch: 1,
+        groupPolicyEpoch: 2,
+        target: { ownerId: "owner-1", fenceToken: "7" },
+      }),
+    ).resolves.toMatchObject({ status: "applied" })
+    expect(pool.sendTyping).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: "g1",
+        threadType: "group",
+        accountPolicyEpoch: 1,
+        groupPolicyEpoch: 2,
+      }),
+    )
+  })
+  it("classifies a fenced group admission rejection as failed rather than unknown", async () => {
+    const admission = {
+      check: () => 0,
+      recordFailure: vi.fn(),
+      recordSuccess: vi.fn(),
+    }
+    const { executor, pool } = makeHarness(admission)
+    pool.sendGroup.mockRejectedValueOnce(
+      new ZaloAccountPreDispatchError("Group policy changed"),
+    )
+    await expect(
+      executor.execute({
+        ...reconnectCommand,
+        commandId: "stale-group",
+        kind: "send_group",
+        groupId: "g1",
+        accountPolicyEpoch: 1,
+        groupPolicyEpoch: 2,
+        target: { ownerId: "owner-1", fenceToken: "7" },
+        message: { recipientId: "g1", text: "hello", attachments: [] },
+      }),
+    ).resolves.toEqual({ status: "failed", error: "Group policy changed" })
+    expect(pool.sendGroup).toHaveBeenCalledWith(
+      expect.objectContaining({ accountPolicyEpoch: 1, groupPolicyEpoch: 2 }),
+    )
+    expect(admission.recordFailure).not.toHaveBeenCalled()
+  })
   it("dispatches a scoped reconnect to the account pool", async () => {
     const { executor, pool } = makeHarness()
 
@@ -271,6 +324,8 @@ describe("ZaloAccountCommandExecutor", () => {
         ...reconnectCommand,
         commandId: "send-group-1",
         kind: "send_group",
+        accountPolicyEpoch: 1,
+        groupPolicyEpoch: 2,
         groupId: "group-1",
         target: { ownerId: "owner-1", fenceToken: "7" },
         message: {

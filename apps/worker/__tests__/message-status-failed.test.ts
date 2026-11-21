@@ -47,6 +47,7 @@ vi.mock("../src/lib/logger", () => ({
 }))
 
 vi.mock("../src/services/integrations", () => ({
+  buildIntegrationContext: vi.fn().mockResolvedValue({ workspaceId: "ws-1" }),
   allIntegrations: { whatsapp: { runChannelHandler: mocks.runChannelHandler } },
   integrationService: {
     identifyInboxAndIntegrationAuthFromIdentifier: mocks.identifyIntegration,

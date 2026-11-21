@@ -20,6 +20,7 @@ import { contactMarkAsRead } from "../integration/handlers/conversation"
 import { processIncomingMessage } from "../integration/handlers/incoming-message"
 import { handleMessageStatus } from "../integration/handlers/message-status"
 import { receiveComment } from "../integration/handlers/received-message"
+import { handleZaloAccountThreadEvent } from "../integration/handlers/zalo-account-thread-event"
 import { runIntegrationJobWithWebhookContext } from "../integration/job-context"
 import { processLeaderboardJob } from "../leaderboard/process-job"
 import { createQueueWorker } from "../lib/create-queue-worker"
@@ -59,6 +60,9 @@ async function processLowJob(
       async () => {
         const jobData = job.data
         switch (jobData.type) {
+          case LowJobAction.zaloAccountThreadEvent:
+            await handleZaloAccountThreadEvent(jobData.data, job)
+            return
           case LowJobAction.coexistAttachmentDownload: {
             await coexistAttachmentDownload(job, jobData.data)
             return

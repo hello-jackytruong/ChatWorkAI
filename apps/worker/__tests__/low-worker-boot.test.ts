@@ -589,3 +589,6 @@ describe("low worker process boot", () => {
     expect(workerState.updateContactAvatar).not.toHaveBeenCalled()
   })
 })
+vi.mock("../src/integration/handlers/zalo-account-thread-event", () => ({
+  handleZaloAccountThreadEvent: vi.fn(),
+}))

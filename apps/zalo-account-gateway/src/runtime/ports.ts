@@ -4,13 +4,17 @@ import type {
   ZaloAccountDirectMessage,
   ZaloAccountDirectStatus,
   ZaloAccountDirectUndo,
+  ZaloAccountFriendSync,
   ZaloAccountGroup,
   ZaloAccountGroupActivity,
+  ZaloAccountGroupMessage,
+  ZaloAccountGroupSync,
   ZaloAccountLabel,
   ZaloAccountLabelSnapshot,
   ZaloAccountLifecycleEvent,
   ZaloAccountOutboundMessage,
   ZaloAccountRuntimeRef,
+  ZaloAccountThreadEvent,
 } from "@chatbotx.io/sdk"
 
 export type AccountLease = { ownerId: string; fenceToken: string }
@@ -35,6 +39,14 @@ export type AccountLeasePort = {
 }
 
 export type RuntimeEventSink = {
+  publishThreadEvent?: (
+    event: ZaloAccountThreadEvent,
+    context: RuntimeEventContext & { epoch: number; fenceToken: string },
+  ) => Promise<void>
+  publishGroupMessage?: (
+    message: ZaloAccountGroupMessage,
+    context: RuntimeEventContext & { epoch: number; fenceToken: string },
+  ) => Promise<void>
   publishLifecycle: (
     event: ZaloAccountLifecycleEvent,
     context: RuntimeEventContext,
@@ -81,6 +93,7 @@ export type ZcaQrEvent =
 export type ZcaListenerPort = { start: () => void; stop: () => void }
 
 export type ZcaListenerHandlers = {
+  onThreadEvent?: (event: ZaloAccountThreadEvent) => void
   onClosed: (reason: string) => void
   onDirectMessage: (message: ZaloAccountDirectMessage) => void
   onDirectStatus: (status: ZaloAccountDirectStatus) => void
@@ -88,18 +101,21 @@ export type ZcaListenerHandlers = {
   onGroupMessage: (input: {
     threadId: string
     providerMessageId: string
+    message?: ZaloAccountGroupMessage
   }) => void
   onUnsupported: (reason: string) => void
 }
 
 export type ZcaApiPort = {
+  listFriends?: (cursor: number) => Promise<ZaloAccountFriendSync>
+  sendTyping?: (threadId: string, threadType: "user" | "group") => Promise<void>
   getOwnId: () => Promise<string>
   listen: (handlers: ZcaListenerHandlers) => ZcaListenerPort
   sendDirect: (message: ZaloAccountOutboundMessage) => Promise<{
     messageIds: string[]
     sentCount: number
   }>
-  listGroups: () => Promise<ZaloAccountGroup[]>
+  listGroups: () => Promise<ZaloAccountGroup[] | ZaloAccountGroupSync>
   sendGroup: (
     groupId: string,
     message: ZaloAccountOutboundMessage,

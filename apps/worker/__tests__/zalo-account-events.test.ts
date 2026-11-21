@@ -1,15 +1,22 @@
+const THREAD_EVENT_JOB_PATTERN = /^zalo-thread-event-[a-f0-9]{64}$/
+const GROUP_MESSAGE_JOB_PATTERN = /^zalo-group-message-[a-f0-9]+$/
+
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   completeTrusted: vi.fn(),
   decryptObject: vi.fn(),
   enqueueIntegrationJob: vi.fn(),
+  applyRuntime: vi.fn(),
   markScanned: vi.fn(),
   publishQr: vi.fn(),
   withBlockedOwnerGuard: vi.fn(
     async (_workspaceId: string, operation: () => Promise<unknown>) =>
       await operation(),
   ),
+}))
+vi.mock("@chatbotx.io/business/zalo-account/runtime-state", () => ({
+  zaloAccountRuntimeStateService: { apply: mocks.applyRuntime },
 }))
 
 vi.mock("@chatbotx.io/business", () => ({
@@ -32,6 +39,8 @@ vi.mock("@chatbotx.io/worker-config", () => ({
     incomingMessageEcho: "incomingMessageEcho",
     messageStatus: "messageStatus",
     zaloAccountGroupRefresh: "zaloAccountGroupRefresh",
+    zaloAccountGroupMessage: "zaloAccountGroupMessage",
+    zaloAccountThreadEvent: "zaloAccountThreadEvent",
   },
   enqueueIntegrationJob: mocks.enqueueIntegrationJob,
 }))
@@ -69,7 +78,132 @@ const secretBase = {
 }
 
 describe("handleZaloAccountEvents", () => {
+  it("maps account lifecycle through the fenced durable connection service", async () => {
+    await handleZaloAccountEvents([
+      {
+        version: 1,
+        eventId: "runtime-event",
+        route: {
+          kind: "account",
+          workspaceId: "w1",
+          accountId: "a1",
+          inboxId: "i1",
+        },
+        epoch: 3,
+        fenceToken: "99",
+        occurredAt: "2026-11-21T00:00:00.000Z",
+        kind: "lifecycle",
+        payload: { type: "closed", reason: "socket_closed" },
+      },
+    ])
+    expect(mocks.applyRuntime).toHaveBeenCalledWith({
+      workspaceId: "w1",
+      accountId: "a1",
+      inboxId: "i1",
+      order: {
+        epoch: 3,
+        fenceToken: "99",
+        occurredAt: "2026-11-21T00:00:00.000Z",
+        state: "closed",
+      },
+    })
+  })
+  it("routes typed group bookkeeping with immutable policy epochs", async () => {
+    const payload = {
+      type: "reaction",
+      threadType: "group",
+      threadId: "g1",
+      providerMessageId: "m1",
+      actorId: "u1",
+      reactionKey: "/-heart",
+      operation: "add",
+      timestampMs: 1_800_000_000_000,
+      timestampSource: "provider",
+    } as const
+    await handleZaloAccountEvents([
+      {
+        version: 1,
+        eventId: "state-event",
+        route: {
+          kind: "account",
+          workspaceId: "w1",
+          accountId: "a1",
+          inboxId: "i1",
+        },
+        epoch: 1,
+        fenceToken: "1",
+        occurredAt: "2026-11-21T00:00:00.000Z",
+        kind: "thread_event",
+        accountPolicyEpoch: 2,
+        groupPolicyEpoch: 3,
+        payload,
+      },
+    ])
+    expect(mocks.enqueueIntegrationJob).toHaveBeenCalledWith(
+      {
+        type: "zaloAccountThreadEvent",
+        data: {
+          workspaceId: "w1",
+          accountId: "a1",
+          inboxId: "i1",
+          accountPolicyEpoch: 2,
+          groupPolicyEpoch: 3,
+          event: payload,
+        },
+      },
+      expect.objectContaining({
+        attempts: 5,
+        jobId: expect.stringMatching(THREAD_EVENT_JOB_PATTERN),
+      }),
+    )
+  })
   beforeEach(() => vi.clearAllMocks())
+  it("routes group messages to a dedicated job with immutable policy epochs", async () => {
+    await handleZaloAccountEvents([
+      {
+        version: 1,
+        eventId: "group-event",
+        route: {
+          kind: "account",
+          workspaceId: "w1",
+          accountId: "a1",
+          inboxId: "i1",
+        },
+        epoch: 1,
+        fenceToken: "1",
+        occurredAt: "2026-11-21T00:00:00.000Z",
+        kind: "group_message",
+        accountPolicyEpoch: 2,
+        groupPolicyEpoch: 3,
+        payload: {
+          providerMessageId: "m1",
+          threadId: "g1",
+          threadType: "group",
+          senderId: "member",
+          timestampMs: 1,
+          msgType: "webchat",
+          isSelf: false,
+          text: "hello",
+          attachments: [],
+          mentions: [],
+        },
+      },
+    ])
+    expect(mocks.enqueueIntegrationJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "zaloAccountGroupMessage",
+        data: expect.objectContaining({
+          workspaceId: "w1",
+          accountId: "a1",
+          accountPolicyEpoch: 2,
+          groupPolicyEpoch: 3,
+        }),
+      }),
+      expect.objectContaining({
+        jobId: expect.stringMatching(GROUP_MESSAGE_JOB_PATTERN),
+      }),
+    )
+  })
 
   it("decrypts QR only inside the worker and publishes the session action", async () => {
     mocks.decryptObject.mockResolvedValueOnce({

@@ -9,6 +9,10 @@ import {
   whatsappFlowService,
 } from "@chatbotx.io/business"
 import {
+  zaloAccountGroupService,
+  zaloAccountSendAttemptService,
+} from "@chatbotx.io/business/zalo-account"
+import {
   channelTypes,
   isLegacyMemberMessage,
   isSentFromInbox,
@@ -307,6 +311,28 @@ export async function sendMessageToChannel(
     isBulkBroadcast,
     sendFrom,
   } = data
+  if (contactInbox.contactKind === "channelGroup") {
+    const audience = data.groupAudience
+    if (
+      !audience ||
+      audience.workspaceId !== conversation.workspaceId ||
+      audience.contactInboxId !== contactInbox.id ||
+      audience.conversationId !== conversation.id ||
+      !(await zaloAccountGroupService.validateAudience(audience))
+    ) {
+      await recordMessageSendError(
+        message.id,
+        message.clientId,
+        conversation.workspaceId,
+        message.createdAt ? new Date(message.createdAt) : undefined,
+        "Group policy changed; message was not sent",
+        { conversationId: conversation.id },
+      )
+      return { messageIds: [], sentCount: 0 }
+    }
+  } else if (data.groupAudience) {
+    return { messageIds: [], sentCount: 0 }
+  }
   const isBulkOutbound =
     isBulkOutboundMetadata(metadata, isBulkBroadcast) ||
     isBulkOutboundMetadata(message.contentAttributes?.metadata, isBulkBroadcast)
@@ -384,6 +410,7 @@ export async function sendMessageToChannel(
     if (
       !isComment &&
       contactInbox.channel === channelTypes.enum.zaloAccount &&
+      contactInbox.contactKind !== "channelGroup" &&
       message.parentId &&
       message.parentCreatedAt
     ) {
@@ -440,6 +467,7 @@ export async function sendMessageToChannel(
           ),
         },
         message: handlerMessage,
+        ...(data.groupAudience ? { groupAudience: data.groupAudience } : {}),
         quickReplies: isComment ? undefined : quickReplies,
         metadata,
         sendFrom,
@@ -559,6 +587,9 @@ export async function sendMessageToChannel(
         }
       }
 
+      if (contactInbox.contactKind === "channelGroup") {
+        return result
+      }
       await contactInboxService.recordOutboundMessageSent({
         contactInboxId: contactInbox.id,
         contactId: contactInbox.contactId,
@@ -663,6 +694,35 @@ export async function sendMessageToChannel(
     return result
   } catch (error) {
     // A reconciled failure is a permanent, known outcome: it is still
+    if (
+      contactInbox.contactKind === "channelGroup" ||
+      (contactInbox.channel === "zaloAccount" &&
+        message.createdAt &&
+        (await zaloAccountSendAttemptService.hasUnresolvedOrAcceptedSend({
+          workspaceId: conversation.workspaceId,
+          inboxId: contactInbox.inboxId,
+          messageId: message.id,
+          createdAt: new Date(message.createdAt),
+        })))
+    ) {
+      logger.error(
+        {
+          err: error,
+          messageId: message.id,
+          workspaceId: conversation.workspaceId,
+        },
+        "Zalo send requires reconciliation",
+      )
+      await recordMessageSendError(
+        message.id,
+        message.clientId,
+        conversation.workspaceId,
+        message.createdAt ? new Date(message.createdAt) : undefined,
+        error instanceof Error ? error.message : "Zalo group send failed",
+        { conversationId: conversation.id },
+      )
+      return { messageIds: [], sentCount: 0 }
+    }
     // recorded below, but never rethrown into a retry.
     const isReconciledSendError = await reconcileChannelSendError({
       error,
@@ -1502,6 +1562,7 @@ export function emitHumanMessageSentEvents(input: {
 }
 
 export async function sendFlowStepToChannel({
+  groupAudience,
   conversation,
   contactInbox,
   flowId,
@@ -1519,6 +1580,7 @@ export async function sendFlowStepToChannel({
   humanSender,
   isTemplateMessage = false,
 }: {
+  groupAudience?: ChatJobSendFlowStep["data"]["groupAudience"]
   conversation: ConversationModel
   contactInbox: ContactInboxModel
   flowId: string
@@ -1542,6 +1604,16 @@ export async function sendFlowStepToChannel({
    */
   isTemplateMessage?: boolean
 }): Promise<OutgoingSendResult> {
+  if (
+    contactInbox.contactKind === "channelGroup" &&
+    (!groupAudience ||
+      groupAudience.workspaceId !== conversation.workspaceId ||
+      groupAudience.conversationId !== conversation.id ||
+      groupAudience.contactInboxId !== contactInbox.id ||
+      !(await zaloAccountGroupService.validateAudience(groupAudience)))
+  ) {
+    return { messageIds: [], sentCount: 0 }
+  }
   // The caller's row is the flow step as it was loaded; a handover may have
   // landed since. Re-read the current routing state (zero queries when the
   // thread has none) before the gate and the implicit-take record, exactly as
@@ -1605,6 +1677,8 @@ export async function sendFlowStepToChannel({
         richResponse,
         sendFrom,
         idempotencyKey: messageId,
+        idempotencyCreatedAt: messageCreatedAt,
+        ...(groupAudience ? { groupAudience } : {}),
         commentAnchor,
         emailThread,
       },
@@ -1631,6 +1705,9 @@ export async function sendFlowStepToChannel({
     messageCreatedAt,
     result,
   )
+  if (contactInbox.contactKind === "channelGroup") {
+    return result
+  }
   await contactInboxService.recordOutboundMessageSent({
     contactInboxId: contactInbox.id,
     contactId: contactInbox.contactId,

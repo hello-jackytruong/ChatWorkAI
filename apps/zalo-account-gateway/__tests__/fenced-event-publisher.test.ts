@@ -35,6 +35,49 @@ const payloadOfLastAppend = () => {
 }
 
 describe("FencedEventPublisher", () => {
+  it("publishes group message content only with a current receive policy", async () => {
+    appendIfOwned.mockClear()
+    const resolveGroupReceivePolicy = vi
+      .fn()
+      .mockResolvedValue({ accountPolicyEpoch: 3, groupPolicyEpoch: 4 })
+    const sink = new FencedEventPublisher({
+      appendPort: { appendIfOwned },
+      eventStreamKey: "events",
+      maxLen: 1000,
+      ownerId: "owner-1",
+      resolveGroupReceivePolicy,
+    })
+    const message = {
+      providerMessageId: "m1",
+      threadId: "g1",
+      threadType: "group" as const,
+      senderId: "member",
+      timestampMs: 1,
+      msgType: "webchat",
+      isSelf: false,
+      text: "hello",
+      mentions: [],
+      attachments: [],
+    }
+    const route = {
+      ...context,
+      accountId: "account-1",
+      inboxId: "inbox-1",
+      epoch: 1,
+      fenceToken: "2",
+    }
+    await sink.publishGroupMessage(message, route)
+    expect(JSON.parse(payloadOfLastAppend())).toMatchObject({
+      kind: "group_message",
+      payload: { senderId: "member" },
+      accountPolicyEpoch: 3,
+      groupPolicyEpoch: 4,
+    })
+    appendIfOwned.mockClear()
+    resolveGroupReceivePolicy.mockResolvedValue(null)
+    await sink.publishGroupMessage(message, route)
+    expect(appendIfOwned).not.toHaveBeenCalled()
+  })
   it("encrypts QR data before appending it to Redis", async () => {
     appendIfOwned.mockClear()
     const event: ZaloAccountLifecycleEvent = {

@@ -23,6 +23,7 @@ export class TriggerExecutorService {
       conversationId,
       decisionFlowOrigin,
       occurrenceId,
+      groupAudience,
     } = input
     const runAllowed = await triggerService.tryAcquireContactRun({
       workspaceId,
@@ -42,6 +43,7 @@ export class TriggerExecutorService {
         workspaceId,
         contactInboxId,
         conversationId,
+        groupAudience,
         runKey: occurrenceId
           ? `trigger:${occurrenceId}:${triggerId}`
           : undefined,
@@ -57,6 +59,7 @@ export class TriggerExecutorService {
               workspaceId,
               contactInboxId,
               conversationId,
+              groupAudience,
               decisionFlowOrigin,
               occurrenceKey: occurrenceId
                 ? `trigger:${occurrenceId}:${triggerId}:${index}`
@@ -72,7 +75,9 @@ export class TriggerExecutorService {
         }
       }
 
-      await this.recordRun(triggerId, contactId, workspaceId)
+      if (!groupAudience) {
+        await this.recordRun(triggerId, contactId, workspaceId)
+      }
     } catch (error) {
       logger.error(
         error,

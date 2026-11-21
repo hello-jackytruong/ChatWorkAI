@@ -8,7 +8,11 @@ import type { TriggerActionScope } from "./types"
 
 type ScopeIdentity = Pick<
   ActionExecutionContext,
-  "contactId" | "workspaceId" | "contactInboxId" | "conversationId"
+  | "contactId"
+  | "workspaceId"
+  | "contactInboxId"
+  | "conversationId"
+  | "groupAudience"
 > & {
   /**
    * Stable key of this run (identical on a retry). It seeds the one outreach
@@ -68,9 +72,15 @@ export function createTriggerActionScope(
       const requested = await conversationService.findBy({
         where: { id: conversationId, workspaceId, contactId },
       })
-      if (requested && isEmailThreadSourceId(requested.sourceId)) {
+      if (
+        requested &&
+        (identity.groupAudience || isEmailThreadSourceId(requested.sourceId))
+      ) {
         return requested
       }
+    }
+    if (identity.groupAudience) {
+      return
     }
     const latest = await conversationService.findLatestCreatedByContact({
       workspaceId,

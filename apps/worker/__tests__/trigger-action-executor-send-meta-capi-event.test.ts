@@ -1,3 +1,10 @@
+// Group services are outside this direct-channel unit boundary.
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountGroupService: {},
+  zaloAccountGroupTagService: {},
+  zaloAccountLabelService: {},
+}))
+
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { z } from "zod"
 

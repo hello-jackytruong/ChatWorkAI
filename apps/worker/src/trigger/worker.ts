@@ -72,6 +72,7 @@ function startTriggerWorker() {
                     matchedTriggers.map((trigger) =>
                       triggerExecutor.execute(trigger, {
                         contactId: eventData.contactId,
+                        groupAudience: eventData.groupAudience,
                         contactInboxId,
                         conversationId,
                         decisionFlowOrigin: decisionFlowOrigin.success

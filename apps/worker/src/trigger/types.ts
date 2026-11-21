@@ -5,6 +5,7 @@ import type {
   WorkspaceModel,
 } from "@chatbotx.io/database/types"
 import type { DecisionFlowOrigin } from "@chatbotx.io/events"
+import type { ZaloAccountGroupAudience } from "@chatbotx.io/sdk"
 
 export type TriggerWithConditions = TriggerModel & {
   conditions: ConditionModel[]
@@ -12,6 +13,7 @@ export type TriggerWithConditions = TriggerModel & {
 }
 
 export type TriggerEventData = {
+  groupAudience?: ZaloAccountGroupAudience
   workspaceId: string
   contactId: string
   eventType: TriggerEventType
@@ -44,6 +46,7 @@ export type ActionExecutionOutcome =
   | { status: "skipped"; reason: string }
 
 export type ActionExecutionContext = {
+  groupAudience?: ZaloAccountGroupAudience
   action: Record<string, unknown>
   contactId: string
   source: ActionSource
@@ -73,6 +76,7 @@ export type ActionExecutionContext = {
  * first parameter.
  */
 export type TriggerExecutionInput = {
+  groupAudience?: ZaloAccountGroupAudience
   contactId: string
   contactInboxId?: string
   conversationId?: string

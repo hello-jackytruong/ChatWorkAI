@@ -618,6 +618,20 @@ vi.mock("../src/lib/db", () => ({
 }))
 
 vi.mock("../src/services/integrations", () => ({
+  buildIntegrationContext: ({
+    workspaceId,
+    integrationType,
+    integrationRow,
+  }: {
+    workspaceId: string
+    integrationType: string
+    integrationRow: unknown
+  }) =>
+    mockBuildContext({
+      workspaceId,
+      integrationType,
+      integration: integrationRow,
+    }),
   allIntegrations: {
     messenger: { runChannelHandler: mockRunChannelHandler },
   },
@@ -1365,3 +1379,16 @@ describe("integration worker — conversation routing (thread control)", () => {
     expect(mockReleaseOwnedThread).toHaveBeenCalledWith(data)
   })
 })
+vi.mock("../src/integration/handlers/zalo-account-group-message", () => ({
+  receiveZaloAccountGroupMessage: vi.fn(),
+}))
+vi.mock("../src/integration/handlers/zalo-account-group-refresh", () => ({
+  refreshZaloAccountGroups: vi.fn(),
+}))
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountGroupService: {},
+  zaloAccountGroupTagService: {},
+}))
+vi.mock("../src/integration/handlers/zalo-account-thread-event", () => ({
+  handleZaloAccountThreadEvent: vi.fn(),
+}))

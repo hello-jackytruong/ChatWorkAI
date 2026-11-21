@@ -1,4 +1,5 @@
 import { Integration, type IntegrationDefinition } from "@chatbotx.io/sdk"
+import { conversationHandlers } from "./conversation"
 import { messageHandlers } from "./message"
 import type {
   ZaloAccountActions,
@@ -12,7 +13,9 @@ const config: IntegrationDefinition<
   ZaloAccountActions
 > = {
   name: "zaloAccount",
-  channels: { channel: { message: messageHandlers } },
+  channels: {
+    channel: { message: messageHandlers, conversation: conversationHandlers },
+  },
   actions: {},
   handleRequest: () =>
     Promise.reject(new Error("Zalo Account uses the fenced gateway transport")),

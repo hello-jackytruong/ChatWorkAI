@@ -1,10 +1,16 @@
-import { zaloAccountCommandTransportService } from "@chatbotx.io/business/zalo-account"
+import {
+  zaloAccountCommandTransportService,
+  zaloAccountGroupService,
+  zaloAccountSendAttemptService,
+} from "@chatbotx.io/business/zalo-account"
 import { stepTypes } from "@chatbotx.io/flow-config"
 import {
   contentTypes,
   type IncomingAttachment,
   type MessageHandlers,
   messageTypes,
+  type ZaloAccountGroupAudience,
+  type ZaloAccountOutboundMessage,
   zaloAccountDirectMessageSchema,
   zaloAccountQuoteSchema,
 } from "@chatbotx.io/sdk"
@@ -15,10 +21,11 @@ const scopedMessageId = (input: {
   accountId: string
   threadId: string
   providerMessageId: string
+  threadType?: "user" | "group"
 }) =>
-  `za:${encodeURIComponent(input.accountId)}:user:${encodeURIComponent(input.threadId)}:${encodeURIComponent(input.providerMessageId)}`
+  `za:${encodeURIComponent(input.accountId)}:${input.threadType ?? "user"}:${encodeURIComponent(input.threadId)}:${encodeURIComponent(input.providerMessageId)}`
 
-const accountContext = (detail: Record<string, unknown> | undefined) => {
+export const accountContext = (detail: Record<string, unknown> | undefined) => {
   const accountId =
     typeof detail?.accountId === "string" ? detail.accountId : ""
   const inboxId = typeof detail?.inboxId === "string" ? detail.inboxId : ""
@@ -50,6 +57,66 @@ const incomingAttachments = (
     ...(attachment.name ? { name: attachment.name } : {}),
     isPhotoMessage: attachment.kind === "image",
   }))
+
+const sendRoutedMessage = async (
+  route: ReturnType<typeof accountContext>,
+  sourceId: string,
+  commandId: string,
+  message: ZaloAccountOutboundMessage,
+  options: {
+    origin: "inbox" | "flow" | "api"
+    localMessage?: { id: string; createdAt: Date }
+    audience?: ZaloAccountGroupAudience
+  },
+) => {
+  const isGroup = sourceId.startsWith("za:group:")
+  const threadId = isGroup
+    ? decodeURIComponent(sourceId.slice("za:group:".length))
+    : sourceId
+  if (!threadId) {
+    throw new Error("Zalo Account message has no target")
+  }
+  if (isGroup && !options.audience) {
+    throw new Error("Zalo group send has no policy audience")
+  }
+  const result = isGroup
+    ? await zaloAccountGroupService.sendByProviderId({
+        ...route,
+        providerGroupId: threadId,
+        commandId,
+        message,
+        ...options,
+      })
+    : await zaloAccountSendAttemptService.send(
+        {
+          ...route,
+          commandId,
+          threadId,
+          threadType: "user",
+          message,
+          ...options,
+        },
+        async (scopedCommandId) =>
+          await zaloAccountCommandTransportService.sendDirectAndWait({
+            ...route,
+            commandId: scopedCommandId,
+            ttlMs: 60_000,
+            waitTimeoutMs: 30_000,
+            message,
+          }),
+      )
+  return {
+    sentCount: result.sentCount,
+    messageIds: result.messageIds.map((providerMessageId) =>
+      scopedMessageId({
+        accountId: route.accountId,
+        threadId,
+        providerMessageId,
+        threadType: isGroup ? "group" : "user",
+      }),
+    ),
+  }
+}
 
 const directStatusPayloadSchema = z
   .object({
@@ -131,28 +198,33 @@ export const sendMessage: MessageHandlers<ZaloAccountAuthValue>["sendMessage"] =
     const quoteCandidate = data.message.contentAttributes?.zaloAccountQuote
     const parsedQuote = zaloAccountQuoteSchema.safeParse(quoteCandidate)
     const quote = parsedQuote.success ? parsedQuote.data : undefined
-    const result = await zaloAccountCommandTransportService.sendDirectAndWait({
-      ...route,
-      commandId: data.message.clientId ?? data.message.id,
-      ttlMs: 60_000,
-      waitTimeoutMs: 30_000,
-      message: {
+    const preparedCommandId =
+      data.message.contentAttributes?.zaloAccountCommandId
+    return await sendRoutedMessage(
+      route,
+      data.contact.sourceId,
+      typeof preparedCommandId === "string"
+        ? preparedCommandId
+        : (data.message.clientId ?? data.message.id),
+      {
         recipientId: data.contact.sourceId,
         ...(data.message.text ? { text: data.message.text } : {}),
         attachments,
         ...(quote ? { quote } : {}),
       },
-    })
-    return {
-      sentCount: result.sentCount,
-      messageIds: result.messageIds.map((providerMessageId) =>
-        scopedMessageId({
-          accountId: route.accountId,
-          threadId: data.contact.sourceId,
-          providerMessageId,
-        }),
-      ),
-    }
+      {
+        origin: data.sendFrom === "inbox" ? "inbox" : "api",
+        ...(data.groupAudience ? { audience: data.groupAudience } : {}),
+        ...(data.message.createdAt
+          ? {
+              localMessage: {
+                id: data.message.id,
+                createdAt: new Date(data.message.createdAt),
+              },
+            }
+          : {}),
+      },
+    )
   }
 
 export const sendFlowStep: MessageHandlers<ZaloAccountAuthValue>["sendFlowStep"] =
@@ -210,23 +282,24 @@ export const sendFlowStep: MessageHandlers<ZaloAccountAuthValue>["sendFlowStep"]
           `Unsupported Zalo Account flow step: ${data.step.stepType}`,
         )
     }
-    const result = await zaloAccountCommandTransportService.sendDirectAndWait({
-      ...route,
-      commandId: data.idempotencyKey,
-      ttlMs: 60_000,
-      waitTimeoutMs: 30_000,
+    return await sendRoutedMessage(
+      route,
+      data.contact.sourceId,
+      data.idempotencyKey,
       message,
-    })
-    return {
-      sentCount: result.sentCount,
-      messageIds: result.messageIds.map((providerMessageId) =>
-        scopedMessageId({
-          accountId: route.accountId,
-          threadId: data.contact.sourceId,
-          providerMessageId,
-        }),
-      ),
-    }
+      {
+        origin: "flow",
+        ...(data.groupAudience ? { audience: data.groupAudience } : {}),
+        ...(data.idempotencyCreatedAt
+          ? {
+              localMessage: {
+                id: data.idempotencyKey,
+                createdAt: new Date(data.idempotencyCreatedAt),
+              },
+            }
+          : {}),
+      },
+    )
   }
 
 const handleMessageStatus: NonNullable<

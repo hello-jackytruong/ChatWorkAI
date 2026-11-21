@@ -13,7 +13,11 @@ import {
   type MetadataPayload,
   type StepType,
 } from "@chatbotx.io/flow-config"
-import type { CommentAnchor, Variables } from "@chatbotx.io/sdk"
+import type {
+  CommentAnchor,
+  Variables,
+  ZaloAccountGroupAudience,
+} from "@chatbotx.io/sdk"
 import type { ErrorLogProvider } from "@chatbotx.io/utils/error-log"
 import type { SendFrom } from "@chatbotx.io/utils/send-from"
 import {
@@ -30,6 +34,7 @@ import {
 import { waitForChatJobCompletion } from "../utils/message"
 
 export type ExecuteMultipleStepsProps = {
+  groupAudience?: ZaloAccountGroupAudience
   conversation: ConversationModel
   contactInbox: ContactInboxModel
   flowVersion: FlowVersionModel
@@ -342,6 +347,7 @@ export async function sendFlow(
           triggerMessageCreatedAt: props.triggerMessageCreatedAt,
           startedByContactMessage: props.startedByContactMessage,
           commentAnchor: props.commentAnchor,
+          groupAudience: props.groupAudience,
           origin: webhookChannelOrigin(),
         },
       },

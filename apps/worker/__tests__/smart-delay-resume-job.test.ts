@@ -40,6 +40,24 @@ const row = {
 } as unknown as Parameters<typeof buildSendFlowResumeJob>[0]
 
 describe("buildSendFlowResumeJob", () => {
+  test("retains the durable group audience and original epochs after Wait", () => {
+    const audience = {
+      kind: "zaloAccountGroup",
+      workspaceId: "w1",
+      accountId: "a1",
+      groupId: "g1",
+      providerGroupId: "pg1",
+      contactInboxId: "ci-1",
+      conversationId: "conv-1",
+      accountPolicyEpoch: 1,
+      groupPolicyEpoch: 2,
+      origin: "automation",
+    }
+    expect(
+      buildSendFlowResumeJob({ ...row, groupAudience: audience } as never).data
+        .data,
+    ).toHaveProperty("groupAudience", audience)
+  })
   test("never emits startedByContactMessage, so a delayed resume is not message-driven", () => {
     const job = buildSendFlowResumeJob(row, {
       sendFrom: "inbox",

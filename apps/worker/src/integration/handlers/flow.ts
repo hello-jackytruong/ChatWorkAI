@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto"
 import { automatedResponseService } from "@chatbotx.io/automated-response"
 import { broadcastService, contactActivityService } from "@chatbotx.io/business"
+import {
+  isAllowedGroupFlow,
+  isAllowedGroupFlowStep,
+  zaloAccountGroupService,
+} from "@chatbotx.io/business/zalo-account"
 import { and, db, eq } from "@chatbotx.io/database/client"
 import { createMessageRepository } from "@chatbotx.io/database/repositories"
 import { contactsOnBroadcastsModel } from "@chatbotx.io/database/schema"
@@ -34,6 +39,7 @@ import {
   initVariables,
   SdkException,
   type Variables,
+  type ZaloAccountGroupAudience,
 } from "@chatbotx.io/sdk"
 import type { SendFrom } from "@chatbotx.io/utils/send-from"
 import {
@@ -152,6 +158,7 @@ const CONTINUES_AFTER_BRANCH_STEP_TYPES: ReadonlySet<StepType> =
   new Set<StepType>([stepTypes.enum.getUserData])
 
 type ExecuteStepsAndQuickRepliesProps = {
+  groupAudience?: ZaloAccountGroupAudience
   conversation: ConversationModel
   contactInbox: ContactInboxModel
   flowVersion: FlowVersionModel
@@ -324,6 +331,20 @@ export const runFlowNode = async (
       conversationId: props.conversationId,
       contactInboxId: props.contactInboxId,
     })
+  if (contactInbox.contactKind === "channelGroup") {
+    const audience = props.groupAudience
+    if (
+      !audience ||
+      audience.contactInboxId !== contactInbox.id ||
+      audience.conversationId !== conversation.id ||
+      audience.workspaceId !== conversation.workspaceId ||
+      !(await zaloAccountGroupService.validateAudience(audience))
+    ) {
+      return
+    }
+  } else if (props.groupAudience) {
+    return
+  }
   const { flowVersion, useLatestFlowVersion } = await detectFlowVersion({
     flowId: props.flowId,
     flowVersionId: props.flowVersionId,
@@ -331,6 +352,9 @@ export const runFlowNode = async (
   })
 
   const nodes = flowVersion.nodes as unknown as FlowNode[]
+  if (props.groupAudience && !isAllowedGroupFlow(nodes)) {
+    return
+  }
 
   // A re-dispatched job continuing a button/quickReply's own multi-step chain
   // (executeMultipleStepsGenerator's one-step-per-job loop) carries its target
@@ -403,6 +427,7 @@ export const runFlowNode = async (
       appointmentId: props.appointmentId,
       sentByUserId: props.sentByUserId,
       flowExecutionKey,
+      groupAudience: props.groupAudience,
       thenSendFlow: props.thenSendFlow,
       branchedNodeId: props.branchedNodeId,
     })
@@ -511,7 +536,7 @@ async function runNodeSteps(
   // node". Written before any step handler runs: a failure throws and the job
   // retries before anything is sent, and the activity key makes the retry (or a
   // second entry) a no-op.
-  if (!props.startFromStepId && props.targetNodeId) {
+  if (!(props.groupAudience || props.startFromStepId) && props.targetNodeId) {
     const occurredAt = new Date()
     await contactActivityService.record({
       entries: [
@@ -600,6 +625,7 @@ async function runNodeSteps(
         ...props,
         nodeVisits,
         commentAnchor: remainingAnchor,
+        groupAudience: props.groupAudience,
         quickReplies:
           quickReplyCarrier?.id === currentStep.id ? quickReplies : undefined,
         steps: [currentStep],
@@ -680,6 +706,7 @@ async function runNodeSteps(
         startedByContactMessage: props.startedByContactMessage,
         commentAnchor: remainingAnchor,
         // The continuation keeps the parent's key: a retried parent enqueues a
+        groupAudience: props.groupAudience,
         // second continuation with another job id, and the conversion step
         // derives its event-mode occurrence from this key.
         flowExecutionKey: isDurableFlowExecutionKey(props.flowExecutionKey)
@@ -759,6 +786,7 @@ async function runNodeSteps(
       startedByContactMessage: props.startedByContactMessage,
       commentAnchor: remainingAnchor,
       origin: webhookChannelOrigin(),
+      groupAudience: props.groupAudience,
     })
   }
 }
@@ -814,6 +842,23 @@ async function* executeMultipleStepsGenerator(
       step.stepType as StepType,
     )
     const stepAnchor = isMessageProducingStep ? anchorAvailable : undefined
+
+    if (
+      props.contactInbox.contactKind === "channelGroup" &&
+      !(
+        props.groupAudience &&
+        isAllowedGroupFlowStep(step) &&
+        (await zaloAccountGroupService.validateAudience(props.groupAudience))
+      )
+    ) {
+      yield {
+        status: "skip",
+        result: { reason: "unsupportedGroupAction" },
+        commentAnchor: anchorAvailable,
+        branched: false,
+      }
+      continue
+    }
 
     const rawResult = await flowStepHandlers[step.stepType as StepType]?.({
       ...rest,
@@ -896,6 +941,7 @@ async function* executeMultipleStepsGenerator(
               triggerMessageCreatedAt: props.triggerMessageCreatedAt,
               startedByContactMessage: props.startedByContactMessage,
               commentAnchor: anchorAvailable,
+              groupAudience: props.groupAudience,
               flowExecutionKey: isDurableFlowExecutionKey(
                 props.flowExecutionKey,
               )

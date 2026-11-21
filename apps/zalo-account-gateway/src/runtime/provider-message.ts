@@ -1,8 +1,10 @@
 import {
   type ZaloAccountAttachment,
   type ZaloAccountDirectMessage,
+  type ZaloAccountGroupMessage,
   type ZaloAccountQuote,
   zaloAccountDirectMessageSchema,
+  zaloAccountGroupMessageSchema,
 } from "@chatbotx.io/sdk"
 
 type ProviderMessageData = {
@@ -15,6 +17,8 @@ type ProviderMessageData = {
   msgType?: unknown
   content?: unknown
   quote?: unknown
+  mentions?: unknown
+  propertyExt?: unknown
 }
 
 export type ProviderMessageInput = {
@@ -26,7 +30,12 @@ export type ProviderMessageInput = {
 
 export type NormalizedProviderMessage =
   | { kind: "direct"; message: ZaloAccountDirectMessage }
-  | { kind: "group"; threadId: string; providerMessageId: string }
+  | {
+      kind: "group"
+      threadId: string
+      providerMessageId: string
+      message: ZaloAccountGroupMessage
+    }
   | { kind: "unsupported"; reason: string }
 
 const asNonEmptyString = (value: unknown): string | undefined => {
@@ -145,6 +154,61 @@ const quoteOf = (value: unknown): ZaloAccountQuote | undefined => {
   }
 }
 
+const normalizeGroupMessage = (
+  input: ProviderMessageInput,
+  threadId: string,
+  providerMessageId: string,
+): NormalizedProviderMessage => {
+  const data = input.data
+  const rawContent = data?.content
+  const content = asObject(rawContent)
+  const msgType = asNonEmptyString(data?.msgType)
+  const attachment =
+    content && msgType ? attachmentOf(msgType, content) : undefined
+  const extension = asObject(data?.propertyExt)
+  const fallback = parseObject(extension?.ext)
+  const mentions = data?.mentions ?? fallback?.mentions ?? []
+  const result = zaloAccountGroupMessageSchema.safeParse({
+    providerMessageId,
+    clientMessageId: asNonEmptyString(data?.cliMsgId),
+    threadId,
+    threadType: "group",
+    senderId: asNonEmptyString(data?.uidFrom),
+    senderName: asNonEmptyString(data?.dName),
+    timestampMs: Number(data?.ts),
+    msgType,
+    isSelf: input.isSelf === true,
+    text: typeof rawContent === "string" ? rawContent : undefined,
+    attachments: attachment ? [attachment] : [],
+    quote: quoteOf(data?.quote),
+    mentions: Array.isArray(mentions)
+      ? mentions.slice(0, 101).map((value: unknown) => {
+          const mention = asObject(value)
+          return {
+            uid: asNonEmptyString(mention?.uid),
+            offset: mention?.pos,
+            length: mention?.len,
+            type: mention?.type,
+          }
+        })
+      : mentions,
+  })
+  return result.success
+    ? { kind: "group", threadId, providerMessageId, message: result.data }
+    : { kind: "unsupported", reason: "invalid_group_message" }
+}
+
+export const normalizeProviderGroupActivity = (input: ProviderMessageInput) => {
+  if (input.type !== 1 && input.type !== "group") {
+    return
+  }
+  const threadId = asNonEmptyString(input.threadId)
+  const providerMessageId = asNonEmptyString(input.data?.msgId)
+  return threadId && providerMessageId
+    ? { threadId, providerMessageId }
+    : undefined
+}
+
 export const normalizeProviderMessage = (
   input: ProviderMessageInput,
 ): NormalizedProviderMessage => {
@@ -155,7 +219,7 @@ export const normalizeProviderMessage = (
     return { kind: "unsupported", reason: "missing_identity" }
   }
   if (input.type === 1 || input.type === "group") {
-    return { kind: "group", threadId, providerMessageId }
+    return normalizeGroupMessage(input, threadId, providerMessageId)
   }
   if (input.type !== 0 && input.type !== "user") {
     return { kind: "unsupported", reason: "unknown_thread_type" }

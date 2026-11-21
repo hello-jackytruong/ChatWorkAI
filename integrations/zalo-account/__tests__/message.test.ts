@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   sendDirectAndWait: vi.fn(),
+  sendByProviderId: vi.fn(),
 }))
 
 vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountSendAttemptService: {
+    send: async (input, dispatch) => await dispatch(input.commandId),
+  },
+  zaloAccountGroupService: { sendByProviderId: mocks.sendByProviderId },
   zaloAccountCommandTransportService: {
     sendDirectAndWait: mocks.sendDirectAndWait,
   },
@@ -40,6 +45,50 @@ const payload = {
 describe("Zalo Account message adapter", () => {
   beforeEach(() => {
     mocks.sendDirectAndWait.mockReset()
+  })
+  it("routes reserved group anchors through group policy instead of direct UID sending", async () => {
+    mocks.sendByProviderId.mockResolvedValue({
+      messageIds: ["m1"],
+      sentCount: 1,
+    })
+    const result = await sendMessage({
+      ctx,
+      data: {
+        groupAudience: {
+          kind: "zaloAccountGroup",
+          workspaceId: "workspace-1",
+          accountId: "account-1",
+          groupId: "local-g1",
+          providerGroupId: "g1",
+          conversationId: "conv1",
+          contactInboxId: "ci1",
+          origin: "inbox",
+          accountPolicyEpoch: 1,
+          groupPolicyEpoch: 2,
+        },
+        contact: { id: "c1", sourceId: "za:group:g1" },
+        message: {
+          id: "msg1",
+          clientId: "cmd1",
+          workspaceId: "workspace-1",
+          conversationId: "conv1",
+          contentType: "text",
+          messageType: "outgoing",
+          text: "hello",
+          attachments: [],
+        },
+      },
+    })
+    expect(result).toMatchObject({ messageIds: ["za:account-1:group:g1:m1"] })
+    expect(mocks.sendByProviderId).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        accountId: "account-1",
+        providerGroupId: "g1",
+        commandId: "cmd1",
+      }),
+    )
+    expect(mocks.sendDirectAndWait).not.toHaveBeenCalled()
   })
 
   it("scopes message identity by account and maps the inbound peer", async () => {

@@ -105,7 +105,9 @@ import {
   runWooCommerceSync,
   runWooCommerceWebhook,
 } from "./handlers/woocommerce"
+import { receiveZaloAccountGroupMessage } from "./handlers/zalo-account-group-message"
 import { refreshZaloAccountGroups } from "./handlers/zalo-account-group-refresh"
+import { handleZaloAccountThreadEvent } from "./handlers/zalo-account-thread-event"
 import { runIntegrationJobWithWebhookContext } from "./job-context"
 
 // Coexist historical sync chunks are bounded to ~4 min via self-continuation
@@ -309,6 +311,13 @@ function startIntegrationWorker() {
               await refreshZaloAccountGroups(job.data.data)
               return
             }
+            case IntegrationJobAction.zaloAccountGroupMessage: {
+              await receiveZaloAccountGroupMessage(job.data.data)
+              return
+            }
+            case IntegrationJobAction.zaloAccountThreadEvent:
+              await handleZaloAccountThreadEvent(job.data.data, job)
+              return
             case IntegrationJobAction.sendFlow: {
               await runFlowNode(job.data.data, {
                 flowExecutionKey:

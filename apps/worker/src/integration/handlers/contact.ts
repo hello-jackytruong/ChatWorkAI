@@ -6,6 +6,7 @@ import {
 } from "@chatbotx.io/business"
 import { contactSequenceService } from "@chatbotx.io/business/contact-sequence"
 import { leaderboardScoringService } from "@chatbotx.io/business/leaderboard"
+import { zaloAccountGroupTagService } from "@chatbotx.io/business/zalo-account"
 import { emitContactUnsubscribed } from "@chatbotx.io/events"
 import type {
   AddContactNotesStepSchema,
@@ -139,10 +140,22 @@ export async function optOutEmail({
 }
 
 export async function addContactTag({
+  groupAudience,
   conversation,
   contactInbox,
   step,
 }: ExecuteStepProps<AddContactTagStepSchema>) {
+  if (groupAudience) {
+    await zaloAccountGroupTagService.update({
+      workspaceId: conversation.workspaceId,
+      accountId: groupAudience.accountId,
+      groupId: groupAudience.groupId,
+      names: step.tags,
+      assigned: true,
+      audience: groupAudience,
+    })
+    return
+  }
   await attachTagsByNames(
     conversation.workspaceId,
     conversation.contactId,
@@ -181,10 +194,22 @@ export async function attachTagsByNames(
 }
 
 export async function removeContactTag({
+  groupAudience,
   conversation,
   contactInbox,
   step,
 }: ExecuteStepProps<AddContactTagStepSchema>) {
+  if (groupAudience) {
+    await zaloAccountGroupTagService.update({
+      workspaceId: conversation.workspaceId,
+      accountId: groupAudience.accountId,
+      groupId: groupAudience.groupId,
+      names: step.tags,
+      assigned: false,
+      audience: groupAudience,
+    })
+    return
+  }
   await detachTagsByNames(
     conversation.workspaceId,
     conversation.contactId,

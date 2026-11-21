@@ -39,6 +39,7 @@ type SendFlowExtrasSource = Pick<
   | "triggerMessageCreatedAt"
   | "startedByContactMessage"
   | "commentAnchor"
+  | "groupAudience"
 >
 
 /** What a flow step hands to the flow it starts, named explicitly. */
@@ -55,4 +56,5 @@ export const pickSendFlowExtras = (
   triggerMessageCreatedAt: props.triggerMessageCreatedAt,
   startedByContactMessage: props.startedByContactMessage,
   commentAnchor: props.commentAnchor,
+  groupAudience: props.groupAudience,
 })

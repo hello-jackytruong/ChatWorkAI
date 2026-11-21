@@ -5,6 +5,7 @@ import {
   type ZaloAccountLabelSnapshot,
   type ZaloAccountLifecycleEvent,
   type ZaloAccountOutboundMessage,
+  ZaloAccountPreDispatchError,
   type ZaloAccountRuntimeRef,
   zaloAccountAuthorizationEventSchema,
   zaloAccountLifecycleEventSchema,
@@ -147,7 +148,9 @@ export class ZaloAccountRuntime {
     message: ZaloAccountOutboundMessage,
   ): Promise<RuntimeSendResult> {
     if (!(this.active && this.api && this.state === "connected")) {
-      throw new Error("Zalo Account runtime is not connected")
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account runtime is not connected",
+      )
     }
     const result = await this.api.sendDirect(message)
     return { status: "sent", ...result }
@@ -159,13 +162,34 @@ export class ZaloAccountRuntime {
     }
     return await this.api.listGroups()
   }
+  async listFriends(cursor: number) {
+    if (!(this.active && this.api?.listFriends && this.state === "connected")) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account friend sync is unavailable",
+      )
+    }
+    return await this.api.listFriends(cursor)
+  }
+  async sendTyping(
+    threadId: string,
+    threadType: "user" | "group",
+  ): Promise<void> {
+    if (!(this.active && this.api?.sendTyping && this.state === "connected")) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account typing is unavailable",
+      )
+    }
+    await this.api.sendTyping(threadId, threadType)
+  }
 
   async sendGroup(
     groupId: string,
     message: ZaloAccountOutboundMessage,
   ): Promise<RuntimeSendResult> {
     if (!(this.active && this.api && this.state === "connected")) {
-      throw new Error("Zalo Account runtime is not connected")
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account runtime is not connected",
+      )
     }
     const result = await this.api.sendGroup(groupId, message)
     return { status: "sent", ...result }
@@ -192,7 +216,9 @@ export class ZaloAccountRuntime {
     }
     const current = await this.getLabels()
     if (current.version !== input.expectedVersion) {
-      throw new Error("Zalo Account label version conflict")
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account label version conflict",
+      )
     }
     const updated = await this.api.updateLabels({
       labelData: input.labelData,
@@ -392,6 +418,17 @@ export class ZaloAccountRuntime {
     this.listener?.stop()
     this.api = api
     this.listener = api.listen({
+      onThreadEvent: (event) => {
+        this.enqueueEvent(generation, async () => {
+          if (this.lease && this.isCurrent(generation)) {
+            await this.options.eventSink.publishThreadEvent?.(event, {
+              ...this.eventContext(),
+              epoch: this.options.epoch,
+              fenceToken: this.lease.fenceToken,
+            })
+          }
+        })
+      },
       onClosed: (reason) => {
         this.runDetached(this.handlePassiveClose(reason, generation))
       },
@@ -412,6 +449,16 @@ export class ZaloAccountRuntime {
       },
       onGroupMessage: (activity) => {
         this.enqueueEvent(generation, async () => {
+          if (activity.message && this.lease && this.isCurrent(generation)) {
+            await this.options.eventSink.publishGroupMessage?.(
+              activity.message,
+              {
+                ...this.eventContext(),
+                epoch: this.options.epoch,
+                fenceToken: this.lease.fenceToken,
+              },
+            )
+          }
           await this.publishGroupActivity(
             {
               providerGroupId: activity.threadId,

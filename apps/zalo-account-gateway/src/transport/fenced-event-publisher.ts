@@ -6,7 +6,9 @@ import {
   type ZaloAccountDirectStatus,
   type ZaloAccountDirectUndo,
   type ZaloAccountGroupActivity,
+  type ZaloAccountGroupMessage,
   type ZaloAccountLifecycleEvent,
+  type ZaloAccountThreadEvent,
   type ZaloAccountTransportEvent,
   type ZaloAccountTransportRoute,
   zaloAccountTransportEventSchema,
@@ -33,6 +35,13 @@ type FencedAppendPort = {
 }
 
 type PublisherOptions = {
+  resolveGroupReceivePolicy?: (input: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    providerGroupId: string
+    allowSendOnly?: boolean
+  }) => Promise<{ accountPolicyEpoch: number; groupPolicyEpoch: number } | null>
   appendPort: FencedAppendPort
   eventStreamKey: string
   maxLen: number
@@ -214,6 +223,88 @@ export class FencedEventPublisher implements RuntimeEventSink {
     context: RuntimeEventContext & { epoch: number; fenceToken: string },
   ): Promise<void> {
     await this.publishAccountEnvelope("group_activity", activity, context)
+  }
+
+  async publishGroupMessage(
+    message: ZaloAccountGroupMessage,
+    context: RuntimeEventContext & { epoch: number; fenceToken: string },
+  ): Promise<void> {
+    if (!context.inboxId) {
+      throw new Error("Zalo group message requires an Inbox route")
+    }
+    const accountId = this.accountIdFromContext(context)
+    const route = {
+      kind: "account" as const,
+      workspaceId: context.workspaceId,
+      accountId,
+      inboxId: context.inboxId,
+    }
+    const policy = await this.options.resolveGroupReceivePolicy?.({
+      ...route,
+      providerGroupId: message.threadId,
+    })
+    if (!policy) {
+      return
+    }
+    const event = zaloAccountTransportEventSchema.parse({
+      version: 1,
+      eventId: randomUUID(),
+      route,
+      epoch: context.epoch,
+      fenceToken: context.fenceToken,
+      occurredAt: new Date().toISOString(),
+      kind: "group_message",
+      payload: message,
+      ...policy,
+    })
+    await this.appendWithLease(
+      { kind: "account", id: accountId },
+      context,
+      event,
+    )
+  }
+
+  async publishThreadEvent(
+    payload: ZaloAccountThreadEvent,
+    context: RuntimeEventContext & { epoch: number; fenceToken: string },
+  ): Promise<void> {
+    if (!context.inboxId) {
+      throw new Error("Zalo thread event requires an Inbox route")
+    }
+    const accountId = this.accountIdFromContext(context)
+    const route = {
+      kind: "account" as const,
+      workspaceId: context.workspaceId,
+      accountId,
+      inboxId: context.inboxId,
+    }
+    const policy =
+      payload.threadType === "group"
+        ? await this.options.resolveGroupReceivePolicy?.({
+            ...route,
+            providerGroupId: payload.threadId,
+            allowSendOnly: payload.type !== "typing",
+          })
+        : undefined
+    if (payload.threadType === "group" && !policy) {
+      return
+    }
+    const event = zaloAccountTransportEventSchema.parse({
+      version: 1,
+      eventId: randomUUID(),
+      route,
+      epoch: context.epoch,
+      fenceToken: context.fenceToken,
+      occurredAt: new Date().toISOString(),
+      kind: "thread_event",
+      payload,
+      ...policy,
+    })
+    await this.appendWithLease(
+      { kind: "account", id: accountId },
+      context,
+      event,
+    )
   }
 
   private baseEnvelope(

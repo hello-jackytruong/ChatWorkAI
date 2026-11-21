@@ -22,6 +22,9 @@ vi.mock("@chatbotx.io/worker-config", () => ({
   PURGE_WORKSPACES_INTERVAL_MINUTES: 10,
   PURGE_BROADCASTS_INTERVAL_MINUTES: 5,
   ScheduleJobData: {
+    purgeZaloMessageState: "purgeZaloMessageState",
+    reconcileZaloLabels: "reconcileZaloLabels",
+    recoverZaloGroupInbox: "recoverZaloGroupInbox",
     scanAbandonedCarts: "scanAbandonedCarts",
     expireUnpaidOrders: "expireUnpaidOrders",
     dispatchProfileSnapshots: "dispatchProfileSnapshots",
@@ -225,6 +228,9 @@ describe("registerSchedules — every-minute cadence", () => {
   ]
   // Scanners and finalizers with no wall-clock dependency: spread over the minute.
   const SPREAD_OVER_THE_MINUTE = [
+    "purgeZaloMessageState",
+    "reconcileZaloLabels",
+    "recoverZaloGroupInbox",
     "expireUnpaidOrders",
     "finishOverdueLeaderboards",
     "dispatchMarketingMessages",

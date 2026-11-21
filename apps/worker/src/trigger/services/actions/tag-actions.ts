@@ -3,6 +3,7 @@ import {
   tagService,
   tagSyncService,
 } from "@chatbotx.io/business"
+import { zaloAccountGroupTagService } from "@chatbotx.io/business/zalo-account"
 import { succeeded, type TriggerActionHandler } from "./types"
 
 export const addTag: TriggerActionHandler = async ({
@@ -11,6 +12,17 @@ export const addTag: TriggerActionHandler = async ({
 }) => {
   const tagIds = context.action.tagIds as string[]
   const { workspaceId } = context
+  if (context.groupAudience) {
+    await zaloAccountGroupTagService.update({
+      workspaceId,
+      accountId: context.groupAudience.accountId,
+      groupId: context.groupAudience.groupId,
+      tagIds,
+      assigned: true,
+      audience: context.groupAudience,
+    })
+    return succeeded
+  }
   const newlyLinked = await tagService.attachExistingToContactForTrigger({
     workspaceId,
     contactId: conversation.contactId,
@@ -38,6 +50,17 @@ export const removeTag: TriggerActionHandler = async ({
 }) => {
   const tagIds = context.action.tagIds as string[]
   const { workspaceId } = context
+  if (context.groupAudience) {
+    await zaloAccountGroupTagService.update({
+      workspaceId,
+      accountId: context.groupAudience.accountId,
+      groupId: context.groupAudience.groupId,
+      tagIds,
+      assigned: false,
+      audience: context.groupAudience,
+    })
+    return succeeded
+  }
   if (tagIds.length > 0) {
     await tagService.detachFromContactForTrigger({
       workspaceId,

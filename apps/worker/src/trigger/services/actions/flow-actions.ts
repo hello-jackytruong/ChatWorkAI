@@ -1,4 +1,5 @@
 import { flowService } from "@chatbotx.io/business"
+import { zaloAccountGroupService } from "@chatbotx.io/business/zalo-account"
 import type { ContactInboxWorkspaceRow } from "@chatbotx.io/database/repositories"
 import type { ConversationModel } from "@chatbotx.io/database/types"
 import { startExternalStepActionSchema } from "@chatbotx.io/flow-config"
@@ -26,6 +27,24 @@ const enqueueSendFlow = async (
   sendFlowJob: IntegrationJobRunFlowNode,
   context: ActionExecutionContext,
 ): Promise<void> => {
+  if (context.groupAudience) {
+    if (
+      !(
+        sendFlowJob.data.flowId &&
+        (await zaloAccountGroupService.canRunFlow({
+          workspaceId: context.workspaceId,
+          flowId: sendFlowJob.data.flowId,
+        }))
+      )
+    ) {
+      return
+    }
+    sendFlowJob.data.groupAudience = context.groupAudience
+    await integrationQueue.add(IntegrationJobAction.sendFlow, sendFlowJob, {
+      jobId: `zalo-group-trigger-${context.groupAudience.groupId}-${(context.occurrenceKey ?? "").replaceAll(":", "-")}`,
+    })
+    return
+  }
   if (context.source.kind === "inboundWebhook" && context.occurrenceKey) {
     await integrationQueue.add(IntegrationJobAction.sendFlow, sendFlowJob, {
       jobId: `send-flow-${context.occurrenceKey.replaceAll(":", "-")}`,

@@ -102,3 +102,6 @@ test("stops consumers a shutdown missed because it began mid-startup", async () 
   await vi.waitFor(() => expect(state.stopWorker).toHaveBeenCalledTimes(2))
   exit.mockRestore()
 })
+vi.mock("../src/events/zalo-account", () => ({
+  default: { bus: {}, listeners: [] },
+}))

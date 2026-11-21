@@ -4,6 +4,7 @@ import type {
   ZaloAccountOutboundMessage,
   ZaloAccountRuntimeRef,
 } from "@chatbotx.io/sdk"
+import { ZaloAccountPreDispatchError } from "@chatbotx.io/sdk"
 import type {
   AccountLeasePort,
   AccountSecretPort,
@@ -23,6 +24,30 @@ type PoolOptions = {
   leaseTtlMs: number
   ownerId: string
   secretPort: AccountSecretPort
+  onGroupSendResult?: (input: {
+    workspaceId: string
+    accountId: string
+    commandId: string
+    threadId: string
+    messageIds: string[]
+  }) => Promise<void>
+  admitLabelMutation?: (input: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    commandId: string
+    operationToken?: string
+    expectedVersion: number
+  }) => Promise<void>
+  admitGroupSend?: (input: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    providerGroupId: string
+    accountPolicyEpoch: number
+    groupPolicyEpoch: number
+    consumeCapacity?: boolean
+  }) => Promise<void>
 }
 
 const keyOf = (runtime: ZaloAccountRuntimeRef) =>
@@ -119,9 +144,21 @@ export class ZaloAccountPool {
       this.assertRunning()
       const runtime = this.runtimes.get(key)
       if (!runtime) {
-        throw new Error("Zalo Account runtime is not owned by this gateway")
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account runtime is not owned by this gateway",
+        )
       }
-      return await runtime.sendDirect(command.message)
+      const result = await runtime.sendDirect(command.message)
+      if (command.commandId?.startsWith("zalo-send-")) {
+        await this.options.onGroupSendResult?.({
+          workspaceId: command.workspaceId,
+          accountId: command.runtime.id,
+          commandId: command.commandId,
+          threadId: command.message.recipientId,
+          messageIds: result.messageIds,
+        })
+      }
+      return result
     })
   }
 
@@ -134,15 +171,36 @@ export class ZaloAccountPool {
       this.assertRunning()
       const runtime = this.runtimes.get(key)
       if (!runtime) {
-        throw new Error("Zalo Account runtime is not owned by this gateway")
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account runtime is not owned by this gateway",
+        )
       }
       return await runtime.listGroups()
+    })
+  }
+
+  async listFriends(command: RuntimeCommand & { cursor: number }) {
+    if (command.runtime.kind !== "account") {
+      throw new Error("Friend sync requires a durable account")
+    }
+    const key = keyOf(command.runtime)
+    return await this.withKeyOperation(key, async () => {
+      this.assertRunning()
+      const runtime = this.runtimes.get(key)
+      if (!runtime) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account runtime is not owned by this gateway",
+        )
+      }
+      return await runtime.listFriends(command.cursor)
     })
   }
 
   async sendGroup(
     command: RuntimeCommand & {
       groupId: string
+      accountPolicyEpoch: number
+      groupPolicyEpoch: number
       message: ZaloAccountOutboundMessage
     },
   ): Promise<RuntimeSendResult> {
@@ -154,9 +212,27 @@ export class ZaloAccountPool {
       this.assertRunning()
       const runtime = this.runtimes.get(key)
       if (!runtime) {
-        throw new Error("Zalo Account runtime is not owned by this gateway")
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account runtime is not owned by this gateway",
+        )
       }
-      return await runtime.sendGroup(command.groupId, command.message)
+      await this.options.admitGroupSend?.({
+        workspaceId: command.workspaceId,
+        accountId: command.runtime.id,
+        inboxId: command.inboxId ?? "",
+        providerGroupId: command.groupId,
+        accountPolicyEpoch: command.accountPolicyEpoch,
+        groupPolicyEpoch: command.groupPolicyEpoch,
+      })
+      const result = await runtime.sendGroup(command.groupId, command.message)
+      await this.options.onGroupSendResult?.({
+        workspaceId: command.workspaceId,
+        accountId: command.runtime.id,
+        commandId: command.commandId ?? "",
+        threadId: command.groupId,
+        messageIds: result.messageIds,
+      })
+      return result
     })
   }
 
@@ -165,19 +241,51 @@ export class ZaloAccountPool {
       runtime.getLabels(),
     )
   }
+  async sendTyping(
+    command: RuntimeCommand & {
+      threadId: string
+      threadType: "user" | "group"
+      accountPolicyEpoch?: number
+      groupPolicyEpoch?: number
+    },
+  ): Promise<void> {
+    await this.withAccountRuntime(command, async (runtime) => {
+      if (command.threadType === "group") {
+        await this.options.admitGroupSend?.({
+          workspaceId: command.workspaceId,
+          accountId: command.runtime.id,
+          inboxId: command.inboxId ?? "",
+          providerGroupId: command.threadId,
+          accountPolicyEpoch: command.accountPolicyEpoch ?? -1,
+          groupPolicyEpoch: command.groupPolicyEpoch ?? -1,
+          consumeCapacity: false,
+        })
+      }
+      await runtime.sendTyping(command.threadId, command.threadType)
+    })
+  }
 
   async updateLabels(
     command: RuntimeCommand & {
+      operationToken?: string
       expectedVersion: number
       labelData: ZaloAccountLabel[]
     },
   ): Promise<ZaloAccountLabelSnapshot> {
-    return await this.withAccountRuntime(command, (runtime) =>
-      runtime.updateLabels({
+    return await this.withAccountRuntime(command, async (runtime) => {
+      await this.options.admitLabelMutation?.({
+        workspaceId: command.workspaceId,
+        accountId: command.runtime.id,
+        inboxId: command.inboxId ?? "",
+        commandId: command.commandId ?? "",
+        operationToken: command.operationToken,
+        expectedVersion: command.expectedVersion,
+      })
+      return await runtime.updateLabels({
         expectedVersion: command.expectedVersion,
         labelData: command.labelData,
-      }),
-    )
+      })
+    })
   }
 
   async shutdown(): Promise<void> {
@@ -252,7 +360,9 @@ export class ZaloAccountPool {
       this.assertRunning()
       const runtime = this.runtimes.get(key)
       if (!runtime) {
-        throw new Error("Zalo Account runtime is not owned by this gateway")
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account runtime is not owned by this gateway",
+        )
       }
       return await operation(runtime)
     })

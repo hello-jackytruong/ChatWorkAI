@@ -13,6 +13,7 @@ import {
   type MetadataPayload,
   metadataSchema,
 } from "@chatbotx.io/flow-config"
+import type { ZaloAccountGroupAudience } from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import type { SendFrom } from "@chatbotx.io/utils/send-from"
 import {
@@ -76,6 +77,7 @@ export const buildSendFlowResumeJob = (
         ...(metadata ? { metadata } : {}),
         ...(extras?.sendFrom ? { sendFrom: extras.sendFrom } : {}),
         ...(appointmentId ? { appointmentId } : {}),
+        ...(row.groupAudience ? { groupAudience: row.groupAudience } : {}),
       },
     },
   }
@@ -157,6 +159,7 @@ const smartDelayPersistenceHandlers: Record<
 }
 
 export async function scheduleSmartDelayResume(props: {
+  groupAudience?: ZaloAccountGroupAudience
   type: SmartDelayType
   triggerAt: Date
   workspaceId: string
@@ -183,6 +186,7 @@ export async function scheduleSmartDelayResume(props: {
     nodeId: props.nodeId,
     stepId: props.stepId,
     metadata: props.metadata ?? null,
+    groupAudience: props.groupAudience ?? null,
     type: props.type,
     createdAt: new Date(),
     triggerAt: props.triggerAt,

@@ -99,6 +99,20 @@ vi.mock("../src/lib/logger", () => ({
 }))
 
 vi.mock("../src/services/integrations", () => ({
+  buildIntegrationContext: ({
+    workspaceId,
+    integrationType,
+    integrationRow,
+  }: {
+    workspaceId: string
+    integrationType: string
+    integrationRow: unknown
+  }) =>
+    mockBuildContext({
+      workspaceId,
+      integrationType,
+      integration: integrationRow,
+    }),
   allIntegrations: {
     messenger: { runChannelHandler: mockRunChannelHandler },
     whatsapp: { runChannelHandler: mockRunChannelHandler },

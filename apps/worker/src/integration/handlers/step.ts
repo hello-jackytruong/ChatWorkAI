@@ -185,6 +185,7 @@ export async function sendFlowMessage(
     sentByUserId,
     commentAnchor,
     appointmentId,
+    groupAudience: props.groupAudience,
     ...(statusBranches.length > 0 && { statusBranches }),
   })
 }
@@ -302,6 +303,7 @@ async function splitTraffic({
 // prevent.
 //
 async function handleWait({
+  groupAudience,
   conversation,
   flowVersion,
   contactInbox,
@@ -352,6 +354,7 @@ async function handleWait({
   }
 
   await scheduleSmartDelayResume({
+    groupAudience,
     type: smartDelayTypes.enum.waitNode,
     triggerAt,
     workspaceId: conversation.workspaceId,
