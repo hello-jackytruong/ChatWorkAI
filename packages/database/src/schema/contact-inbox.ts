@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm"
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -24,7 +25,7 @@ import {
   threadControlEvents,
   threadControlStates,
 } from "../partials/thread-control"
-import { contactModel } from "./contact"
+import { contactKind, contactModel } from "./contact"
 import { inboxModel } from "./inbox"
 
 export type ContactInboxReferral = {
@@ -105,6 +106,9 @@ export const contactInboxModel = pgTable(
   {
     ...sharedColumns,
     originalContactId: bigintAsString().notNull(),
+    // Projection of Contact.kind, stamped by the database on identity changes.
+    // Delete triggers can read OLD even after the parent Contact was cascaded.
+    contactKind: contactKind().default("person").notNull(),
     contactId: bigintAsString()
       .notNull()
       .references(() => contactModel.id, {
@@ -183,6 +187,10 @@ export const contactInboxModel = pgTable(
     threadPreviousOwnerAppId: text(),
   },
   (table) => [
+    check(
+      "ContactInbox_group_source_check",
+      sql`(${table.contactKind} = 'channelGroup') = COALESCE((${table.channel} = 'zaloAccount' AND ${table.sourceId} LIKE 'za:group:%'), false)`,
+    ),
     uniqueIndex(CONTACT_INBOX_SOURCE_ID_KEY).using(
       "btree",
       table.inboxId.asc().nullsLast(),

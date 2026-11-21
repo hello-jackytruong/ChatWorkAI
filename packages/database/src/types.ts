@@ -132,6 +132,14 @@ export type IntegrationZaloAccountPublicModel = Omit<
 >
 export type IntegrationZaloAccountGroupModel =
   typeof schema.integrationZaloAccountGroupModel.$inferSelect
+export type ZaloAccountMessageIdentityModel =
+  typeof schema.zaloAccountMessageIdentityModel.$inferSelect
+export type ZaloAccountMessageReceiptModel =
+  typeof schema.zaloAccountMessageReceiptModel.$inferSelect
+export type ZaloAccountMessageReactionModel =
+  typeof schema.zaloAccountMessageReactionModel.$inferSelect
+export type ZaloAccountSendAttemptModel =
+  typeof schema.zaloAccountSendAttemptModel.$inferSelect
 export type IntegrationLineModel =
   typeof schema.integrationLineModel.$inferSelect
 export type IntegrationTelegramModel =

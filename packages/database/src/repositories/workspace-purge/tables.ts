@@ -1,4 +1,9 @@
 export const HEAVY_WORKSPACE_TABLES = [
+  "ZaloAccountFriendImport",
+  "ZaloAccountMessageReceipt",
+  "ZaloAccountMessageReaction",
+  "ZaloAccountSendAttempt",
+  "ZaloAccountMessageIdentity",
   "ErrorLog",
   "AuditLog",
   "InboundWebhookRequest",

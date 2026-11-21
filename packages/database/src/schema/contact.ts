@@ -10,7 +10,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core"
-import { genderTypes } from "../partials"
+import { type ContactKind, contactKinds, genderTypes } from "../partials"
 import {
   bigintAsString,
   sharedColumns,
@@ -21,6 +21,10 @@ import { workspaceModel } from "./workspace"
 export const gender = pgEnum(
   "gender",
   genderTypes.options as [string, ...string[]],
+)
+export const contactKind = pgEnum(
+  "contactKind",
+  contactKinds.options as [ContactKind, ...ContactKind[]],
 )
 
 /**
@@ -37,6 +41,7 @@ export const contactModel = pgTable(
   "Contact",
   {
     ...sharedColumns,
+    kind: contactKind().default("person").notNull(),
     avatar: text(),
     phoneNumber: text(),
     email: text(),

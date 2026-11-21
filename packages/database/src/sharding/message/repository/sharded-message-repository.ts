@@ -1621,7 +1621,7 @@ export class ShardedMessageRepository implements IMessageRepository {
       CreateAttachmentInput,
       "messageId" | "messageCreatedAt"
     >[],
-    options?: { ignoreConflict?: boolean },
+    options?: { ignoreConflict?: boolean; stableIdentity?: boolean },
   ): Promise<MessageWithAttachments | null> {
     const db = await this.shardManager.getShardForWrite(message.workspaceId)
 
@@ -1633,13 +1633,17 @@ export class ShardedMessageRepository implements IMessageRepository {
         ? await tx
             .insert(messageModel)
             .values(message as typeof messageModel.$inferInsert)
-            .onConflictDoNothing({
-              target: [
-                messageModel.contactInboxId,
-                messageModel.sourceId,
-                messageModel.createdAt,
-              ],
-            })
+            .onConflictDoNothing(
+              options.stableIdentity
+                ? undefined
+                : {
+                    target: [
+                      messageModel.contactInboxId,
+                      messageModel.sourceId,
+                      messageModel.createdAt,
+                    ],
+                  },
+            )
             .returning()
         : await tx
             .insert(messageModel)
@@ -1804,11 +1808,40 @@ export class ShardedMessageRepository implements IMessageRepository {
     return { result: created, isNew: true }
   }
 
+  async createWithStableIdentity(
+    message: CreateMessageInput & { id: string; createdAt: Date },
+    attachments: Omit<
+      CreateAttachmentInput,
+      "messageId" | "messageCreatedAt"
+    >[],
+  ): Promise<{ result: MessageWithAttachments; isNew: boolean }> {
+    const created = await this.createWithAttachmentsInternal(
+      message,
+      attachments,
+      { ignoreConflict: true, stableIdentity: true },
+    )
+    if (created) {
+      return { result: created, isNew: true }
+    }
+    const existing = await this.findById({
+      id: message.id,
+      createdAt: message.createdAt,
+      workspaceId: message.workspaceId,
+      conversationId: message.conversationId,
+      primaryAndFailOnError: true,
+    })
+    if (!existing || existing.contactInboxId !== message.contactInboxId) {
+      throw new MessageShardUnavailableError("Stable message identity conflict")
+    }
+    return { result: existing, isNew: false }
+  }
+
   async findById({
     id,
     createdAt,
     conversationId,
     workspaceId,
+    primaryAndFailOnError,
   }: FindMessageByIdParams): Promise<MessageWithAttachments | null> {
     const shards = await this.getConversationReadShards(createdAt, workspaceId)
     if (shards.length === 0) {
@@ -1817,40 +1850,52 @@ export class ShardedMessageRepository implements IMessageRepository {
 
     for (const shardInfo of shards) {
       try {
-        const found = await this.shardManager.withShardClientForRead(
-          shardInfo.shard,
-          async (shardClient) => {
-            const [message] = await shardClient
-              .select()
-              .from(messageModel)
-              .where(
-                and(
-                  eq(messageModel.id, id),
-                  matchesCreatedAt(messageModel.createdAt, createdAt),
-                  eq(messageModel.workspaceId, workspaceId),
-                  conversationId
-                    ? eq(messageModel.conversationId, conversationId)
-                    : undefined,
-                ),
-              )
-              .limit(1)
-
-            if (!message) {
-              return null
-            }
-
-            const attachments = await this.queryAttachmentsForMessages(
-              shardClient,
-              [id],
-              [message.createdAt],
+        const readMessage = async (
+          shardClient: Awaited<
+            ReturnType<MessageShardConnectionManager["getShardClient"]>
+          >,
+        ) => {
+          const [message] = await shardClient
+            .select()
+            .from(messageModel)
+            .where(
+              and(
+                eq(messageModel.id, id),
+                matchesCreatedAt(messageModel.createdAt, createdAt),
+                eq(messageModel.workspaceId, workspaceId),
+                conversationId
+                  ? eq(messageModel.conversationId, conversationId)
+                  : undefined,
+              ),
             )
-            return { ...message, attachments } as MessageWithAttachments
-          },
-        )
+            .limit(1)
+
+          if (!message) {
+            return null
+          }
+
+          const attachments = await this.queryAttachmentsForMessages(
+            shardClient,
+            [id],
+            [message.createdAt],
+          )
+          return { ...message, attachments } as MessageWithAttachments
+        }
+        const found = primaryAndFailOnError
+          ? await readMessage(
+              await this.shardManager.getShardClient(shardInfo.shard),
+            )
+          : await this.shardManager.withShardClientForRead(
+              shardInfo.shard,
+              readMessage,
+            )
         if (found) {
           return found
         }
       } catch (error) {
+        if (primaryAndFailOnError) {
+          throw error
+        }
         logger.warn(
           { err: error, shardId: shardInfo.shard.id },
           "Shard query failed in findById",

@@ -15,6 +15,7 @@ import { contactModel, contactsToTagsModel, tagModel } from "../../schema"
 import type { ContactCustomFieldModel, ContactModel } from "../../types"
 import { userColumnsWithoutSecrets } from "../user/columns"
 import { buildContactListWhere, resolveContactOrderBy } from "./list-where"
+import { personContactWhere } from "./person-boundary"
 
 /** What a contact-export page loads besides the contact row itself. */
 export type ContactExportRelations = {
@@ -139,7 +140,7 @@ export const contactRepository = {
     tx: DatabaseClient = db,
   ) {
     return tx.query.contactModel
-      .findFirst({ where: input, columns: { id: true } })
+      .findFirst({ where: personContactWhere(input), columns: { id: true } })
       .then((contact) => contact ?? null)
   },
   findPublicById(
@@ -147,7 +148,7 @@ export const contactRepository = {
     tx: DatabaseClient = db,
   ) {
     return tx.query.contactModel.findFirst({
-      where: input,
+      where: personContactWhere(input),
       with: PUBLIC_CONTACT_RELATIONS,
     })
   },
@@ -163,7 +164,7 @@ export const contactRepository = {
   ) {
     const { where, limit, orderBy } = input
     const data = await tx.query.contactModel.findMany({
-      where,
+      where: personContactWhere(where),
       limit,
       orderBy,
       with: PUBLIC_CONTACT_RELATIONS,
@@ -173,6 +174,7 @@ export const contactRepository = {
   listWithRelations(input: ContactListInput, tx: DatabaseClient = db) {
     return tx.query.contactModel.findMany({
       ...input,
+      where: personContactWhere(input.where),
       with: PUBLIC_CONTACT_RELATIONS,
     })
   },
@@ -182,6 +184,7 @@ export const contactRepository = {
   ) {
     return tx.query.contactModel.findMany({
       ...input,
+      where: personContactWhere(input.where),
       with: {
         contactInboxes: { with: { inbox: true } },
         conversation: {
@@ -196,6 +199,7 @@ export const contactRepository = {
   listTableRows(input: ContactListInput, tx: DatabaseClient = db) {
     return tx.query.contactModel.findMany({
       ...input,
+      where: personContactWhere(input.where),
       columns: {
         id: true,
         fullName: true,
@@ -229,7 +233,7 @@ export const contactRepository = {
     tx: DatabaseClient = db,
   ) {
     return tx.query.contactModel.findFirst({
-      where: input,
+      where: personContactWhere(input),
       with: {
         tags: true,
         contactCustomFields: { with: { customField: true } },
@@ -240,6 +244,7 @@ export const contactRepository = {
   count(input: { client?: DatabaseClient; where: Record<string, unknown> }) {
     return countWithRelationsFilter({
       ...input,
+      where: personContactWhere(input.where),
       table: contactModel,
       tsName: "contactModel",
     })
@@ -251,6 +256,7 @@ export const contactRepository = {
   }) {
     return countWithRelationsFilterCapped({
       ...input,
+      where: personContactWhere(input.where),
       table: contactModel,
       tsName: "contactModel",
     })
@@ -278,6 +284,7 @@ export const contactRepository = {
       .where(
         and(
           eq(contactModel.workspaceId, input.workspaceId),
+          eq(contactModel.kind, "person"),
           inArray(contactModel.id, input.contactIds),
           buildContactFilterMatchSQL({
             workspaceId: input.workspaceId,
@@ -408,7 +415,7 @@ export const contactRepository = {
   ): Promise<ContactExportRow[]> {
     const { customFieldIds, tagIds, contactInboxes } = input.relations
     return await tx.query.contactModel.findMany({
-      where: input.where,
+      where: personContactWhere(input.where),
       with: {
         ...(customFieldIds.length > 0 && {
           contactCustomFields: {

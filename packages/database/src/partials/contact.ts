@@ -1,5 +1,8 @@
 import z from "zod"
 
+export const contactKinds = z.enum(["person", "channelGroup"])
+export type ContactKind = z.infer<typeof contactKinds>
+
 export const contactSources = z.enum([
   "inboundMessage",
   "webchat",

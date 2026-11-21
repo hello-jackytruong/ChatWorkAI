@@ -25,6 +25,9 @@ import type {
   CommentAnchor,
   MessageInboundOrderEntity,
   OutgoingMessage,
+  ZaloAccountGroupAudience,
+  ZaloAccountGroupMessage,
+  ZaloAccountThreadEvent,
   ZaloAccountTransportRoute,
 } from "@chatbotx.io/sdk"
 import type { SendFrom } from "@chatbotx.io/utils/send-from"
@@ -128,6 +131,8 @@ export const IntegrationJobAction = {
   // Provider-scoped Zalo group activity. This refreshes group metadata only
   // and must never enter direct-message or generic audience processing.
   zaloAccountGroupRefresh: "zaloAccountGroupRefresh",
+  zaloAccountGroupMessage: "zaloAccountGroupMessage",
+  zaloAccountThreadEvent: "zaloAccountThreadEvent",
 } as const
 
 type IntegrationJobActionValue =
@@ -348,6 +353,29 @@ export type IntegrationJobZaloAccountGroupRefresh = {
   }
 }
 
+export type IntegrationJobZaloAccountGroupMessage = {
+  type: typeof IntegrationJobAction.zaloAccountGroupMessage
+  data: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    accountPolicyEpoch: number
+    groupPolicyEpoch: number
+    message: ZaloAccountGroupMessage
+  }
+}
+export type IntegrationJobZaloAccountThreadEvent = {
+  type: typeof IntegrationJobAction.zaloAccountThreadEvent
+  data: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    accountPolicyEpoch?: number
+    groupPolicyEpoch?: number
+    event: ZaloAccountThreadEvent
+  }
+}
+
 /**
  * Retries only the post-send tracking transaction of an email recipient (never
  * the SMTP send). One job per (token, phase): a phase is a first-time-only
@@ -402,6 +430,7 @@ export type NodeVisits = Record<string, number>
 export type IntegrationJobRunFlowNode = {
   type: typeof IntegrationJobAction.sendFlow
   data: {
+    groupAudience?: ZaloAccountGroupAudience
     conversationId: string | ConversationModel
     contactInboxId: string | ContactInboxModel
     flowId?: string
@@ -1613,6 +1642,8 @@ export type IntegrationJobData =
   | IntegrationJobContactSync
   | IntegrationJobChannelAudienceEvent
   | IntegrationJobZaloAccountGroupRefresh
+  | IntegrationJobZaloAccountGroupMessage
+  | IntegrationJobZaloAccountThreadEvent
 
 export const integrationQueue = isNoRedisEnv()
   ? fakeQueue
@@ -1678,6 +1709,7 @@ const jobOptionsByAction: Partial<
  * ahead of a customer reply.
  */
 export type LowRoutedIntegrationJob =
+  | IntegrationJobZaloAccountThreadEvent
   | IntegrationJobMessageStatus
   | IntegrationJobContactMarkAsRead
   | IntegrationJobReceiveMessageEcho
@@ -1695,6 +1727,7 @@ const isLowRoutedIntegrationJob = (
       return job.data.continuesFlow !== true
     case IntegrationJobAction.contactMarkAsRead:
     case IntegrationJobAction.incomingMessageEcho:
+    case IntegrationJobAction.zaloAccountThreadEvent:
       return true
     default:
       return false

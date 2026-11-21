@@ -1,3 +1,4 @@
+import type { ZaloAccountGroupAudience } from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import { sql } from "drizzle-orm"
 import {
@@ -56,6 +57,7 @@ export const contactOnSmartDelayModel = pgTable(
     nodeId: text(),
     stepId: text(),
     metadata: jsonb().$type<Record<string, unknown> | null>(),
+    groupAudience: jsonb().$type<ZaloAccountGroupAudience>(),
     type: contactOnSmartDelayType().notNull(),
     createdAt: timestamp(timestampConfig).defaultNow().notNull(),
     triggerAt: timestamp(timestampConfig).notNull(),

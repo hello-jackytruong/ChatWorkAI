@@ -177,6 +177,8 @@ export interface FindMessageByIdParams {
   conversationId?: string
   createdAt: Date
   id: string
+  /** Recovery/admission reads must not mistake a lagging or failed replica for absence. */
+  primaryAndFailOnError?: boolean
   workspaceId: string
 }
 
@@ -348,6 +350,14 @@ export interface IMessageRepository {
       "messageId" | "messageCreatedAt"
     >[],
   ): Promise<MessageWithAttachments>
+  /** A durable caller owns this identity; a conflict must never mint another ID. */
+  createWithStableIdentity(
+    message: CreateMessageInput & { id: string; createdAt: Date },
+    attachments: Omit<
+      CreateAttachmentInput,
+      "messageId" | "messageCreatedAt"
+    >[],
+  ): Promise<{ result: MessageWithAttachments; isNew: boolean }>
 
   deleteAttachmentsByMessageId(
     messageId: string,

@@ -36,6 +36,21 @@ type ContactTagChannelRow = {
  * that used to live inline in those handlers.
  */
 export const tagChannelRepository = {
+  async listUnmappedContactIds(
+    input: { tagId: string; contactIds: string[] },
+    tx: DatabaseClient = db,
+  ): Promise<string[]> {
+    if (!input.contactIds.length) {
+      return []
+    }
+    const rows = await tx.execute<{ contactId: string }>(
+      sql`SELECT DISTINCT c."contactId" FROM ${contactsToTagsModel} c WHERE c."tagId" = ${input.tagId} AND c."contactId" IN (${sql.join(
+        input.contactIds.map((id) => sql`${id}`),
+        sql`, `,
+      )}) AND NOT EXISTS (SELECT 1 FROM ${contactToTagChannelModel} m INNER JOIN ${contactInboxModel} ci ON ci."id" = m."contactInboxId" WHERE m."tagId" = c."tagId" AND ci."contactId" = c."contactId")`,
+    )
+    return rows.rows.map((row) => row.contactId)
+  },
   /**
    * Inbound-scan upsert path (`sync-channel-labels.ts`): creates or renames
    * the workspace `Tag`, its `TagChannel` mapping, and links the scanned

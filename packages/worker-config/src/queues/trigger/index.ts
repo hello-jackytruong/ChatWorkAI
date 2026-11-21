@@ -1,4 +1,5 @@
 import type { TriggerEventType } from "@chatbotx.io/database/partials"
+import type { ZaloAccountGroupAudience } from "@chatbotx.io/sdk"
 import { Queue } from "bullmq"
 import {
   defaultJobOptions,
@@ -14,6 +15,7 @@ export const TriggerJobAction = {
 } as const
 
 export type TriggerEvent = {
+  groupAudience?: ZaloAccountGroupAudience
   workspaceId: string
   contactId: string
   eventType: TriggerEventType
@@ -26,6 +28,7 @@ export type TriggerEvent = {
 export type TriggerJobExecute = {
   type: typeof TriggerJobAction.executeTrigger
   data: {
+    groupAudience?: ZaloAccountGroupAudience
     triggerId: string
     contactId: string
     workspaceId: string

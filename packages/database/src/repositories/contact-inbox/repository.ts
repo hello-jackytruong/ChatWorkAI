@@ -138,7 +138,7 @@ const adEligibleInboxChannelConfigs = {
 
 export type ContactInboxWorkspaceRow = Pick<
   ContactInboxModel,
-  "id" | "channel" | "inboxId" | "sourceId"
+  "id" | "channel" | "inboxId" | "sourceId" | "contactKind"
 >
 
 export type ContactInboxIdentityFields = Pick<
@@ -204,6 +204,7 @@ const contactInboxWorkspaceRowColumns = {
   channel: contactInboxModel.channel,
   inboxId: contactInboxModel.inboxId,
   sourceId: contactInboxModel.sourceId,
+  contactKind: contactInboxModel.contactKind,
 } satisfies Record<keyof ContactInboxWorkspaceRow, unknown>
 
 /** A contact inbox that carries a Google Ads Click-to-Message click. */

@@ -1768,6 +1768,27 @@ describe("ShardedMessageRepository.hardDeleteAllByContactInbox", () => {
 })
 
 describe("ShardedMessageRepository.findById", () => {
+  test("recovery reads use the primary and propagate a shard failure", async () => {
+    const primaryError = new Error("primary unavailable")
+    const manager = {
+      getShardsForTimeRange: vi
+        .fn()
+        .mockResolvedValue([makeShardInfo("tr:s1", "s1")]),
+      getWriteShardInfo: vi.fn().mockResolvedValue(null),
+      getShardClient: vi.fn().mockRejectedValue(primaryError),
+      withShardClientForRead: vi.fn(),
+    }
+    const repo = new ShardedMessageRepository(manager as never)
+    await expect(
+      repo.findById({
+        id: "m1",
+        workspaceId: "w1",
+        createdAt: new Date("2026-06-01T00:00:00Z"),
+        primaryAndFailOnError: true,
+      }),
+    ).rejects.toThrow("primary unavailable")
+    expect(manager.withShardClientForRead).not.toHaveBeenCalled()
+  })
   test("scopes message lookup by workspaceId", async () => {
     const createdAt = new Date("2026-06-01T00:00:00Z")
     const message = {
@@ -2171,6 +2192,46 @@ describe("ShardedMessageRepository.createOrUpdate — idempotent echo save", () 
 })
 
 describe("ShardedMessageRepository.createWithAttachments — attachment timestamps", () => {
+  test("keeps a ledger-owned message identity on a primary-key conflict", async () => {
+    const chain = {
+      values: vi.fn().mockReturnThis(),
+      onConflictDoNothing: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([]),
+    }
+    const tx = { insert: vi.fn().mockReturnValue(chain) }
+    const repo = new ShardedMessageRepository(
+      {
+        getShardForWrite: async () => ({
+          transaction: async (fn: (client: unknown) => Promise<unknown>) =>
+            await fn(tx),
+        }),
+      } as never,
+      passthroughLock as never,
+    )
+    const message = {
+      ...makeMessage(),
+      id: "durable-id",
+      createdAt: new Date("2026-11-21T00:00:00Z"),
+    }
+    const existing = { ...existingRow, ...message, attachments: [] }
+    const read = vi.spyOn(repo, "findById").mockResolvedValue(existing as never)
+    await expect(repo.createWithStableIdentity(message, [])).resolves.toEqual({
+      result: existing,
+      isNew: false,
+    })
+    expect(chain.onConflictDoNothing).toHaveBeenCalledWith(undefined)
+    expect(chain.values).toHaveBeenCalledTimes(1)
+    expect(chain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "durable-id" }),
+    )
+    expect(read).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "durable-id",
+        createdAt: message.createdAt,
+        primaryAndFailOnError: true,
+      }),
+    )
+  })
   test("stamps each attachment's createdAt itself instead of leaving it to the database", async () => {
     const created = { ...existingRow, id: "msg-new" }
     const messageChain = {

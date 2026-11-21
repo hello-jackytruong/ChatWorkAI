@@ -32,6 +32,7 @@ import type {
   ThreadControlWebhookResult,
   ThreadOwnerResult,
 } from "./shared"
+import type { ZaloAccountGroupAudience } from "./zalo-account"
 
 // ---------------------------------------------------------------------------
 // Constants & internal helpers
@@ -127,6 +128,7 @@ export type MessageHandlers<
       data: {
         contact: OutgoingContact
         message: OutgoingMessage
+        groupAudience?: ZaloAccountGroupAudience
         quickReplies?: MessageButtonTemplate[]
         metadata?: MetadataPayload
         sendFrom?: SendFrom
@@ -161,6 +163,8 @@ export type MessageHandlers<
         sendFrom?: SendFrom
         /** Stable persisted send identity used by transports with command dedupe. */
         idempotencyKey?: string
+        idempotencyCreatedAt?: Date | string
+        groupAudience?: ZaloAccountGroupAudience
         /** See {@link ChannelSendFlowStepProps}. */
         commentAnchor?: CommentAnchor
         /** See {@link ChannelSendFlowStepProps}. */

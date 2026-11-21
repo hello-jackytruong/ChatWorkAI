@@ -113,6 +113,7 @@ export const pipelineReferenceRepository = {
         and(
           eq(contactModel.workspaceId, input.workspaceId),
           inArray(contactModel.id, input.ids),
+          eq(contactModel.kind, "person"),
         ),
       )
   },
@@ -128,6 +129,7 @@ export const pipelineReferenceRepository = {
         and(
           eq(contactModel.workspaceId, input.workspaceId),
           eq(contactModel.id, input.id),
+          eq(contactModel.kind, "person"),
         ),
       )
       .limit(1)

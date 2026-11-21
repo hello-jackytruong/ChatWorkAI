@@ -46,6 +46,7 @@ export function resolveContactOrderBy(input: {
 export function buildContactListWhere(input: ListWhereInput): ContactWhere {
   const where: ContactWhere = {
     workspaceId: input.workspaceId,
+    kind: "person",
   }
 
   const contactFilter = pruneEmailPhoneFilterConditions(

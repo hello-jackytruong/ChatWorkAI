@@ -241,6 +241,7 @@ describe("contactInboxRepository.findByIdForWorkspace", () => {
 
     expect(chain.select).toHaveBeenCalledWith({
       id: contactInboxModel.id,
+      contactKind: contactInboxModel.contactKind,
       channel: contactInboxModel.channel,
       inboxId: contactInboxModel.inboxId,
       // Selected so an error-log row can carry the channel-side contact id.

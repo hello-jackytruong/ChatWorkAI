@@ -82,6 +82,9 @@ describe("resolveContactOrderBy", () => {
 })
 
 describe("buildContactListWhere", () => {
+  test("excludes group anchors even when no contact filter is supplied", () => {
+    expect(buildContactListWhere(baseInput).kind).toBe("person")
+  })
   test("adds the assigned-user conversation scope", () => {
     const where = buildContactListWhere({
       ...baseInput,
@@ -168,6 +171,7 @@ describe("buildContactListWhere", () => {
 
     expect(where).toEqual({
       workspaceId: "1",
+      kind: "person",
       AND: [
         {
           OR: [
@@ -193,6 +197,7 @@ describe("buildContactListWhere", () => {
 
     expect(buildContactListWhere({ ...baseInput, inboxScope })).toEqual({
       workspaceId: "1",
+      kind: "person",
       __inboxScope: inboxScope,
     })
   })

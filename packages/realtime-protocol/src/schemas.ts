@@ -296,6 +296,9 @@ export type RealtimeEventTyping = {
     conversationId: string
     typing: boolean
     seconds: number
+    audience?: "zaloAccountGroup"
+    actor?: { uid: string; name?: string }
+    expiresAt?: string
   }
 }
 

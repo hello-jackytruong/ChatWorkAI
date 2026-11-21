@@ -226,6 +226,7 @@ export type OutgoingContact = {
 }
 
 export type OutgoingMessage = {
+  createdAt?: Date | string
   id: string
   workspaceId: string
   additionalAttributes?: { [x: string]: unknown }

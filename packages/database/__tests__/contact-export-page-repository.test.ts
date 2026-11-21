@@ -57,7 +57,7 @@ describe("contactRepository.listForExportPage", () => {
 
     expect(findManyContacts).toHaveBeenCalledWith(
       expect.objectContaining({
-        where,
+        where: { AND: [where, { kind: "person" }] },
         limit: 2,
         orderBy: { id: "asc" },
       }),

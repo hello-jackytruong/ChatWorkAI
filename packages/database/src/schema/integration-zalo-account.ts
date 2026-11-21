@@ -1,21 +1,45 @@
 import type { EncryptedData } from "@chatbotx.io/encryption"
+import type { ZaloAccountRuntimeOrder } from "@chatbotx.io/sdk"
+import { sql } from "drizzle-orm"
 import {
   boolean,
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core"
 import {
+  type ZaloAccountGroupAutomationMode,
+  zaloAccountGroupAutomationModes,
+} from "../partials/integration"
+import {
   bigintAsString,
   sharedColumns,
   timestampConfig,
 } from "../partials/shared"
+import { contactInboxModel } from "./contact-inbox"
+import { conversationModel } from "./conversation"
 import { inboxModel } from "./inbox"
 import { workspaceModel } from "./workspace"
+
+export type ZaloAccountLabelState = {
+  version: number
+  complete: boolean
+  hash?: string
+  scanHash?: string
+  cursor?: number
+  token?: string
+  graceUntil?: string
+  paused?: boolean
+  commandId?: string
+  lastSyncedAt?: string
+  reason?: string
+  pendingHash?: string
+}
 
 /** Durable identity and encrypted device authorization for one personal Zalo account. */
 export const integrationZaloAccountModel = pgTable(
@@ -39,6 +63,28 @@ export const integrationZaloAccountModel = pgTable(
     avatarUrl: text(),
     encryptedAuth: jsonb().$type<EncryptedData>().notNull(),
     sessionVerifiedAt: timestamp(timestampConfig).notNull(),
+    groupMessagingEnabled: boolean().default(false).notNull(),
+    groupPolicyEpoch: integer().default(0).notNull(),
+    operations: jsonb().$type<{
+      groups?: {
+        runId: string
+        startedAt: string
+        completedAt?: string
+        complete?: boolean
+        count?: number
+        reason?: string
+      }
+      labels?: ZaloAccountLabelState
+      friends?: {
+        runId: string
+        cursor: number
+        completedAt?: string
+        count?: number
+        complete?: boolean
+        reason?: string
+      }
+      runtime?: ZaloAccountRuntimeOrder
+    }>(),
   },
   (table) => [
     index("IntegrationZaloAccount_workspaceId_idx").on(table.workspaceId),
@@ -47,6 +93,14 @@ export const integrationZaloAccountModel = pgTable(
       table.workspaceId,
       table.zaloUid,
     ),
+  ],
+)
+
+export const zaloAccountGroupAutomationMode = pgEnum(
+  "zaloAccountGroupAutomationMode",
+  zaloAccountGroupAutomationModes.options as [
+    ZaloAccountGroupAutomationMode,
+    ...ZaloAccountGroupAutomationMode[],
   ],
 )
 
@@ -73,6 +127,19 @@ export const integrationZaloAccountGroupModel = pgTable(
     memberCount: integer().notNull(),
     providerVersion: text(),
     sendEnabled: boolean().default(false).notNull(),
+    receiveEnabled: boolean().default(false).notNull(),
+    automationMode: zaloAccountGroupAutomationMode()
+      .default("disabled")
+      .notNull(),
+    policyEpoch: integer().default(0).notNull(),
+    contactInboxId: bigintAsString().references(() => contactInboxModel.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    conversationId: bigintAsString().references(() => conversationModel.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
     accessible: boolean().default(true).notNull(),
     lastSyncRunId: text().notNull(),
     lastSyncedAt: timestamp(timestampConfig).notNull(),
@@ -81,6 +148,12 @@ export const integrationZaloAccountGroupModel = pgTable(
   (table) => [
     index("IntegrationZaloAccountGroup_workspaceId_idx").on(table.workspaceId),
     index("IntegrationZaloAccountGroup_accountId_idx").on(table.accountId),
+    index("IntegrationZaloAccountGroup_contactInboxId_idx")
+      .on(table.contactInboxId)
+      .where(sql`${table.contactInboxId} IS NOT NULL`),
+    index("IntegrationZaloAccountGroup_conversationId_idx")
+      .on(table.conversationId)
+      .where(sql`${table.conversationId} IS NOT NULL`),
     uniqueIndex("IntegrationZaloAccountGroup_accountId_providerGroupId_key").on(
       table.accountId,
       table.providerGroupId,

@@ -1,5 +1,23 @@
 import { z } from "zod"
 
+export const zaloAccountGroupAutomationModes = z.enum([
+  "disabled",
+  "mentionOnly",
+  "all",
+])
+export type ZaloAccountGroupAutomationMode = z.infer<
+  typeof zaloAccountGroupAutomationModes
+>
+
+export const zaloAccountThreadTypes = z.enum(["user", "group"])
+export const zaloAccountSendAttemptStatuses = z.enum([
+  "pending",
+  "applied",
+  "failed",
+  "unknown",
+])
+export const zaloAccountSendOrigins = z.enum(["inbox", "flow", "api"])
+
 export const integrationTypes = z.enum([
   "activeCampaign",
   "api",

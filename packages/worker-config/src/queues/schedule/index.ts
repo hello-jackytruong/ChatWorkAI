@@ -55,6 +55,9 @@ export const ScheduleJobData = {
   purgeAutomationThrottle: "purgeAutomationThrottle",
   purgeErrorLogs: "purgeErrorLogs",
   redispatchInboundWebhookRequests: "redispatchInboundWebhookRequests",
+  recoverZaloGroupInbox: "recoverZaloGroupInbox",
+  reconcileZaloLabels: "reconcileZaloLabels",
+  purgeZaloMessageState: "purgeZaloMessageState",
   redispatchTemplateJobs: "redispatchTemplateJobs",
   purgeInboundWebhookRequests: "purgeInboundWebhookRequests",
   purgeCommentAutomationEvents: "purgeCommentAutomationEvents",
@@ -453,6 +456,18 @@ export type ScheduleJobFinalizeMarketingMessages = {
 }
 
 export type ScheduleJobData =
+  | {
+      type: typeof ScheduleJobData.purgeZaloMessageState
+      data: Record<string, never>
+    }
+  | {
+      type: typeof ScheduleJobData.reconcileZaloLabels
+      data: Record<string, never>
+    }
+  | {
+      type: typeof ScheduleJobData.recoverZaloGroupInbox
+      data: Record<string, never>
+    }
   | ScheduleJobEnqueueMarketingMessages
   | ScheduleJobDispatchMarketingMessages
   | ScheduleJobFinalizeMarketingMessages

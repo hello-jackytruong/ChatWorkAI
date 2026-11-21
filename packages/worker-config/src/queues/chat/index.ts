@@ -28,7 +28,11 @@ import type {
   WhatsappCallButtonStepSchema,
   WhatsappLocationStepSchema,
 } from "@chatbotx.io/flow-config"
-import type { CommentAnchor, MessageButtonTemplate } from "@chatbotx.io/sdk"
+import type {
+  CommentAnchor,
+  MessageButtonTemplate,
+  ZaloAccountGroupAudience,
+} from "@chatbotx.io/sdk"
 import type { SendFrom } from "@chatbotx.io/utils/send-from"
 import { Queue } from "bullmq"
 import {
@@ -60,6 +64,7 @@ export const ChatJobAction = {
 export type ChatJobSendChannelMessage = {
   type: typeof ChatJobAction.sendChannelMessage
   data: {
+    groupAudience?: ZaloAccountGroupAudience
     conversation: ConversationModel
     contactInbox: ContactInboxModel
     message: MessageModel & {
@@ -76,6 +81,7 @@ export type ChatJobSendChannelMessage = {
 export type ChatJobSendFlowStep = {
   type: typeof ChatJobAction.sendFlowMessage
   data: {
+    groupAudience?: ZaloAccountGroupAudience
     conversationId: string
     contactInboxId?: string
     flowId: string
@@ -134,6 +140,7 @@ export type ChatJobSendFlowStep = {
 export type ChatJobSendChatMessage = {
   type: typeof ChatJobAction.sendChatMessage
   data: {
+    groupAudience?: ZaloAccountGroupAudience
     conversation: ConversationModel
     contactInbox?: ContactInboxModel
     text?: string
