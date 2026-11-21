@@ -28,8 +28,9 @@ the existing `zalo` channel, which uses the official Zalo OA API.
   work.
 - QR and authorization event bodies are encrypted with session/fence-bound AAD.
   Poison logging and command DLQ records contain metadata only, not payloads.
-- A failed provider send or whole-label write is an `unknown` outcome and is
-  never replayed automatically. Read/reconnect failures are explicit failures.
+- A send or whole-label write that may have reached the provider has an
+  `unknown` outcome and is never replayed automatically. Known rejection before
+  the provider call is a failure; it does not trip the provider circuit.
 - Account and provider-wide admission circuits temporarily pause work after a
   burst of failures. Readiness requires Redis, a live consumer heartbeat, and
   acceptable command-stream lag.
@@ -111,19 +112,35 @@ Outbound media is fetched only through the controlled download path: HTTPS,
 allowlisted resolution checks, redirect revalidation, byte/type limits, and a
 temporary local file that is removed after the SDK call. Arbitrary local paths
 and provider URLs are not exposed as client-facing attachments. Sticker,
-voice/video, card, poll, reaction, forward, and other unsupported payloads fail
+voice/video, card, poll, outbound reaction, forward, and other unsupported payloads fail
 explicitly; they are not silently converted.
 
-## Controlled group sending
+## Controlled group Inbox
 
-Groups are provider-scoped resources, not Contacts or Inbox conversations.
-Sync stores group metadata under its owning workspace/account. New groups have
-`sendEnabled = false`; inaccessible/removed groups also cannot send.
+`IntegrationZaloAccountGroup` owns provider metadata and policy. Enabling receive
+**or send** creates one internal `Contact(kind=channelGroup)`, `ContactInbox`
+and Conversation under the reserved `za:group:` source namespace. Disabling
+retains history. A send-only group has an outbound timeline but does not persist
+incoming messages. Members remain sender metadata; they do not become Contacts.
 
-Group activity schedules a coalesced group-resource refresh only. It never
-enters direct-message/audience handlers, creates a Contact, or runs 1:1 flow
-automation. Sending requires the exact stored group row and explicit policy
-enablement.
+The internal anchor is excluded from customer CRUD/export, contact quota/MAC,
+broadcasts, sequences, pipelines and customer scoring. Group persistence uses
+its own facade and durable provider identity, with bounded recovery across
+database/shard/queue failures. The Inbox renders actual sender, validated mention
+spans, quotes and supported text/image/file attachments. Own echoes reconcile
+confirmed provider IDs. Group metadata events still schedule coalesced refreshes.
+
+The account kill switch and every group's receive/send flags default off;
+automation defaults `disabled`. Turn on the account switch and select individual
+groups. Automation can be `mentionOnly` or `all`, with a closed allowlist of
+reply sends and tag changes. Only the supported send/tag/Wait flow subset can
+execute for a group. Original policy epochs travel through retries and delayed
+work; disabling then re-enabling cannot authorize old queued jobs. Provider
+admission checks current policy and account/group limits immediately before send.
+Direct traffic continues when the group switch is off.
+
+Sync does not tombstone missing groups unless the provider snapshot is proven
+complete. Partial, stale and failed scans retain existing metadata/policies.
 
 Public operations:
 
@@ -132,17 +149,62 @@ Public operations:
 - `POST /v1/zalo-accounts/{accountId}/groups/sync`
 - `PATCH /v1/zalo-accounts/{accountId}/groups/{id}/policy`
 - `POST /v1/zalo-accounts/{accountId}/groups/{id}/messages`
+- `PATCH /connections/zalo-account/{accountId}/group-messaging`
+- `PATCH /connections/zalo-account/{accountId}/groups/{groupId}/policy`
 
 The send endpoint accepts exactly one of text or one supported attachment and
 requires a caller-provided stable `commandId`.
+
+## Canonical sends and message lifecycle
+
+Direct sends (`POST /v1/zalo-accounts/{accountId}/messages`) select a known
+ContactInbox or existing provider UID, never an arbitrary phone number. Direct
+and group API sends prepare a fixed Message identity before enqueueing the
+existing chat worker. Reuse a command ID only with identical input. Inspect
+`GET /v1/zalo-accounts/{accountId}/send-attempts/{commandId}` with the same
+target after a timeout; the read remains available when sending is disabled.
+`applied` returns confirmed provider IDs. `pending`/`unknown` must not be
+automatically resent, and manual resend is blocked for pending/unknown/applied
+attempts. Prepared work that has not reached provider dispatch has bounded
+recovery; dispatched work is never automatically replayed.
+
+Delivered/seen receipts, typing, reaction add/remove and inbound undo enter the
+typed lifecycle path. Group receipts never mark customer activity. Group undo
+records a durable tombstone before resolving a missing Message, preventing late
+messages or reactions from restoring it. Direct missing targets use bounded
+lookup retries. Receipt/reaction detail is retained for 90 days and purged in
+bounded batches; durable dedupe identities remain compacted.
+
+`GET /v1/zalo-accounts/{accountId}/message-state` reads at most 50 provider
+message IDs per request (reaction aggregates are bounded to 2,500 rows).
+`POST /v1/zalo-accounts/{accountId}/typing` is ephemeral, throttled to one call
+per thread per five seconds; the Inbox expires the indicator locally. Outbound
+reaction/revoke/delete remain unavailable until live provider proof. Local
+delete is rejected before mutation so it cannot appear to unsend a Zalo message.
+
+## Friend sync and safe status
+
+`POST /v1/zalo-accounts/{accountId}/friends/sync` imports up to 500 provider
+entries per page, in sequential transactions of 100. Follow `nextCursor` with
+a new command ID until complete. UID is account-scoped; updates fill missing
+profile fields and missing friends are never deleted. Each newly created person,
+ContactInbox, import ledger and durable contact counters commit together. A
+revision-fenced cache outbox recovers invalidation after crashes without counting
+twice. Imports emit no customer-created/activity automation and consume no MAC.
+
+`GET /v1/zalo-accounts/{accountId}/status` exposes Connection state, gateway
+availability, capabilities and friend/group/label sync summaries. Availability
+means a current lease exists, not a provider health guarantee. It never returns
+authorization, operation tokens or gateway fencing identifiers.
 
 ## Native labels and ChatbotX tags
 
 Zalo labels are an account-wide versioned document. Sync maps provider label
 definitions through `TagChannel(channelType=zaloAccount,
-integrationId=accountId)` and applies assignments only to existing direct
-`ContactInbox` rows in the owning account Inbox. Group IDs are excluded before
-contact resolution.
+integrationId=accountId)` and applies assignments to existing direct threads
+and explicitly provisioned group anchors in the owning Inbox. It never creates
+member Contacts. Group tagging uses a quiet service and does not emit customer
+activity, lead events or MAC.
 
 Attach/detach performs a serialized read-modify-write of the whole provider
 document, preserves unrelated labels/conversations, and retries once only for
@@ -157,18 +219,40 @@ generic ChatbotX tag attach/detach operations drive mapped provider updates.
 Manual sync is available at:
 
 - `POST /v1/zalo-accounts/{accountId}/labels/sync`
+- `GET /v1/zalo-accounts/{accountId}/groups/{groupId}/tags`
+- `PATCH /v1/zalo-accounts/{accountId}/groups/{groupId}/tags`
+
+Whole-document writes are fenced by an operation token/version/hash. Unknown
+writes remain inspect-only until reconciliation; unconfirmed detach mappings
+are retained. Missing or incomplete snapshots do not erase assignments. The
+settings UI reports conflict/unknown/partial states rather than implying success.
 
 ## Database rollout
 
-Two generated migrations are required and intentionally are not applied by
-the implementation workflow:
+The migration chain includes these generated changes; the implementation
+workflow does not apply migrations:
 
 - `packages/database/drizzle/20261119161633_zalo-account/`
 - `packages/database/drizzle/20261120060156_zalo-account-groups/`
+- `packages/database/drizzle/20261121024313_zalo-account-group-inbox/`
+- `packages/database/drizzle/20261121055141_zalo-account-message-operations/`
 
 Inspect and apply them in order only after explicit approval. Until then,
 database-backed Zalo integration tests and live channel operation remain a
 rollout gate; unit/contract/type checks do not replace this approval.
+
+The group Inbox migration adds the immutable person/group discriminator,
+anchor references, policy defaults/epochs, durable identity and kind-aware
+contact-stat triggers. The operations migration adds receipt/reaction/attempt
+enums and tables, friend import/cache ledger, operations summaries, Wait audience,
+identity tombstones/recovery index and the reserved-source constraint. FKs have
+leading indexes and purge drains the new children before account/workspace rows.
+
+Apply the additive migrations **before deploying this code**: normal Contact
+and account selects now read the new columns. Then deploy builder, workers and
+gateway together with group flags off. Enable only a bounded staging account
+after redacted live fixtures verify the pinned provider contract; static tests
+do not authorize production enablement.
 
 ## Operations and rollback
 
@@ -177,7 +261,9 @@ admission pauses, lease loss, reconnect churn, and provider rate-limit errors.
 Validate real message/group/label payloads against pinned `zca-js` 2.1.2 in a
 bounded staging account before enabling a production cohort.
 
-To roll back, hide/disable the Zalo Account channel, stop accepting new work,
-let accepted stream entries drain, and stop gateway runtimes. Keep encrypted
-account/group rows for controlled recovery; schema or secret deletion requires
-a separate retention decision.
+To roll back group behavior, disable the account group switch first. Its epoch
+fences queued group work while direct messaging continues. Disable per-group
+receive/send/automation and drain in-flight group work. Preserve anchors,
+history and reconciliation records. A whole-channel rollback additionally stops
+accepting new work and drains/stops gateway runtimes; schema or secret deletion
+requires a separate retention decision.

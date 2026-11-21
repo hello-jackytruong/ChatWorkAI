@@ -15,6 +15,15 @@ Only the **final** failure settles the row. While BullMQ will still retry the jo
 the row is left as it is (no error badge that would invite a duplicate Resend).
 Rows that already carried a `sendError` before this rule are left untouched.
 
+Zalo Account has additional delivery-safety rules. Group failures retain their
+canonical Message for inspection. A direct send with a durable `pending`,
+`unknown` or `applied` attempt also retains its Message and suppresses customer
+failure automation: a lost acknowledgement is not evidence that Zalo refused
+the send. Manual resend is blocked for those states. Known direct failures keep
+the normal rules above. Prepared API sends that fail to enqueue retain their
+fixed identity for bounded recovery before provider dispatch. See
+[Zalo Account](./zalo-account.md#canonical-sends-and-message-lifecycle).
+
 ## How a send is recognised as "from the Inbox"
 
 - `sendFrom` (`@chatbotx.io/utils/send-from`) is `"inbox" | "api"`. Every
