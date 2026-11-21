@@ -7,7 +7,7 @@ import { z } from "zod"
 export const contactResource = createSelectSchema(contactModel, {
   id: z.string(),
   workspaceId: z.string(),
-})
+}).omit({ kind: true })
 export type ContactResource = z.infer<typeof contactResource>
 
 export type ContactEditableField = {

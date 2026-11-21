@@ -4174,6 +4174,21 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "GET",
+    "operationId": "zaloAccounts.getMessageState",
+    "path": "/v1/zalo-accounts/{accountId}/message-state",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getSendAttempt",
+    "path": "/v1/zalo-accounts/{accountId}/send-attempts/{commandId}",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getStatus",
+    "path": "/v1/zalo-accounts/{accountId}/status",
+  },
+  {
+    "method": "GET",
     "operationId": "zaloAccounts.list",
     "path": "/v1/zalo-accounts",
   },
@@ -4183,9 +4198,29 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "path": "/v1/zalo-accounts/{accountId}/groups",
   },
   {
+    "method": "GET",
+    "operationId": "zaloAccounts.listGroupTags",
+    "path": "/v1/zalo-accounts/{accountId}/groups/{groupId}/tags",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.sendDirectMessage",
+    "path": "/v1/zalo-accounts/{accountId}/messages",
+  },
+  {
     "method": "POST",
     "operationId": "zaloAccounts.sendGroupMessage",
     "path": "/v1/zalo-accounts/{accountId}/groups/{id}/messages",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.sendTyping",
+    "path": "/v1/zalo-accounts/{accountId}/typing",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.syncFriends",
+    "path": "/v1/zalo-accounts/{accountId}/friends/sync",
   },
   {
     "method": "POST",
@@ -4201,6 +4236,21 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "PATCH",
     "operationId": "zaloAccounts.updateGroupPolicy",
     "path": "/v1/zalo-accounts/{accountId}/groups/{id}/policy",
+  },
+  {
+    "method": "PATCH",
+    "operationId": "zaloAccounts.updateGroupTags",
+    "path": "/v1/zalo-accounts/{accountId}/groups/{groupId}/tags",
+  },
+  {
+    "method": "PATCH",
+    "operationId": "zaloAccountSetGroupMessaging",
+    "path": "/connections/zalo-account/{accountId}/group-messaging",
+  },
+  {
+    "method": "PATCH",
+    "operationId": "zaloAccountUpdateGroupPolicy",
+    "path": "/connections/zalo-account/{accountId}/groups/{groupId}/policy",
   },
   {
     "method": "GET",

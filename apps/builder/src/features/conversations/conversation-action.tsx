@@ -25,6 +25,7 @@ import { useChatStore } from "../chat/store/chat-store-provider"
 import { blockContactAction } from "../contacts/actions/block-contact.action"
 import { unblockContactAction } from "../contacts/actions/unblock-contact.action"
 import DeleteContactDialog from "../contacts/components/remove-contact-dialog"
+import { getZaloGroupConversation } from "../zalo-accounts/lib/group-content"
 import { archiveConversationAction } from "./actions/archive-conversation.action"
 import { followConversationAction } from "./actions/follow-conversation.action"
 import { unarchiveConversationAction } from "./actions/unarchive-conversation.action"
@@ -39,6 +40,7 @@ type ConversationActionProps = {
 export function ConversationAction({ conversation }: ConversationActionProps) {
   const t = useTranslations()
   const workspaceId = useWorkspaceId()
+  const isGroup = !!getZaloGroupConversation(conversation)
 
   const {
     deleteConversation,
@@ -215,36 +217,39 @@ export function ConversationAction({ conversation }: ConversationActionProps) {
             {t("actions.archive")}
           </DropdownMenuItem>
         )}
-        {conversation.contact?.blockedAt ? (
-          <DropdownMenuItem onClick={() => unblockContactFn()}>
-            <UserLockIcon />
-            {t("actions.unblockContact")}
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem
-            disabled={isBlockingContact}
-            onClick={() => blockContactFn()}
-          >
-            <UserLockIcon />
-            {t("actions.blockContact")}
-          </DropdownMenuItem>
-        )}
-
-        <DeleteContactDialog
-          ids={[conversation.contact?.id || ""]}
-          onSuccess={() => {
-            deleteConversation(conversation.id)
-          }}
-          trigger={
-            <DropdownMenuItem
-              closeOnClick={false}
-              onClick={(e) => e.preventDefault()}
-            >
-              <TrashIcon className="text-destructive" />
-              {t("actions.deleteContact")}
+        {!isGroup &&
+          (conversation.contact?.blockedAt ? (
+            <DropdownMenuItem onClick={() => unblockContactFn()}>
+              <UserLockIcon />
+              {t("actions.unblockContact")}
             </DropdownMenuItem>
-          }
-        />
+          ) : (
+            <DropdownMenuItem
+              disabled={isBlockingContact}
+              onClick={() => blockContactFn()}
+            >
+              <UserLockIcon />
+              {t("actions.blockContact")}
+            </DropdownMenuItem>
+          ))}
+
+        {!isGroup && (
+          <DeleteContactDialog
+            ids={[conversation.contact?.id || ""]}
+            onSuccess={() => {
+              deleteConversation(conversation.id)
+            }}
+            trigger={
+              <DropdownMenuItem
+                closeOnClick={false}
+                onClick={(e) => e.preventDefault()}
+              >
+                <TrashIcon className="text-destructive" />
+                {t("actions.deleteContact")}
+              </DropdownMenuItem>
+            }
+          />
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

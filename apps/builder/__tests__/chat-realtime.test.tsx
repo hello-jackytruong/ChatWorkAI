@@ -407,6 +407,24 @@ describe("ChatRealtime — chat event parity", () => {
   })
 })
 
+// Keep Zalo server actions outside these client-only regression fixtures.
+vi.mock("@/features/zalo-accounts/actions/group-inbox.action", () => ({
+  getZaloGroupInboxAction: vi.fn(),
+  getZaloGroupMessageStateAction: vi.fn(),
+  sendZaloGroupTypingAction: vi.fn(),
+  updateZaloGroupTagAction: vi.fn(),
+}))
+vi.mock("@/features/zalo-accounts/queries/use-group-inbox", () => ({
+  useZaloGroupInbox: () => ({ data: undefined }),
+}))
+vi.mock("@/features/zalo-accounts/queries/use-group-message-state", () => ({
+  useZaloGroupMessageState: () => ({ data: undefined }),
+  zaloMessageStateKey: (workspaceId: string) => [
+    "zalo-message-state",
+    workspaceId,
+  ],
+}))
+
 describe("ChatRealtime — call permission reply invalidates the outbound call mode", () => {
   let container: HTMLDivElement
   let root: Root

@@ -45,6 +45,9 @@ import type { SavedReplyResource } from "@/features/saved-replies/schema/resourc
 import { authClient } from "@/lib/auth/auth-client"
 import { shouldSendOnEnter } from "@/lib/keyboard/should-send-on-enter"
 import { useChatStore } from "../../chat/store/chat-store-provider"
+import { sendZaloGroupTypingAction } from "../../zalo-accounts/actions/group-inbox.action"
+import { getZaloGroupConversation } from "../../zalo-accounts/lib/group-content"
+import { useZaloGroupInbox } from "../../zalo-accounts/queries/use-group-inbox"
 import { createMessageAction } from "../actions/create-message.action"
 import {
   discardHeldSends,
@@ -134,6 +137,13 @@ export const MessageInput = () => {
   )
 
   const channel = conversation?.contactInboxes[0]?.channel
+  const groupAudience = getZaloGroupConversation(conversation)
+  const groupInbox = useZaloGroupInbox(
+    conversation?.workspaceId ?? "",
+    groupAudience,
+  )
+  const groupSendDisabled = !!groupAudience && groupInbox.data?.canSend !== true
+  const lastTypingAt = useRef(0)
   const threadControl = useThreadControl(conversation, channel)
 
   // A send with a reply target (picked, or the last contact comment that
@@ -372,6 +382,10 @@ export const MessageInput = () => {
   const isSendLocked = sendQueue ? isSendQueueLocked(sendQueue) : false
 
   const sendMessage = useCallback(async () => {
+    if (groupSendDisabled) {
+      toast.error(t("zaloAccount.sendDisabled"))
+      return
+    }
     if (isSendLocked) {
       return
     }
@@ -441,6 +455,8 @@ export const MessageInput = () => {
     imageLimitMessage,
     isPrivateReply,
     isSendLocked,
+    groupSendDisabled,
+    t,
     lastContactComment,
     replyToMessage,
     replyKind,
@@ -607,6 +623,13 @@ export const MessageInput = () => {
 
   return (
     <div className="m-3 shrink-0 rounded-xl border pt-2">
+      {groupSendDisabled && (
+        <p className="px-3 pb-2 text-muted-foreground text-xs" role="status">
+          {groupInbox.data?.status === "needs_reauth"
+            ? t("zaloAccount.reconnectRequired")
+            : t("zaloAccount.sendDisabled")}
+        </p>
+      )}
       <Form {...form}>
         <form
           aria-label="Message input form"
@@ -687,6 +710,25 @@ export const MessageInput = () => {
                     enterKeyHint={isTouchDevice ? "enter" : "send"}
                     placeholder={t("actions.messagePlaceholder")}
                     {...field}
+                    onChange={(event) => {
+                      field.onChange(event)
+                      if (
+                        groupAudience &&
+                        conversation &&
+                        !groupSendDisabled &&
+                        Date.now() - lastTypingAt.current >= 5000
+                      ) {
+                        lastTypingAt.current = Date.now()
+                        sendZaloGroupTypingAction(
+                          conversation.workspaceId,
+                          groupAudience.accountId,
+                          {
+                            groupId: groupAudience.groupId,
+                            commandId: crypto.randomUUID(),
+                          },
+                        ).catch(() => undefined)
+                      }
+                    }}
                     onKeyDown={onKeyDown}
                     ref={textareaRef}
                   />
@@ -788,12 +830,13 @@ export const MessageInput = () => {
                 </>
               )}
               <Button
-                aria-label="Send message"
+                aria-label={t("actions.send")}
                 className="px-2 py-1.5 [&_svg]:size-5"
                 disabled={
                   !form.formState.isValid ||
                   form.formState.isSubmitting ||
-                  isSendLocked
+                  isSendLocked ||
+                  groupSendDisabled
                 }
                 type="submit"
                 variant="ghost"

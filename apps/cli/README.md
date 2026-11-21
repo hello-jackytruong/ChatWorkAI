@@ -1632,25 +1632,47 @@ chatbotx zalo-channels tag-sync update <id> --enabled <enabled>
 
 ### `zalo-accounts`
 
-Personal Zalo account metadata, controlled group sending, and native-label
-sync. Connection lifecycle uses the shared `connections` and
+Personal Zalo account status, group Inbox policies, friend and native-label
+sync, canonical messaging and lifecycle aggregates. Connection lifecycle uses the shared `connections` and
 `connect-sessions` groups with provider `zaloAccount`.
 
 ```bash
 chatbotx zalo-accounts list
 chatbotx zalo-accounts get <id>
-chatbotx zalo-accounts group list <accountId>
+chatbotx zalo-accounts status list <accountId>
+chatbotx zalo-accounts groups list <accountId>
 chatbotx zalo-accounts group get <accountId> <id>
 chatbotx zalo-accounts groups sync <accountId> --commandId <stable-id>
 chatbotx zalo-accounts labels sync <accountId> --commandId <stable-id>
+chatbotx zalo-accounts friends sync <accountId> --commandId <page-id> --cursor <nextCursor>
 chatbotx zalo-accounts policy update <accountId> <id> --sendEnabled <true|false>
 chatbotx zalo-accounts message send <accountId> <id> --commandId <stable-id> --text <text>
                                                      # Use --attachment <json> instead of --text for one supported image/file
+chatbotx zalo-accounts message send-direct <accountId> --contactInboxId <id> --commandId <stable-id> --text <text>
+chatbotx zalo-accounts send-attempt get <accountId> <commandId> --groupId <groupId>
+chatbotx zalo-accounts message-state list <accountId> --groupId <groupId> --providerMessageIds <id>
+chatbotx zalo-accounts typing add <accountId> --groupId <groupId> --commandId <stable-id>
+chatbotx zalo-accounts tags list <accountId> <groupId>
+chatbotx zalo-accounts tags update <accountId> <groupId> --commandId <stable-id> --tagIds '["tag-id"]' --assigned <true|false>
+chatbotx zalo-account-set-group-messaging <accountId> --enabled <true|false>
+chatbotx zalo-account-update-group-policy <accountId> <groupId> --receiveEnabled <true|false> --sendEnabled <true|false> --automationMode <disabled|mentionOnly|all>
 ```
 
-Group sending is disabled by default and the send command fails until the
-stored group policy is enabled. Reuse the same `commandId` when retrying a
-known request; an ambiguous provider send is not replayed automatically.
+Both the account group switch and group receive/send default off. Enabling
+receive or send provisions one group conversation; send-only still rejects
+incoming messages. The old `policy update` command remains a send-only alias.
+Direct sends accept one known `contactInboxId` or `providerUid`; connection
+credentials and phone-number discovery are not exposed. Replies use
+`--replyToMessageId` and `--replyToMessageCreatedAt` from the same thread.
+
+Reuse a `commandId` only with identical input. Sends persist a canonical Message
+before dispatch. Inspect the send-attempt endpoint after a timeout; pending and
+unknown outcomes must not be automatically resent. Friend sync follows the
+returned `nextCursor` with a new command ID per page and creates no MAC/activity.
+The generated MCP equivalents include `zalo_account_set_group_messaging` and
+`zalo_account_update_group_policy`; Zalo operations remain discoverable through
+`search_tools`/`call_tool` without expanding the default tool payload. See
+[the operation and rollout reference](../../docs/zalo-account.md).
 
 ---
 
@@ -1667,7 +1689,7 @@ chatbotx line-channels test-webhook add <id>   # POST /v1/line-channels/{id}/tes
 
 ## Known command-name collisions
 
-Commands are named by `pathAndMethodToCommandName` (`apps/cli/src/openapi-loader.ts`) from `{path, method}` alone, ignoring the router's own action key. When two operations under the same resource reduce to the same name, `toolsToCommands` keeps the first and silently drops the second (a `Warning: duplicate command name "..." — skipping` line on stderr). Every entry below was verified against source, not just the stderr warning.
+Commands are named by `pathAndMethodToCommandName` (`apps/cli/src/openapi-loader.ts`) from `{path, method}` alone, ignoring the router's own action key. When two operations under the same resource reduce to the same name, `registerToolCommands` keeps the first and silently drops the second (a `Warning: duplicate command name "..." — skipping` line on stderr). Every entry below was verified against source, not just the stderr warning.
 
 | Command name | Colliding operations | What's reachable |
 |---|---|---|

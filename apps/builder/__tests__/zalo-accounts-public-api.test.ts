@@ -29,6 +29,7 @@ vi.mock("@/orpc", () => ({
 }))
 
 const mocks = vi.hoisted(() => ({
+  canonicalSend: vi.fn(),
   account: { findById: vi.fn(), listByWorkspace: vi.fn() },
   group: {
     get: vi.fn(),
@@ -43,6 +44,9 @@ vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountGroupService: mocks.group,
   zaloAccountLabelService: mocks.label,
   zaloAccountService: mocks.account,
+}))
+vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
+  zaloAccountCanonicalSendService: { send: mocks.canonicalSend },
 }))
 vi.mock("@chatbotx.io/business/errors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@chatbotx.io/business/errors")>()),
@@ -134,8 +138,8 @@ describe("Zalo Account public API", () => {
     })
   })
 
-  it("sends one text message through the scoped group service", async () => {
-    mocks.group.send.mockResolvedValueOnce({
+  it("sends one text message through the canonical persisted service", async () => {
+    mocks.canonicalSend.mockResolvedValueOnce({
       messageIds: ["provider-message-1"],
       sentCount: 1,
     })
@@ -153,13 +157,28 @@ describe("Zalo Account public API", () => {
       },
     } as never)
 
-    expect(mocks.group.send).toHaveBeenCalledWith({
+    expect(mocks.canonicalSend).toHaveBeenCalledWith({
       workspaceId: "workspace-1",
       accountId: "account-1",
       groupId: "group-1",
       commandId: "command-1",
-      message: { text: "hello", attachments: [], quote: undefined },
+      text: "hello",
     })
+  })
+  it("exposes distinct account/group policies, sync, direct send, and message state operations", () => {
+    for (const [method, path] of [
+      ["PATCH", "/connections/zalo-account/{accountId}/group-messaging"],
+      [
+        "PATCH",
+        "/connections/zalo-account/{accountId}/groups/{groupId}/policy",
+      ],
+      ["GET", "/v1/zalo-accounts/{accountId}/status"],
+      ["POST", "/v1/zalo-accounts/{accountId}/friends/sync"],
+      ["POST", "/v1/zalo-accounts/{accountId}/messages"],
+      ["GET", "/v1/zalo-accounts/{accountId}/message-state"],
+    ] as const) {
+      expect(() => procedure(method, path)).not.toThrow()
+    }
   })
 
   it("syncs native labels inside the token workspace and account scope", async () => {

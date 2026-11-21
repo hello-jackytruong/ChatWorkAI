@@ -24,6 +24,9 @@ import {
 import { MessageInput } from "../messages/components/message-input"
 import MessageHead from "../messages/message-head"
 import { MessageList } from "../messages/message-list"
+import { ZaloGroupPanel } from "../zalo-accounts/components/zalo-group-panel"
+import { ZaloGroupTypingIndicator } from "../zalo-accounts/components/zalo-group-typing"
+import { getZaloGroupConversation } from "../zalo-accounts/lib/group-content"
 import { useChatStore } from "./store/chat-store-provider"
 
 /**
@@ -136,20 +139,28 @@ export function MessageThreadPane({
           {...threadReadHandlers}
         >
           <MessageHead onBack={onBack} onOpenContact={onOpenContact} />
-          {isConversationActive(activeConversation) && !isThreadOnStandby && (
-            <Button
-              className="shrink-0 rounded-none"
-              disabled={isDisablingBot}
-              onClick={() => {
-                disableBot({ ids: [activeConversation.id] })
-              }}
-              variant="secondary"
-            >
-              <BotIcon />
-              {t("messages.botIsActive")}
-            </Button>
-          )}
+          {isConversationActive(activeConversation) &&
+            !getZaloGroupConversation(activeConversation) &&
+            !isThreadOnStandby && (
+              <Button
+                className="shrink-0 rounded-none"
+                disabled={isDisablingBot}
+                onClick={() => {
+                  disableBot({ ids: [activeConversation.id] })
+                }}
+                variant="secondary"
+              >
+                <BotIcon />
+                {t("messages.botIsActive")}
+              </Button>
+            )}
           <MessageList />
+          {getZaloGroupConversation(activeConversation) && (
+            <ZaloGroupTypingIndicator
+              conversationId={activeConversation.id}
+              key={activeConversation.id}
+            />
+          )}
           <MessageInput />
         </div>
       )}
@@ -176,18 +187,22 @@ export function ContactDetailPane({
   workspaceId,
 }: PaneState & { workspaceId: string }) {
   const t = useTranslations()
+  const groupAudience = getZaloGroupConversation(activeConversation)
 
   return (
     <>
       {isResolvingConversation && (
         <Loader2Icon className="mx-auto my-4 animate-spin" />
       )}
-      {activeConversation && (
-        <ContactInboxPanel
-          activeConversationId={activeConversation.id}
-          workspaceId={workspaceId}
-        />
-      )}
+      {activeConversation &&
+        (groupAudience ? (
+          <ZaloGroupPanel audience={groupAudience} workspaceId={workspaceId} />
+        ) : (
+          <ContactInboxPanel
+            activeConversationId={activeConversation.id}
+            workspaceId={workspaceId}
+          />
+        ))}
       {shouldShowEmptyState && (
         <PaneEmptyState
           description={t("messages.selectConversationContactDescription")}

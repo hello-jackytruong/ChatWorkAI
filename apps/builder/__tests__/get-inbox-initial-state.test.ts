@@ -82,6 +82,34 @@ const mockDeepLinkSeedRequests = () => {
 }
 
 describe("getInboxInitialState", () => {
+  test("opens a group and seeds messages without looking up its anchor as a person", async () => {
+    mockDeepLinkSeedRequests()
+    mockFindConversation.mockResolvedValue({
+      data: {
+        id: DEEP_LINK_ID,
+        sourceId: "za:group:a:g",
+        contact: { id: "anchor", kind: "group" },
+        additionalAttributes: {
+          audience: {
+            kind: "zaloAccountGroup",
+            accountId: "a",
+            groupId: "g",
+            providerGroupId: "pg",
+          },
+        },
+      },
+    })
+    mockGetContact.mockRejectedValue(new Error("Contact not found"))
+    const state = await getInitialState({
+      workspaceId: "workspace-1",
+      conversationId: DEEP_LINK_ID,
+    })
+    expect(mockGetContact).not.toHaveBeenCalled()
+    expect(loggerWarnMock).not.toHaveBeenCalled()
+    expect(state?.activeConversationId).toBe(DEEP_LINK_ID)
+    expect(state?.messagesSeed?.messages).toHaveLength(2)
+    expect(state?.seededContact).toBeUndefined()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useRealTimers()

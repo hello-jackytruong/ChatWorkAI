@@ -8,6 +8,7 @@ import { SelectFlowDialog } from "@/features/flows/components/select-flow-dialog
 import SavedReplyManage from "@/features/saved-replies/saved-reply-manage"
 import type { SavedReplyResource } from "@/features/saved-replies/schema/resource"
 import { useChatStore } from "../../chat/store/chat-store-provider"
+import { getZaloGroupConversation } from "../../zalo-accounts/lib/group-content"
 import { CreateAppointmentDialogTrigger } from "./create-appointment-trigger"
 import EmojiPicker from "./emoji-picker"
 import { SendProductsDialogTrigger } from "./send-products-trigger"
@@ -60,6 +61,12 @@ export const InputMenu = ({
   bypassThreadControlLock,
 }: InputMenuProps) => {
   const activePost = useChatStore((state) => state.activePost)
+  const activeConversation = useChatStore((state) =>
+    state.conversations.find(
+      (conversation) => conversation.id === state.activeConversationId,
+    ),
+  )
+  const isGroup = !!getZaloGroupConversation(activeConversation)
   const channel = channelTypes.safeParse(contactInbox?.channel)
   // The channel's own policy says whether it has product messages, so a new
   // channel gets the button by declaring them, not by being named here.
@@ -81,14 +88,17 @@ export const InputMenu = ({
           </Button>
         </SendFlowDialogTrigger>
       )}
-      {!activePost && canSendProducts && channel.success && contactInbox && (
-        <SendProductsDialogTrigger
-          bypassThreadControlLock={bypassThreadControlLock}
-          channel={channel.data}
-          inboxId={contactInbox.inboxId}
-        />
-      )}
-      {!activePost && canSendBookingLink && contactInbox && (
+      {!(isGroup || activePost) &&
+        canSendProducts &&
+        channel.success &&
+        contactInbox && (
+          <SendProductsDialogTrigger
+            bypassThreadControlLock={bypassThreadControlLock}
+            channel={channel.data}
+            inboxId={contactInbox.inboxId}
+          />
+        )}
+      {!(isGroup || activePost) && canSendBookingLink && contactInbox && (
         <CreateAppointmentDialogTrigger
           bypassThreadControlLock={bypassThreadControlLock}
           inboxId={contactInbox.inboxId}

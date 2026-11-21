@@ -59,6 +59,7 @@ import { useCopyToClipboard } from "usehooks-ts"
 import type { AttachmentResource } from "@/features/attachments/schema/resource"
 import { useAttachmentSource } from "@/features/attachments/utils"
 import { contactDisplayName } from "@/features/contacts/lib/contact-display-name"
+import { getZaloGroupMessage } from "@/features/zalo-accounts/lib/group-content"
 import { getEmailSubject } from "../lib/get-email-subject"
 import {
   getSentPaymentRequests,
@@ -82,8 +83,16 @@ import { WhatsappCallCard } from "./whatsapp-call-card"
 import { WhatsappFlowResponseCard } from "./whatsapp-flow-response-card"
 import { WhatsappPaymentConfirmation } from "./whatsapp-payment-confirmation"
 import { WhatsappPaymentRequestCard } from "./whatsapp-payment-request-card"
+import {
+  ZaloGroupMessageContext,
+  type ZaloGroupMessageState,
+  ZaloGroupMessageStatus,
+} from "./zalo-group-message-context"
+import { ZaloGroupText } from "./zalo-group-text"
 
 type MessageItemProps = {
+  zaloGroup?: boolean
+  zaloState?: ZaloGroupMessageState
   message: MessageResourceWithRelations
   guestDisplay?: boolean
   /**
@@ -141,6 +150,7 @@ export const MessageItem = (props: MessageItemProps) => {
   } = props
   const t = useTranslations("messages")
   const tRouting = useTranslations("conversationRouting")
+  const tZalo = useTranslations("zaloAccount")
   const [isEditing, setIsEditing] = useState(false)
 
   const variants: Record<"left" | "right" | "full", string> = {
@@ -164,6 +174,9 @@ export const MessageItem = (props: MessageItemProps) => {
 
   const isComment = message.type === "comment"
   const isDeleted = message.deletedAt != null
+  const zaloGroupMessage = props.zaloGroup
+    ? getZaloGroupMessage(message.contentAttributes)
+    : null
   const attributes = message.attributes as {
     liked?: boolean
     hidden?: boolean
@@ -250,6 +263,9 @@ export const MessageItem = (props: MessageItemProps) => {
         )}
       >
         {storyReply && <StoryReplyContext story={storyReply.story} />}
+        {props.zaloGroup && !isDeleted && (
+          <ZaloGroupMessageContext attributes={message.contentAttributes} />
+        )}
         {isPartnerEcho && (
           <span className="flex items-center gap-1 self-end text-muted-foreground text-xs">
             <BotIcon aria-hidden className="size-3" />
@@ -313,7 +329,15 @@ export const MessageItem = (props: MessageItemProps) => {
                         {t("messageDeleted")}
                       </span>
                     ) : (
-                      message.text
+                      <>
+                        {props.zaloGroup && zaloGroupMessage && (
+                          <ZaloGroupText
+                            mentions={zaloGroupMessage.mentions}
+                            text={message.text ?? ""}
+                          />
+                        )}
+                        {!(props.zaloGroup && zaloGroupMessage) && message.text}
+                      </>
                     )}
                   </pre>
                 </div>
@@ -330,6 +354,28 @@ export const MessageItem = (props: MessageItemProps) => {
           </>
         )}
         {RenderContentAttributes(props, paymentRequests)}
+        {props.zaloGroup && !isDeleted && (
+          <ZaloGroupMessageStatus state={props.zaloState} />
+        )}
+        {props.zaloGroup && !isDeleted && message.sourceId && onReply && (
+          <Button
+            className="self-start"
+            onClick={() => {
+              if (!message.sourceId) {
+                return
+              }
+              onReply({
+                commentId: message.sourceId,
+                text: message.text ?? "",
+              })
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            <ReplyIcon aria-hidden className="size-3" />
+            {tZalo("reply")}
+          </Button>
+        )}
       </div>
 
       <div className="flex">

@@ -4,9 +4,11 @@ import {
   zaloAccountLabelService,
   zaloAccountService,
 } from "@chatbotx.io/business/zalo-account"
+import { zaloAccountCanonicalSendService } from "@chatbotx.io/business/zalo-account/canonical-send"
 import { zaloAccountAttachmentSchema } from "@chatbotx.io/sdk"
 import { zodBigintAsString } from "@chatbotx.io/utils"
 import { z } from "zod"
+import { mcpSpec } from "@/lib/orpc/mcp-annotations"
 import {
   possibleErrorsOnFindingResource,
   possibleErrorsOnListingResource,
@@ -14,10 +16,12 @@ import {
 } from "@/lib/orpc/orpc-error-helper"
 import { workspaceTokenAuthAPIForScope } from "@/orpc"
 import { toZaloAccountResource } from "../lib/to-resource"
+import { zaloAccountErrors } from "../schema/errors"
 import {
   zaloAccountGroupResource,
   zaloAccountResource,
 } from "../schema/resource"
+import { zaloAccountOperations } from "./operations"
 
 const workspaceTokenAuthAPI = workspaceTokenAuthAPIForScope("channels")
 
@@ -40,9 +44,11 @@ const groupIdSchema = zodBigintAsString().describe(
 const writeErrors = {
   ...possibleErrorsOnFindingResource,
   ...possibleIdempotencyErrors,
+  ...zaloAccountErrors,
 }
 
 export const zaloAccountsPublicRouter = {
+  ...zaloAccountOperations,
   list: workspaceTokenAuthAPI
     .route({
       method: "GET",
@@ -101,13 +107,32 @@ export const zaloAccountsPublicRouter = {
         "Returns the synchronized groups and their explicit sending policy for one connected personal account.",
       tags: ["Zalo Accounts"],
     })
-    .input(groupScopeInput)
+    .input(
+      groupScopeInput.extend({
+        receiveEnabled: z
+          .boolean()
+          .optional()
+          .describe("Filter groups allowed to receive messages"),
+        sendEnabled: z
+          .boolean()
+          .optional()
+          .describe("Filter groups explicitly allowed to send messages"),
+        accessible: z
+          .boolean()
+          .optional()
+          .describe("Filter currently accessible provider groups"),
+        automationMode: z
+          .enum(["disabled", "mentionOnly", "all"])
+          .optional()
+          .describe("Filter the group's local automation allowlist mode"),
+      }),
+    )
     .output(z.object({ data: z.array(zaloAccountGroupResource) }))
     .errors(possibleErrorsOnFindingResource)
     .handler(async ({ context, input }) => ({
       data: await zaloAccountGroupService.list({
         workspaceId: context.workspace.id,
-        accountId: input.accountId,
+        ...input,
       }),
     })),
 
@@ -213,6 +238,7 @@ export const zaloAccountsPublicRouter = {
       method: "POST",
       path: "/v1/zalo-accounts/{accountId}/groups/{id}/messages",
       summary: "Send message to enabled personal Zalo group",
+      spec: mcpSpec({ hitlPolicy: "confirm_outbound", openWorldHint: true }),
       description:
         "Sends exactly one text or supported attachment after verifying that the group's sending policy is enabled.",
       tags: ["Zalo Accounts"],
@@ -222,6 +248,15 @@ export const zaloAccountsPublicRouter = {
         .extend({
           id: groupIdSchema,
           commandId: commandIdSchema,
+          replyToMessageId: zodBigintAsString()
+            .optional()
+            .describe("Same-group Message ID from the Inbox"),
+          replyToMessageCreatedAt: z.coerce
+            .date()
+            .optional()
+            .describe(
+              "Creation time of the reply target, required with its ID",
+            ),
           text: z
             .string()
             .trim()
@@ -251,16 +286,19 @@ export const zaloAccountsPublicRouter = {
     .errors(writeErrors)
     .handler(
       async ({ context, input }) =>
-        await zaloAccountGroupService.send({
+        await zaloAccountCanonicalSendService.send({
           workspaceId: context.workspace.id,
           accountId: input.accountId,
           groupId: input.id,
           commandId: input.commandId,
-          message: {
-            ...(input.text ? { text: input.text } : {}),
-            attachments: input.attachment ? [input.attachment] : [],
-            quote: undefined,
-          },
+          ...(input.text ? { text: input.text } : {}),
+          ...(input.attachment ? { attachment: input.attachment } : {}),
+          ...(input.replyToMessageId
+            ? {
+                replyToMessageId: input.replyToMessageId,
+                replyToMessageCreatedAt: input.replyToMessageCreatedAt,
+              }
+            : {}),
         }),
     ),
 }

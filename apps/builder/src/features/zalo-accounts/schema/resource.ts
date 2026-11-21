@@ -7,6 +7,7 @@ export const zaloAccountResource = z
     inboxId: z.string(),
     zaloUid: z.string(),
     name: z.string(),
+    groupMessagingEnabled: z.boolean(),
     avatarUrl: z.string().nullable(),
     sessionVerifiedAt: z.string().datetime(),
     createdAt: z.string().datetime(),
@@ -27,6 +28,10 @@ export const zaloAccountGroupResource = z
     memberCount: z.number().int(),
     providerVersion: z.string().nullable(),
     sendEnabled: z.boolean(),
+    receiveEnabled: z.boolean(),
+    automationMode: z.enum(["disabled", "mentionOnly", "all"]),
+    contactInboxId: z.string().nullable(),
+    conversationId: z.string().nullable(),
     accessible: z.boolean(),
     lastSyncRunId: z.string(),
     lastSyncedAt: z.date(),
@@ -37,3 +42,40 @@ export const zaloAccountGroupResource = z
   .omit({ workspaceId: true })
 
 export type ZaloAccountGroupResource = z.infer<typeof zaloAccountGroupResource>
+
+const syncStatus = z.object({
+  complete: z.boolean(),
+  count: z.number().int().nonnegative(),
+  completedAt: z.string().nullable(),
+})
+export const zaloAccountStatusResource = z.object({
+  accountId: z.string(),
+  groupMessagingEnabled: z.boolean(),
+  status: z.string(),
+  reason: z.string().nullable(),
+  gatewayAvailable: z.boolean(),
+  capabilities: z.object({
+    text: z.boolean(),
+    image: z.boolean(),
+    file: z.boolean(),
+    typing: z.boolean(),
+    reactions: z.boolean(),
+    revoke: z.boolean(),
+    delete: z.boolean(),
+  }),
+  groups: syncStatus.extend({ reason: z.string().nullable() }),
+  friends: syncStatus.extend({
+    nextCursor: z.number().int().nullable(),
+    reason: z.string().nullable(),
+  }),
+  labels: z.object({
+    complete: z.boolean(),
+    version: z.number().int(),
+    paused: z.boolean(),
+    completedAt: z.string().nullable(),
+    reason: z.string().nullable(),
+  }),
+})
+export type ZaloAccountStatusResource = z.infer<
+  typeof zaloAccountStatusResource
+>

@@ -142,6 +142,7 @@ export function ZaloAccountManage({
         <ZaloAccountGroups
           accountId={account.id}
           accountName={account.name}
+          groupMessagingEnabled={account.groupMessagingEnabled}
           groups={account.groups}
           key={account.id}
           workspaceId={workspaceId}

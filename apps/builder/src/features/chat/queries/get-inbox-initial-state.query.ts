@@ -17,6 +17,7 @@ import {
 } from "@/features/conversations/queries/list-conversations.query"
 import type { ListConversationItemResource } from "@/features/conversations/schema/resource"
 import { listMessages } from "@/features/messages/queries"
+import { getZaloGroupConversation } from "@/features/zalo-accounts/lib/group-content"
 import { logger } from "@/lib/log"
 
 // Balances slow-network tolerance against blocking the page render: past this,
@@ -105,7 +106,7 @@ const seedContactState = async (
   contactPermissionScope: ContactPermissionScope,
 ): Promise<ChatStoreInitialState> => {
   const contactId = conversation.contact?.id
-  if (!contactId) {
+  if (!contactId || getZaloGroupConversation(conversation)) {
     return {}
   }
 

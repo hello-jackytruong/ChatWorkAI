@@ -615,3 +615,48 @@ describe("pathAndMethodToCommandName — WhatsApp routing roles", () => {
     expect(new Set(names)).toHaveLength(names.length)
   })
 })
+describe("Zalo Account policy names", () => {
+  test("account and group policy commands stay distinct", () => {
+    expect(
+      pathAndMethodToCommandName(
+        "/connections/zalo-account/{accountId}/group-messaging",
+        "PATCH",
+      ),
+    ).toBe("zalo-account-set-group-messaging")
+    expect(
+      pathAndMethodToCommandName(
+        "/connections/zalo-account/{accountId}/groups/{groupId}/policy",
+        "PATCH",
+      ),
+    ).toBe("zalo-account-update-group-policy")
+  })
+  test("keeps the complete Zalo Account surface discoverable without command collisions", () => {
+    const routes = [
+      ["GET", "/v1/zalo-accounts"],
+      ["GET", "/v1/zalo-accounts/{id}"],
+      ["GET", "/v1/zalo-accounts/{accountId}/groups"],
+      ["GET", "/v1/zalo-accounts/{accountId}/groups/{id}"],
+      ["POST", "/v1/zalo-accounts/{accountId}/groups/sync"],
+      ["POST", "/v1/zalo-accounts/{accountId}/labels/sync"],
+      ["PATCH", "/v1/zalo-accounts/{accountId}/groups/{id}/policy"],
+      ["POST", "/v1/zalo-accounts/{accountId}/groups/{id}/messages"],
+      ["PATCH", "/connections/zalo-account/{accountId}/group-messaging"],
+      [
+        "PATCH",
+        "/connections/zalo-account/{accountId}/groups/{groupId}/policy",
+      ],
+      ["GET", "/v1/zalo-accounts/{accountId}/status"],
+      ["POST", "/v1/zalo-accounts/{accountId}/friends/sync"],
+      ["POST", "/v1/zalo-accounts/{accountId}/messages"],
+      ["POST", "/v1/zalo-accounts/{accountId}/typing"],
+      ["GET", "/v1/zalo-accounts/{accountId}/send-attempts/{commandId}"],
+      ["GET", "/v1/zalo-accounts/{accountId}/message-state"],
+      ["GET", "/v1/zalo-accounts/{accountId}/groups/{groupId}/tags"],
+      ["PATCH", "/v1/zalo-accounts/{accountId}/groups/{groupId}/tags"],
+    ] as const
+    const names = routes.map(([method, path]) =>
+      pathAndMethodToCommandName(path, method),
+    )
+    expect(new Set(names).size).toBe(names.length)
+  })
+})

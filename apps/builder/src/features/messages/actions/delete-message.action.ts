@@ -41,6 +41,17 @@ export const deleteMessage = async (props: {
   if (!message || message.conversationId !== conversationId) {
     throw new ChatbotXException("Comment not found")
   }
+  const contactInbox = message.contactInboxId
+    ? await contactInboxService.findByIdForWorkspace({
+        id: message.contactInboxId,
+        workspaceId,
+      })
+    : null
+  if (contactInbox?.channel === "zaloAccount") {
+    throw new ChatbotXException(
+      "Zalo Account message deletion is not supported",
+    )
+  }
 
   // Soft-delete immediately in the DB and notify other tabs in realtime.
   // If the message has a sourceId, also queue a background job to remove it
@@ -61,23 +72,17 @@ export const deleteMessage = async (props: {
 
   const jobs: Promise<unknown>[] = []
 
-  if (message.sourceId && message.contactInboxId) {
-    const contactInbox = await contactInboxService.findByIdForWorkspace({
-      id: message.contactInboxId,
-      workspaceId,
-    })
-    if (contactInbox) {
-      jobs.push(
-        chatQueue.add(ChatJobAction.deleteChannelMessage, {
-          type: ChatJobAction.deleteChannelMessage,
-          data: {
-            conversation,
-            contactInbox,
-            message: { id: message.id, createdAt: message.createdAt },
-          },
-        }),
-      )
-    }
+  if (message.sourceId && message.contactInboxId && contactInbox) {
+    jobs.push(
+      chatQueue.add(ChatJobAction.deleteChannelMessage, {
+        type: ChatJobAction.deleteChannelMessage,
+        data: {
+          conversation,
+          contactInbox,
+          message: { id: message.id, createdAt: message.createdAt },
+        },
+      }),
+    )
   }
 
   await Promise.allSettled(jobs)

@@ -190,6 +190,8 @@ function extractPathParamNames(pathTemplate: string): string[] {
  * unambiguous verb here. Keyed by `METHOD path`.
  */
 const COMMAND_NAME_OVERRIDES: Readonly<Record<string, string>> = {
+  "POST /v1/zalo-accounts/{accountId}/messages":
+    "zalo-accounts:message:send-direct",
   "DELETE /v1/contacts/{identifier}/custom-fields":
     "contacts:clear-all-custom-fields",
   "PUT /v1/contacts/{identifier}/custom-fields/{idOrName}":
@@ -275,6 +277,12 @@ const COMMAND_NAME_OVERRIDES: Readonly<Record<string, string>> = {
     "marketing-messages:delete-audience",
   "POST /v1/zalo-accounts/{accountId}/groups/sync": "zalo-accounts:groups:sync",
   "POST /v1/zalo-accounts/{accountId}/labels/sync": "zalo-accounts:labels:sync",
+  "PATCH /connections/zalo-account/{accountId}/group-messaging":
+    "zalo-account-set-group-messaging",
+  "PATCH /connections/zalo-account/{accountId}/groups/{groupId}/policy":
+    "zalo-account-update-group-policy",
+  "POST /v1/zalo-accounts/{accountId}/friends/sync":
+    "zalo-accounts:friends:sync",
 }
 
 export function pathAndMethodToCommandName(

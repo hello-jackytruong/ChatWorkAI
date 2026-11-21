@@ -36,6 +36,7 @@ import { InboxIcon } from "../inboxes/components/inbox-icon"
 import { useWhatsappVoipCallStore } from "../integration-whatsapp/calling/voip/voip-call-store"
 import { useOptionalWhatsappVoipCallContext } from "../integration-whatsapp/calling/voip/whatsapp-voip-call-context"
 import { useTenantSettings } from "../tenant/tenant-settings-provider"
+import { getZaloGroupConversation } from "../zalo-accounts/lib/group-content"
 import { SlaPill } from "./components/sla-pill"
 import { ThreadControlPill } from "./components/thread-control-pill"
 import { useMarkConversationRead } from "./hooks/use-mark-conversation-read"
@@ -360,6 +361,11 @@ export default function ConversationItem({
               )}
             >
               {contactName}
+              {getZaloGroupConversation(conversation) && (
+                <span className="ms-1 text-muted-foreground text-xs">
+                  {t("zaloAccount.groupBadge")}
+                </span>
+              )}
             </span>
             <Tooltip>
               <TooltipTrigger

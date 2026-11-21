@@ -105,6 +105,29 @@ describe("deleteMessage", () => {
       route: { assignedTeamIds: [], assignedUserIds: [] },
     })
   })
+  test("refuses unsupported Zalo provider deletion before changing local history", async () => {
+    mockFindById.mockResolvedValue({
+      id: "msg-1",
+      conversationId: "conv-1",
+      createdAt,
+      sourceId: "za:account:group:g:provider",
+      contactInboxId: "ci-1",
+    })
+    mockContactInboxFindByIdForWorkspace.mockResolvedValue({
+      id: "ci-1",
+      channel: "zaloAccount",
+      contactKind: "channelGroup",
+    })
+    await expect(
+      deleteMessage({
+        workspaceId: "ws-1",
+        conversationId: "conv-1",
+        parsedInput: { id: "msg-1", createdAt },
+      }),
+    ).rejects.toThrow("not supported")
+    expect(mockDeleteBySourceId).not.toHaveBeenCalled()
+    expect(mockQueueWorkspaceRealtimeEvent).not.toHaveBeenCalled()
+  })
 
   test("queues a channel deletion job when the message has a sourceId", async () => {
     mockFindById.mockResolvedValue({

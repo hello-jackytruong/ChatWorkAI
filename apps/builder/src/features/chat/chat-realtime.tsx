@@ -13,6 +13,7 @@ import { outboundCallModeQueryKeys } from "../integration-whatsapp/calling/voip/
 import { useWhatsappVoipCallStore } from "../integration-whatsapp/calling/voip/voip-call-store"
 import type { MessageResourceWithRelations } from "../messages/schema/resource"
 import { useResponseSlaEnabled } from "../response-sla/provider/response-sla-hook"
+import { zaloMessageStateKey } from "../zalo-accounts/queries/use-group-message-state"
 import { useChatStore } from "./store/chat-store-provider"
 
 /** Cap for the bubble-to-top dedupe set below. */
@@ -256,6 +257,11 @@ export function ChatRealtime() {
         event.data.messageId,
         event.data.contentAttributes,
       )
+      if (event.data.contentAttributes?.zaloAccountStateUpdatedAt) {
+        queryClient.invalidateQueries({
+          queryKey: zaloMessageStateKey(workspaceId),
+        })
+      }
     },
     contactBlocked: (event) => {
       updateContact(event.data.contactId, { blockedAt: new Date() })

@@ -57,6 +57,24 @@ const action = vi.hoisted(() => {
     resolveRequests,
   }
 })
+
+// Keep Zalo server actions outside these client-only regression fixtures.
+vi.mock("@/features/zalo-accounts/actions/group-inbox.action", () => ({
+  getZaloGroupInboxAction: vi.fn(),
+  getZaloGroupMessageStateAction: vi.fn(),
+  sendZaloGroupTypingAction: vi.fn(),
+  updateZaloGroupTagAction: vi.fn(),
+}))
+vi.mock("@/features/zalo-accounts/queries/use-group-inbox", () => ({
+  useZaloGroupInbox: () => ({ data: undefined }),
+}))
+vi.mock("@/features/zalo-accounts/queries/use-group-message-state", () => ({
+  useZaloGroupMessageState: () => ({ data: undefined }),
+  zaloMessageStateKey: (workspaceId: string) => [
+    "zalo-message-state",
+    workspaceId,
+  ],
+}))
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }))
@@ -464,7 +482,7 @@ describe("message composers", () => {
     expect(action.executeAsync).toHaveBeenCalledTimes(1)
     expect(
       container
-        .querySelector('[aria-label="Send message"]')
+        .querySelector('[aria-label="actions.send"]')
         ?.hasAttribute("disabled"),
     ).toBe(true)
     expect(container.textContent).toContain("messages.sendQueue.failed")

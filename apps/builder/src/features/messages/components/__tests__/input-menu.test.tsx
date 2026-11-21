@@ -4,7 +4,11 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { InputMenu } from "../input-menu"
 
-const chatState = vi.hoisted(() => ({ activePost: null as unknown }))
+const chatState = vi.hoisted(() => ({
+  activePost: null as unknown,
+  conversations: [],
+  activeConversationId: null,
+}))
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,

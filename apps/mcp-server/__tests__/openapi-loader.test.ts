@@ -16,6 +16,8 @@ import {
 describe("toSnakeCase", () => {
   test.each([
     ["tags.list", "tags_list"],
+    ["zaloAccountSetGroupMessaging", "zalo_account_set_group_messaging"],
+    ["zaloAccountUpdateGroupPolicy", "zalo_account_update_group_policy"],
     ["aiAgents.list", "ai_agents_list"],
     ["contacts.listTags", "contacts_list_tags"],
     ["botFields.bulkUpdate", "bot_fields_bulk_update"],

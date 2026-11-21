@@ -3,71 +3,11 @@ import type { Argv } from "yargs"
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import packageJson from "../package.json"
-import { collectCliParams, registerActionArgs } from "./command-args"
+import { registerToolCommands } from "./command-registration"
 import { setConfig } from "./commands/config"
 import type { ConfigOptions } from "./config"
 import { getConfig } from "./config"
-import { executeDynamicCommand } from "./dynamic-executor"
-import { type DynamicTool, loadOpenApiSpecForCli } from "./openapi-loader"
-
-const buildActionCommandString = (
-  action: string,
-  tool: DynamicTool,
-): string => {
-  const positionals = tool.pathParamNames.map((p) => `<${p}>`).join(" ")
-  return positionals ? `${action} ${positionals}` : action
-}
-
-const buildActionHandler =
-  (tool: DynamicTool, config: { apiKey: string; apiUrl: string }) =>
-  async (argv: Record<string, unknown>): Promise<void> => {
-    await executeDynamicCommand(tool, collectCliParams(tool, argv), config)
-  }
-
-type ActionEntry = { tool: DynamicTool; name: string }
-type GroupEntry = {
-  actions: Record<string, ActionEntry>
-  subgroups: Record<string, Record<string, ActionEntry>>
-}
-
-const registerActionsOnCli = (
-  groupCli: Argv,
-  actions: Record<string, ActionEntry>,
-  config: { apiKey: string; apiUrl: string },
-): void => {
-  for (const [actionName, { tool, name }] of Object.entries(actions)) {
-    const commandStr = buildActionCommandString(actionName, tool)
-    groupCli.command(
-      commandStr,
-      name,
-      (actionCli: Argv) => registerActionArgs(actionCli, tool),
-      async (argv) =>
-        buildActionHandler(tool, config)(argv as Record<string, unknown>),
-    )
-  }
-}
-
-const registerGroupCommand = (
-  cli: ReturnType<typeof yargs>,
-  groupName: string,
-  group: GroupEntry,
-  config: { apiKey: string; apiUrl: string },
-): void => {
-  cli.command(groupName, `${groupName} commands`, (groupCli: Argv) => {
-    registerActionsOnCli(groupCli, group.actions, config)
-    for (const [subgroupName, actions] of Object.entries(group.subgroups)) {
-      groupCli.command(
-        subgroupName,
-        `${subgroupName} commands`,
-        (subgroupCli: Argv) => {
-          registerActionsOnCli(subgroupCli, actions, config)
-          return subgroupCli.demandCommand(1, "You need at least one action")
-        },
-      )
-    }
-    return groupCli.demandCommand(1, "You need at least one action")
-  })
-}
+import { loadOpenApiSpecForCli } from "./openapi-loader"
 
 const registerConfigCommand = (cli: ReturnType<typeof yargs>): void => {
   cli.command(
@@ -98,47 +38,6 @@ const registerConfigCommand = (cli: ReturnType<typeof yargs>): void => {
         )
         .demandCommand(1, "You need at least one action"),
   )
-}
-
-const toolsToCommands = (tools: DynamicTool[]): Record<string, GroupEntry> => {
-  const grouped: Record<string, GroupEntry> = {}
-
-  for (const tool of tools) {
-    const parts = tool.commandName.split(":")
-    const group = parts[0]
-
-    if (!grouped[group]) {
-      grouped[group] = { actions: {}, subgroups: {} }
-    }
-
-    if (parts.length === 3) {
-      const [, subgroup, action] = parts
-      if (!grouped[group].subgroups[subgroup]) {
-        grouped[group].subgroups[subgroup] = {}
-      }
-      if (grouped[group].subgroups[subgroup][action]) {
-        process.stderr.write(
-          `Warning: duplicate command name "${tool.commandName}" — skipping\n`,
-        )
-        continue
-      }
-      grouped[group].subgroups[subgroup][action] = {
-        tool,
-        name: tool.description,
-      }
-    } else {
-      const action = parts.slice(1).join(":")
-      if (grouped[group].actions[action]) {
-        process.stderr.write(
-          `Warning: duplicate command name "${tool.commandName}" — skipping\n`,
-        )
-        continue
-      }
-      grouped[group].actions[action] = { tool, name: tool.description }
-    }
-  }
-
-  return grouped
 }
 
 const main = async (): Promise<void> => {
@@ -198,11 +97,7 @@ const main = async (): Promise<void> => {
   }
 
   const tools = await loadOpenApiSpecForCli(config.apiUrl, forceRefresh)
-  const grouped = toolsToCommands(tools)
-
-  for (const [groupName, actions] of Object.entries(grouped)) {
-    registerGroupCommand(cli, groupName, actions, config)
-  }
+  registerToolCommands(cli, tools, config)
 
   await cli
     .demandCommand(1, "You need at least one command")

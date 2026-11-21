@@ -8,6 +8,7 @@ export const toZaloAccountResource = (
   inboxId: account.inboxId,
   zaloUid: account.zaloUid,
   name: account.name,
+  groupMessagingEnabled: account.groupMessagingEnabled ?? false,
   avatarUrl: account.avatarUrl,
   sessionVerifiedAt: account.sessionVerifiedAt.toISOString(),
   createdAt: account.createdAt.toISOString(),

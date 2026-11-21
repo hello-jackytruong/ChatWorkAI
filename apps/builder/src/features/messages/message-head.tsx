@@ -12,6 +12,7 @@ import { useTranslations } from "next-intl"
 import { useAction } from "next-safe-action/hooks"
 import { toast } from "sonner"
 import { contactDisplayName } from "@/features/contacts/lib/contact-display-name"
+import { getZaloGroupConversation } from "@/features/zalo-accounts/lib/group-content"
 import { useWorkspaceId } from "@/hooks/routing"
 import { useChatStore } from "../chat/store/chat-store-provider"
 import { enableBotAction } from "../conversations/actions/enable-bot.action"
@@ -50,6 +51,7 @@ export default function MessageHead({
   const activeConversation = conversations.find(
     (c) => c.id === activeConversationId,
   )
+  const groupAudience = getZaloGroupConversation(activeConversation)
 
   const voipCallContext = useOptionalWhatsappVoipCallContext()
 
@@ -108,6 +110,11 @@ export default function MessageHead({
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="truncate font-medium text-semibold">
             {contactDisplayName(activeConversation?.contact)}
+            {groupAudience && (
+              <span className="ms-2 text-muted-foreground text-xs">
+                {t("zaloAccount.groupBadge")} · {groupAudience.memberCount ?? 0}
+              </span>
+            )}
           </div>
           <UpdateConversationAssignee
             conversation={activeConversation}
@@ -123,7 +130,7 @@ export default function MessageHead({
           />
         )}
         <ThreadControlReleaseButton conversation={activeConversation} />
-        {!isConversationActive(activeConversation) && (
+        {!(groupAudience || isConversationActive(activeConversation)) && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -145,7 +152,11 @@ export default function MessageHead({
         )}
         {onOpenContact && (
           <Button
-            aria-label={t("fields.contact.label")}
+            aria-label={
+              groupAudience
+                ? t("zaloAccount.groupBadge")
+                : t("fields.contact.label")
+            }
             className="shrink-0"
             onClick={onOpenContact}
             size="icon"

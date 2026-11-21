@@ -17,6 +17,11 @@ import { useWorkspaceId } from "@/hooks/routing"
 import { INBOX_MESSAGES_PER_PAGE } from "../chat/store/chat-store"
 import { useChatStore } from "../chat/store/chat-store-provider"
 import { ConversationInfo } from "../conversations/components/conversation-info"
+import {
+  getZaloGroupConversation,
+  zaloGroupProviderMessageId,
+} from "../zalo-accounts/lib/group-content"
+import { useZaloGroupMessageState } from "../zalo-accounts/queries/use-group-message-state"
 import { changeMessageAttributesAction } from "./actions/change-message-attributes.action"
 import { deleteMessageAction } from "./actions/delete-message.action"
 import { editMessageAction } from "./actions/edit-message.action"
@@ -50,9 +55,23 @@ export function MessageList() {
 
   // Which channel this conversation belongs to, for the private-reply gate
   // below. The same `contactInboxes[0].channel` the store reads elsewhere.
-  const activeChannel = conversations.find(
+  const currentConversation = conversations.find(
     (conversation) => conversation.id === activeConversationId,
-  )?.contactInboxes?.[0]?.channel
+  )
+  const activeChannel = currentConversation?.contactInboxes?.[0]?.channel
+  const groupAudience = getZaloGroupConversation(currentConversation)
+  const [visibleProviderIds, setVisibleProviderIds] = useState<string[] | null>(
+    null,
+  )
+  const groupState = useZaloGroupMessageState(
+    workspaceId,
+    groupAudience,
+    visibleProviderIds ??
+      messages.slice(-50).flatMap((message) => {
+        const id = zaloGroupProviderMessageId(message, groupAudience)
+        return id ? [id] : []
+      }),
+  )
 
   const { execute: deleteMessage } = useAction(
     deleteMessageAction.bind(null, workspaceId, activeConversationId ?? ""),
@@ -219,6 +238,7 @@ export function MessageList() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: wip
   useEffect(() => {
     setFirstItemIndex(START_INDEX)
+    setVisibleProviderIds(null)
     handleAtBottomStateChange(true)
     prevLengthRef.current = 0
     pendingPrependSeqRef.current = null
@@ -324,21 +344,59 @@ export function MessageList() {
               message={message}
               onChangeHide={() => handleChangeHideState(message)}
               onChangeLike={() => handleChangeLikeState(message)}
-              onDelete={() => {
-                handleDeleteComment({
-                  id: message.id,
-                  createdAt: message.createdAt,
-                })
-              }}
-              onEdit={handleEditMessage}
+              onDelete={
+                groupAudience
+                  ? undefined
+                  : () => {
+                      handleDeleteComment({
+                        id: message.id,
+                        createdAt: message.createdAt,
+                      })
+                    }
+              }
+              onEdit={groupAudience ? undefined : handleEditMessage}
               onPrivateReply={handlePrivateReplyComment}
               onReply={handleReplyComment}
               renderResend={(failed) => (
                 <ResendMessageButton message={failed} />
               )}
+              zaloGroup={!!groupAudience}
+              zaloState={
+                groupAudience
+                  ? {
+                      receipt: groupState.data?.receipts.find(
+                        (receipt) =>
+                          receipt.providerMessageId ===
+                          zaloGroupProviderMessageId(message, groupAudience),
+                      ),
+                      reactions:
+                        groupState.data?.reactions.filter(
+                          (reaction) =>
+                            reaction.providerMessageId ===
+                            zaloGroupProviderMessageId(message, groupAudience),
+                        ) ?? [],
+                    }
+                  : undefined
+              }
             />
           </div>
         )}
+        itemsRendered={(items) => {
+          const ids = items
+            .flatMap((item) => {
+              const id = item.data
+                ? zaloGroupProviderMessageId(item.data, groupAudience)
+                : null
+              return id ? [id] : []
+            })
+            .slice(0, 50)
+          setVisibleProviderIds((current) =>
+            current?.length === ids.length &&
+            ids.every((id, index) => current[index] === id)
+              ? current
+              : ids,
+          )
+        }}
         ref={virtuosoRef}
         startReached={loadMoreItems}
       />
