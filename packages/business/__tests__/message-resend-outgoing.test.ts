@@ -9,6 +9,17 @@ const mocks = vi.hoisted(() => ({
   findContactInbox: vi.fn(),
   chatQueueAdd: vi.fn(),
   resolveTenantSettings: vi.fn(),
+  groupAudience: vi.fn(),
+  assertCanResend: vi.fn(),
+}))
+vi.mock("../src/zalo-account/group.service", () => ({
+  zaloAccountGroupService: { createAudience: mocks.groupAudience },
+}))
+vi.mock("../src/zalo-account/send-attempt.service", () => ({
+  zaloAccountSendAttemptService: { assertCanResend: mocks.assertCanResend },
+}))
+vi.mock("../src/zalo-account/service", () => ({
+  zaloAccountService: { findByInboxId: async () => ({ id: "account-1" }) },
 }))
 
 vi.mock("@chatbotx.io/database/repositories", () => ({
@@ -77,7 +88,34 @@ const resend = () =>
     sendFrom: "inbox",
   })
 
+test("an unknown direct Zalo attempt cannot be manually resent", async () => {
+  mocks.findById.mockResolvedValue(failedMessage())
+  mocks.findConversation.mockResolvedValue(conversation)
+  mocks.findContactInbox.mockResolvedValue({
+    ...contactInbox,
+    channel: "zaloAccount",
+    inboxId: "inbox-1",
+    contactKind: "person",
+  })
+  mocks.assertCanResend.mockRejectedValueOnce(new Error("unknown outcome"))
+  await expect(resend()).rejects.toThrow("unknown outcome")
+  expect(mocks.claimForResend).not.toHaveBeenCalled()
+})
+
 describe("messageService.resendOutgoing", () => {
+  test("refuses to replay an uncertain group send before claiming the Message", async () => {
+    mocks.findContactInbox.mockResolvedValue({
+      ...contactInbox,
+      contactKind: "channelGroup",
+    })
+    mocks.groupAudience.mockResolvedValue({ accountId: "a1" })
+    mocks.assertCanResend.mockRejectedValueOnce(
+      new Error("Send outcome is unknown"),
+    )
+    await expect(resend()).rejects.toThrow("unknown")
+    expect(mocks.claimForResend).not.toHaveBeenCalled()
+    expect(mocks.chatQueueAdd).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.findById.mockResolvedValue(failedMessage())

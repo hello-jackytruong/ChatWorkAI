@@ -104,10 +104,15 @@ describe("contactService.matchesContactFilter", () => {
 
     expect(findFirst).toHaveBeenCalledWith({
       columns: { id: true },
-      where: expect.objectContaining({
-        id: "contact-1",
-        workspaceId: "ws-1",
-      }),
+      where: {
+        AND: [
+          expect.objectContaining({
+            id: "contact-1",
+            workspaceId: "ws-1",
+          }),
+          { kind: "person" },
+        ],
+      },
     })
   })
 

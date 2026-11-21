@@ -4,6 +4,7 @@ import {
   contactActivityService,
 } from "@chatbotx.io/business"
 import { enqueueLeaderboardAward } from "@chatbotx.io/business/leaderboard"
+import { zaloAccountGroupService } from "@chatbotx.io/business/zalo-account"
 import { db } from "@chatbotx.io/database/client"
 import type { FileType } from "@chatbotx.io/database/partials"
 import type {
@@ -19,6 +20,7 @@ import {
   ChatJobAction,
   chatQueue,
   IntegrationJobAction,
+  type IntegrationJobRunFlowNode,
   integrationQueue,
 } from "@chatbotx.io/worker-config"
 import { ruleMatchesMessage } from "./keyword-match"
@@ -72,7 +74,10 @@ const recordKeywordReceived = async (props: {
   rule: Pick<AutomatedResponseModel, "id" | "type">
   text: string
 }): Promise<void> => {
-  if (props.rule.type !== "inbound") {
+  if (
+    props.rule.type !== "inbound" ||
+    props.contactInbox.contactKind === "channelGroup"
+  ) {
     return
   }
   await contactActivityService.recordKeywordMatch({
@@ -86,6 +91,9 @@ const recordKeywordReceived = async (props: {
 }
 
 export const dispatchAutomatedResponseReply = async (props: {
+  groupAudience?: NonNullable<
+    IntegrationJobRunFlowNode["data"]["groupAudience"]
+  >
   conversation: ConversationModel
   contactInbox: ContactInboxModel
   messageId: string
@@ -102,6 +110,15 @@ export const dispatchAutomatedResponseReply = async (props: {
 }): Promise<boolean> => {
   const { conversation, contactInbox, messageId, text, rules, triggerType } =
     props
+  if (
+    contactInbox.contactKind === "channelGroup" &&
+    (!props.groupAudience ||
+      props.groupAudience.contactInboxId !== contactInbox.id ||
+      props.groupAudience.conversationId !== conversation.id ||
+      props.groupAudience.workspaceId !== conversation.workspaceId)
+  ) {
+    return false
+  }
   let keywordAwarded = false
 
   for (const rule of rules) {
@@ -117,7 +134,11 @@ export const dispatchAutomatedResponseReply = async (props: {
       continue
     }
 
-    if (rule.type === "inbound" && !keywordAwarded) {
+    if (
+      contactInbox.contactKind !== "channelGroup" &&
+      rule.type === "inbound" &&
+      !keywordAwarded
+    ) {
       keywordAwarded = true
       await awardKeywordLeaderboard({ conversation, contactInbox, messageId })
     }
@@ -127,6 +148,7 @@ export const dispatchAutomatedResponseReply = async (props: {
     // and only on WhatsApp, where CTWA attribution exists.
     if (
       rule.type === "inbound" &&
+      contactInbox.contactKind !== "channelGroup" &&
       adsConversionService.isEligibleChannel(contactInbox.channel)
     ) {
       await adsConversionService.enqueueKeywordMatchedEvaluation({
@@ -140,9 +162,19 @@ export const dispatchAutomatedResponseReply = async (props: {
     }
 
     if (rule.flowId) {
+      if (
+        props.groupAudience &&
+        !(await zaloAccountGroupService.canRunFlow({
+          workspaceId: conversation.workspaceId,
+          flowId: rule.flowId,
+        }))
+      ) {
+        continue
+      }
       const flow = await db.query.flowModel.findFirst({
         where: {
           id: rule.flowId,
+          workspaceId: conversation.workspaceId,
           currentVersionId: { isNotNull: true },
         },
       })
@@ -154,25 +186,38 @@ export const dispatchAutomatedResponseReply = async (props: {
           rule,
           text,
         })
-        await integrationQueue.add(IntegrationJobAction.sendFlow, {
-          type: IntegrationJobAction.sendFlow,
-          data: {
-            conversationId: conversation.id,
-            contactInboxId: contactInbox.id,
-            flowId: flow.id,
-            startedByContactMessage: props.startedByContactMessage,
-            trackingContext: {
-              aiProvider: "none",
-              messageId,
+        await integrationQueue.add(
+          IntegrationJobAction.sendFlow,
+          {
+            type: IntegrationJobAction.sendFlow,
+            data: {
               conversationId: conversation.id,
-              responseType: trackingResponseTypes.enum.automated_response,
-              startTime: Date.now(),
-              triggerType,
-              workspaceId: conversation.workspaceId,
+              contactInboxId: contactInbox.id,
+              flowId: flow.id,
+              ...(props.groupAudience
+                ? {
+                    groupAudience: props.groupAudience,
+                    triggerMessageId: messageId,
+                    flowExecutionKey: `zalo-group-flow-${messageId}`,
+                  }
+                : {}),
+              startedByContactMessage: props.startedByContactMessage,
+              trackingContext: {
+                aiProvider: "none",
+                messageId,
+                conversationId: conversation.id,
+                responseType: trackingResponseTypes.enum.automated_response,
+                startTime: Date.now(),
+                triggerType,
+                workspaceId: conversation.workspaceId,
+              },
+              origin: webhookChannelOrigin(),
             },
-            origin: webhookChannelOrigin(),
           },
-        })
+          ...(props.groupAudience
+            ? [{ jobId: `zalo-group-keyword-${messageId}` }]
+            : []),
+        )
         return true
       }
     } else if (rule.text) {
@@ -194,22 +239,31 @@ export const dispatchAutomatedResponseReply = async (props: {
         text: applySpintax(rule.text),
         variables,
       })
-      await chatQueue.add(ChatJobAction.sendChatMessage, {
-        type: ChatJobAction.sendChatMessage,
-        data: {
-          conversation,
-          text: stepMessage,
-          trackingContext: {
-            aiProvider: "none",
-            conversationId: conversation.id,
-            messageId,
-            responseType: trackingResponseTypes.enum.automated_response,
-            startTime: Date.now(),
-            triggerType,
-            workspaceId: conversation.workspaceId,
+      await chatQueue.add(
+        ChatJobAction.sendChatMessage,
+        {
+          type: ChatJobAction.sendChatMessage,
+          data: {
+            conversation,
+            ...(props.groupAudience
+              ? { contactInbox, groupAudience: props.groupAudience }
+              : {}),
+            text: stepMessage,
+            trackingContext: {
+              aiProvider: "none",
+              conversationId: conversation.id,
+              messageId,
+              responseType: trackingResponseTypes.enum.automated_response,
+              startTime: Date.now(),
+              triggerType,
+              workspaceId: conversation.workspaceId,
+            },
           },
         },
-      })
+        ...(props.groupAudience
+          ? [{ jobId: `zalo-group-keyword-${messageId}` }]
+          : []),
+      )
       return true
     }
   }

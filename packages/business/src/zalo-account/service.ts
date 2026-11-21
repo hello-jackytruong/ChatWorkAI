@@ -1,12 +1,18 @@
-import { integrationZaloAccountRepository } from "@chatbotx.io/database/repositories"
+import {
+  connectionRepository,
+  integrationZaloAccountRepository,
+} from "@chatbotx.io/database/repositories"
 import type { IntegrationZaloAccountPublicModel } from "@chatbotx.io/database/types"
+import { cacheConnections } from "@chatbotx.io/redis"
 import type { ZaloAccountAuth } from "@chatbotx.io/sdk"
+import { zaloAccountTransportKeys } from "@chatbotx.io/sdk"
 import {
   connectionIdentityMismatchException,
   notFoundException,
 } from "../errors"
 import { decryptZaloAccountAuth, encryptZaloAccountAuth } from "./auth"
 
+const GATEWAY_LEASE_PATTERN = /:\d+$/
 const toPublic = (
   row: Awaited<
     ReturnType<
@@ -22,6 +28,75 @@ const toPublic = (
 }
 
 export const zaloAccountService = {
+  async status(input: { workspaceId: string; accountId: string }) {
+    const account = await this.findById({
+      workspaceId: input.workspaceId,
+      id: input.accountId,
+    })
+    if (!account) {
+      throw notFoundException("Zalo Account not found")
+    }
+    const connection = await connectionRepository.findByInboxId({
+      inboxId: account.inboxId,
+    })
+    if (
+      connection &&
+      (connection.workspaceId !== input.workspaceId ||
+        connection.provider !== "zaloAccount")
+    ) {
+      throw notFoundException("Zalo Account connection not found")
+    }
+    const { groups, labels, friends } = account.operations ?? {}
+    let gatewayAvailable = false
+    try {
+      const client = await cacheConnections.useExisting()
+      const lease = await client.get(
+        zaloAccountTransportKeys.lease({
+          workspaceId: input.workspaceId,
+          runtime: { kind: "account", id: account.id },
+        }),
+      )
+      gatewayAvailable = !!lease && GATEWAY_LEASE_PATTERN.test(lease)
+    } catch {
+      gatewayAvailable = false
+    }
+    return {
+      accountId: account.id,
+      groupMessagingEnabled: account.groupMessagingEnabled,
+      gatewayAvailable,
+      status: connection?.status ?? "disconnected",
+      reason: connection?.statusReason ?? null,
+      capabilities: {
+        text: true,
+        image: true,
+        file: true,
+        typing: true,
+        reactions: false,
+        revoke: false,
+        delete: false,
+      },
+      groups: {
+        complete: groups?.complete ?? false,
+        count: groups?.count ?? 0,
+        completedAt: groups?.completedAt ?? null,
+        reason: groups?.reason ?? null,
+      },
+      friends: {
+        complete: friends?.complete ?? false,
+        count: friends?.count ?? 0,
+        completedAt: friends?.completedAt ?? null,
+        reason: friends?.reason ?? null,
+        nextCursor: friends && !friends.complete ? friends.cursor : null,
+      },
+      labels: {
+        complete: labels?.complete ?? false,
+        version: labels?.version ?? 0,
+        paused: labels?.paused ?? false,
+        completedAt: labels?.lastSyncedAt ?? null,
+        reason: labels?.reason ?? null,
+      },
+    }
+  },
   async listByWorkspace(input: {
     workspaceId: string
   }): Promise<IntegrationZaloAccountPublicModel[]> {

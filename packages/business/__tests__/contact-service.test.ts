@@ -121,9 +121,14 @@ describe("contactService assigned-contact access scope", () => {
 
     expect(findFirst).toHaveBeenCalledWith({
       where: {
-        id: "contact-1",
-        workspaceId: "ws-1",
-        conversation: { OR: [{ assignedUserId: "user-1" }] },
+        AND: [
+          {
+            id: "contact-1",
+            workspaceId: "ws-1",
+            conversation: { OR: [{ assignedUserId: "user-1" }] },
+          },
+          { kind: "person" },
+        ],
       },
     })
   })
@@ -147,9 +152,14 @@ describe("contactService assigned-contact access scope", () => {
 
     expect(findMany).toHaveBeenCalledWith({
       where: {
-        workspaceId: "ws-1",
-        id: { in: ["contact-1", "contact-2"] },
-        conversation: { OR: [{ assignedUserId: "user-1" }] },
+        AND: [
+          {
+            workspaceId: "ws-1",
+            id: { in: ["contact-1", "contact-2"] },
+            conversation: { OR: [{ assignedUserId: "user-1" }] },
+          },
+          { kind: "person" },
+        ],
       },
       columns: { id: true },
     })

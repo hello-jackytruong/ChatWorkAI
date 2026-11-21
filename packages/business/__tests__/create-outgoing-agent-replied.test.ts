@@ -12,11 +12,20 @@ const mockWorkspaceFind = vi.fn()
 const mockEmit = vi.fn()
 const mockLoggerError = vi.fn()
 const mockQueueMessageCreatedEvent = vi.fn()
+const mockGroupAudience = vi.fn()
+const mockFindMessage = vi.fn()
+vi.mock("../src/zalo-account/group.service", () => ({
+  zaloAccountGroupService: { createAudience: mockGroupAudience },
+}))
+vi.mock("../src/zalo-account/service", () => ({
+  zaloAccountService: { findById: async () => ({ zaloUid: "account-uid" }) },
+}))
 
 vi.mock("@chatbotx.io/database/repositories", () => ({
   createMessageRepository: async () => ({
     create: mockRepositoryCreate,
     createWithAttachments: vi.fn(),
+    findById: mockFindMessage,
   }),
   flowRepository: { existsInWorkspace: mockFlowExists },
   mediaLibraryFileRepository: { findByPath: vi.fn(), findById: vi.fn() },
@@ -56,6 +65,7 @@ vi.mock("../src/contact-inbox/service", () => ({
 
 vi.mock("../src/conversation/service", () => ({
   conversationService: {
+    updateFlowStepState: vi.fn().mockResolvedValue(undefined),
     markAgentReplied: mockMarkAgentReplied,
     findOrCreate: vi.fn(),
   },
@@ -131,6 +141,167 @@ describe("createOutgoing agent:replied", () => {
     mockMarkAgentReplied.mockResolvedValue(claim)
     mockFindForAgent.mockResolvedValue(null)
     mockWorkspaceFind.mockResolvedValue({ id: "ws-1", timezone: "UTC" })
+    mockGroupAudience.mockResolvedValue({
+      kind: "zaloAccountGroup",
+      groupId: "g1",
+      providerGroupId: "g1",
+      accountId: "a1",
+      workspaceId: "ws-1",
+      contactInboxId: "ci-1",
+      conversationId: "conv-1",
+      origin: "inbox",
+      accountPolicyEpoch: 1,
+      groupPolicyEpoch: 2,
+    })
+  })
+  test("group sends enqueue only the channel job and do not touch customer tracking", async () => {
+    await createOutgoing({
+      conversation: conversation as never,
+      contactInbox: {
+        ...contactInbox,
+        contactKind: "channelGroup",
+        channel: "zaloAccount",
+        sourceId: "za:group:g1",
+      } as never,
+      input: { text: "hello group" },
+      user: user as never,
+    })
+    expect(mockChatQueueAdd).toHaveBeenCalledTimes(1)
+    expect(mockUpdateTracking).not.toHaveBeenCalled()
+    expect(mockMarkAgentReplied).not.toHaveBeenCalled()
+    expect(mockEmit).not.toHaveBeenCalled()
+    expect(mockChatQueueAdd).toHaveBeenCalledWith(
+      "sendChannelMessage",
+      expect.objectContaining({
+        data: expect.objectContaining({
+          groupAudience: expect.objectContaining({ groupPolicyEpoch: 2 }),
+        }),
+      }),
+    )
+  })
+  test("rejects a disabled group before creating a message", async () => {
+    mockGroupAudience.mockResolvedValue(null)
+    await expect(
+      createOutgoing({
+        conversation: conversation as never,
+        contactInbox: { ...contactInbox, contactKind: "channelGroup" } as never,
+        input: { text: "blocked" },
+        sendFrom: "inbox",
+      }),
+    ).rejects.toThrow("group sending is disabled")
+    expect(mockRepositoryCreate).not.toHaveBeenCalled()
+  })
+  test("reuses the prepared canonical message identity and stable queue job on recovery", async () => {
+    const createdAt = new Date("2026-10-19T02:00:00Z")
+    mockFindMessage.mockResolvedValue({
+      id: "prepared",
+      createdAt,
+      workspaceId: "ws-1",
+      conversationId: "conv-1",
+      contactInboxId: "ci-1",
+      attachments: [],
+      text: "hello",
+      contentAttributes: {},
+    })
+    await createOutgoing({
+      conversation: conversation as never,
+      contactInbox: { ...contactInbox, channel: "zaloAccount" } as never,
+      input: { text: "hello", clientId: "caller" },
+      sendFrom: "api",
+      deliveryIdentity: { id: "prepared", createdAt },
+    })
+    expect(mockRepositoryCreate).not.toHaveBeenCalled()
+    expect(mockQueueMessageCreatedEvent).not.toHaveBeenCalled()
+    expect(mockChatQueueAdd).toHaveBeenCalledWith(
+      "sendChannelMessage",
+      expect.objectContaining({
+        data: expect.objectContaining({
+          message: expect.objectContaining({ id: "prepared" }),
+        }),
+      }),
+      { jobId: "zalo-api-message-prepared" },
+    )
+  })
+  test("group replies validate the parent in the same conversation and remain messages", async () => {
+    mockFindMessage.mockResolvedValue({
+      contactInboxId: "ci-1",
+      contentAttributes: {
+        zaloAccount: {
+          group: {
+            threadType: "group",
+            threadId: "g1",
+            providerMessageId: "provider-1",
+            senderId: "member-1",
+            text: "original",
+            timestampMs: 100,
+            msgType: "webchat",
+            isSelf: false,
+            attachments: [],
+            mentions: [],
+          },
+        },
+      },
+    })
+    await createOutgoing({
+      conversation: conversation as never,
+      contactInbox: { ...contactInbox, contactKind: "channelGroup" } as never,
+      input: {
+        text: "reply",
+        replyToMessageId: "parent-1",
+        replyToMessageCreatedAt: new Date(),
+      },
+      sendFrom: "inbox",
+    })
+    expect(mockFindMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "conv-1",
+        workspaceId: "ws-1",
+        primaryAndFailOnError: true,
+      }),
+    )
+    expect(mockRepositoryCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "message",
+        contentAttributes: expect.objectContaining({
+          zaloAccountQuote: expect.objectContaining({
+            providerMessageId: "provider-1",
+          }),
+        }),
+      }),
+    )
+  })
+  test("can quote its confirmed outgoing text in a send-only group without waiting for an inbound self echo", async () => {
+    mockFindMessage.mockResolvedValue({
+      contactInboxId: "ci-1",
+      sourceId: "za:a1:group:g1:provider-owned",
+      messageType: "outgoing",
+      contentType: "text",
+      text: "own text",
+      createdAt: new Date(),
+      attachments: [],
+      contentAttributes: {},
+    })
+    await createOutgoing({
+      conversation: conversation as never,
+      contactInbox: { ...contactInbox, contactKind: "channelGroup" } as never,
+      input: {
+        text: "reply",
+        replyToMessageId: "parent-1",
+        replyToMessageCreatedAt: new Date(),
+      },
+      sendFrom: "inbox",
+    })
+    expect(mockRepositoryCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contentAttributes: expect.objectContaining({
+          zaloAccountQuote: expect.objectContaining({
+            providerMessageId: "provider-owned",
+            senderId: "account-uid",
+            text: "own text",
+          }),
+        }),
+      }),
+    )
   })
 
   test("emits once with seconds computed from the customer message", async () => {

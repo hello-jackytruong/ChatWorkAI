@@ -107,7 +107,7 @@ vi.mock("@chatbotx.io/database/schema", () => ({
     kind: "connection.kind",
     status: "connection.status",
   },
-  contactModel: { workspaceId: "contact.workspaceId" },
+  contactModel: { workspaceId: "contact.workspaceId", kind: "contact.kind" },
   tenantModel: { ownerId: "tenant.ownerId" },
   userQuotaModel,
   workspaceMacModel: {},
@@ -224,14 +224,19 @@ describe("reconcileOwnerPoolUsage", () => {
       .map((r) => r.value)
       .flatMap((b) => b.where.mock.calls.map((c: unknown[]) => c[0]))
     expect(wheres[0]).toEqual({
-      or: [
-        { eq: ["workspace.tenantId", "tenant-1"] },
+      and: [
         {
-          and: [
-            { eq: ["workspace.tenantId", "1"] },
-            { eq: ["workspace.ownerId", "owner-1"] },
+          or: [
+            { eq: ["workspace.tenantId", "tenant-1"] },
+            {
+              and: [
+                { eq: ["workspace.tenantId", "1"] },
+                { eq: ["workspace.ownerId", "owner-1"] },
+              ],
+            },
           ],
         },
+        { eq: ["contact.kind", "person"] },
       ],
     })
   })

@@ -180,3 +180,6 @@ describe("dispatchAutomatedResponseReply flow rule start flag", () => {
     expect(job.data.startedByContactMessage).toBe(expected)
   })
 })
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountGroupService: { canRunFlow: vi.fn().mockResolvedValue(false) },
+}))

@@ -49,8 +49,9 @@ const activeQuickReplyFollowUps = (workspaceId: string) =>
 
 export type SmartDelayRow = Omit<
   typeof contactOnSmartDelayModel.$inferSelect,
-  "status" | "type"
+  "status" | "type" | "groupAudience"
 > & {
+  groupAudience?: typeof contactOnSmartDelayModel.$inferSelect.groupAudience
   status: SmartDelayStatus
   type: SmartDelayType
 }

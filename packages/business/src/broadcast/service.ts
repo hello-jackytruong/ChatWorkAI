@@ -3012,6 +3012,7 @@ class BroadcastService extends BaseService {
     input: BroadcastAudienceInput,
   ): SQL | undefined {
     return and(
+      eq(contactInboxModel.contactKind, "person"),
       inArray(contactInboxModel.inboxId, inboxIds),
       this.buildDmRequirement(input),
       requiresRecentInteractionWindow(input.subaction)
@@ -3059,6 +3060,7 @@ class BroadcastService extends BaseService {
     const contactFilter = this.pruneAudienceContactFilter(input)
 
     return and(
+      eq(contactInboxModel.contactKind, "person"),
       inArray(contactInboxModel.inboxId, inboxIds),
       contactFilter
         ? buildContactInboxContactFilterSQL({

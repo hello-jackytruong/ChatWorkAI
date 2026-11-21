@@ -25,7 +25,12 @@ import {
   RealtimeEventType,
   routeForConversation,
 } from "@chatbotx.io/realtime-protocol"
-import type { MessageButtonTemplate } from "@chatbotx.io/sdk"
+import {
+  type MessageButtonTemplate,
+  type ZaloAccountGroupAudience,
+  zaloAccountGroupMessageSchema,
+  zaloAccountQuoteSchema,
+} from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import { channelTypes } from "@chatbotx.io/utils/channel"
 import {
@@ -58,6 +63,8 @@ import { resolveTenantSettings } from "../platform/settings"
 import { productMessageService } from "../product-message/service"
 import { getPublicFileUrl } from "../utils"
 import { recordAgentReply } from "../working-hours/agent-reply-metric"
+import { zaloAccountGroupService } from "../zalo-account/group.service"
+import { zaloAccountService } from "../zalo-account/service"
 
 type CreateOutgoingInput = (
   | { flowId: string; nodeId?: string }
@@ -256,10 +263,11 @@ const recordEnqueueFailure = async (input: {
   conversation: ConversationModel
   clientId: string | undefined
   sendFrom: SendFrom
+  retainMessage?: boolean
 }): Promise<void> => {
   const { repository, message, conversation, clientId } = input
   try {
-    if (input.sendFrom !== "inbox") {
+    if (input.sendFrom !== "inbox" && !input.retainMessage) {
       await repository.hardDeleteById(
         message.id,
         message.workspaceId,
@@ -337,6 +345,11 @@ export const createOutgoing = async (props: {
    * the Error Log.
    */
   sendFrom: SendFrom
+  /** Internal durable Zalo API preparation; never accepted from generic API input. */
+  deliveryIdentity?: { id: string; createdAt: Date; commandId?: string }
+  preparedAttachment?: UploadedFile
+  prepareAttachment?: () => Promise<UploadedFile>
+  groupAudience?: ZaloAccountGroupAudience
 }) => {
   const {
     conversation,
@@ -348,8 +361,96 @@ export const createOutgoing = async (props: {
   const sender = user
     ? ({ kind: "agent", userId: user.id } as const)
     : ({ kind: "other" } as const)
+  const isGroup = contactInbox.contactKind === "channelGroup"
+  const groupAudience = isGroup
+    ? await zaloAccountGroupService.createAudience({
+        workspaceId: conversation.workspaceId,
+        contactInboxId: contactInbox.id,
+        conversationId: conversation.id,
+        origin: sendFrom === "inbox" ? "inbox" : "api",
+      })
+    : undefined
+  if (isGroup && !groupAudience) {
+    throw new ChatbotXException("Zalo Account group sending is disabled")
+  }
+  if (
+    props.groupAudience &&
+    (!groupAudience ||
+      props.groupAudience.accountPolicyEpoch !==
+        groupAudience.accountPolicyEpoch ||
+      props.groupAudience.groupPolicyEpoch !== groupAudience.groupPolicyEpoch ||
+      props.groupAudience.groupId !== groupAudience.groupId)
+  ) {
+    throw new ChatbotXException("Zalo Account group policy changed")
+  }
+  if (isGroup && (parsedInput.isPrivateReply || "products" in parsedInput)) {
+    throw validationException(
+      "message",
+      "Unsupported Zalo Account group operation",
+    )
+  }
+  if (props.deliveryIdentity) {
+    if (contactInbox.channel !== "zaloAccount") {
+      throw validationException(
+        "channel",
+        "Prepared delivery requires Zalo Account",
+      )
+    }
+    const repository = await createMessageRepository()
+    const existing = await repository.findById({
+      id: props.deliveryIdentity.id,
+      createdAt: props.deliveryIdentity.createdAt,
+      workspaceId: conversation.workspaceId,
+      conversationId: conversation.id,
+      primaryAndFailOnError: true,
+    })
+    if (existing) {
+      if (existing.contactInboxId !== contactInbox.id) {
+        throw notFoundException("Prepared message target not found")
+      }
+      const { storageUrl } = await resolveTenantSettings({
+        workspaceId: conversation.workspaceId,
+      })
+      const message = {
+        ...existing,
+        clientId: parsedInput.clientId,
+        parentCreatedAt: parsedInput.replyToMessageCreatedAt ?? null,
+        attachments: existing.attachments.map((attachment) => ({
+          ...attachment,
+          url: getPublicFileUrl(attachment.originPath, storageUrl),
+        })),
+      }
+      await chatQueue.add(
+        ChatJobAction.sendChannelMessage,
+        {
+          type: ChatJobAction.sendChannelMessage,
+          data: {
+            conversation,
+            contactInbox,
+            message,
+            sendFrom,
+            ...(groupAudience ? { groupAudience } : {}),
+          },
+        },
+        { jobId: `zalo-api-message-${existing.id}` },
+      )
+      return message
+    }
+  }
 
   if ("flowId" in parsedInput) {
+    if (
+      groupAudience &&
+      !(await zaloAccountGroupService.canRunFlow({
+        workspaceId: conversation.workspaceId,
+        flowId: parsedInput.flowId,
+      }))
+    ) {
+      throw validationException(
+        "flowId",
+        "Flow contains unsupported group actions",
+      )
+    }
     // The worker resolves the flow inside the conversation's workspace and
     // fails asynchronously when it is missing; reject it here so the caller
     // gets a 404 instead of a 204 for a send that can never happen.
@@ -370,6 +471,7 @@ export const createOutgoing = async (props: {
         nodeId: parsedInput.nodeId,
         sendFrom,
         sentByUserId: user?.id,
+        ...(groupAudience ? { groupAudience } : {}),
       },
     })
     // Claimed only after a successful enqueue so a failed send keeps the
@@ -453,7 +555,92 @@ export const createOutgoing = async (props: {
     })
   }
 
+  const repository = await createMessageRepository()
+  let groupQuote: Record<string, unknown> | undefined
+  if (groupAudience && parsedInput.replyToMessageId) {
+    if (!parsedInput.replyToMessageCreatedAt) {
+      throw validationException(
+        "replyToMessageCreatedAt",
+        "Group replies require the parent creation time",
+      )
+    }
+    const parent = await repository.findById({
+      id: parsedInput.replyToMessageId,
+      createdAt: parsedInput.replyToMessageCreatedAt,
+      workspaceId: conversation.workspaceId,
+      conversationId: targetConversation.id,
+      primaryAndFailOnError: true,
+    })
+    const attributes = parent?.contentAttributes?.zaloAccount as
+      | { group?: unknown }
+      | undefined
+    const parsed = zaloAccountGroupMessageSchema.safeParse(attributes?.group)
+    if (parent?.contactInboxId !== contactInbox.id || parent.deletedAt) {
+      throw notFoundException("Group reply target not found")
+    }
+    if (
+      parsed.success &&
+      parsed.data.threadId === groupAudience.providerGroupId
+    ) {
+      const {
+        providerMessageId,
+        clientMessageId,
+        senderId,
+        text,
+        msgType,
+        timestampMs,
+      } = parsed.data
+      groupQuote = {
+        providerMessageId,
+        ...(clientMessageId ? { clientMessageId } : {}),
+        senderId,
+        ...(text ? { text } : {}),
+        msgType,
+        timestampMs,
+      }
+    } else if (
+      !parsed.success &&
+      parent.messageType === "outgoing" &&
+      parent.contentType === "text" &&
+      parent.text &&
+      !parent.attachments?.length
+    ) {
+      const prefix = `za:${encodeURIComponent(groupAudience.accountId)}:group:${encodeURIComponent(groupAudience.providerGroupId)}:`
+      if (parent.sourceId?.startsWith(prefix)) {
+        const account = await zaloAccountService.findById({
+          workspaceId: conversation.workspaceId,
+          id: groupAudience.accountId,
+        })
+        let providerMessageId = ""
+        try {
+          providerMessageId = decodeURIComponent(
+            parent.sourceId.slice(prefix.length),
+          )
+        } catch {
+          /* Invalid stored identity is not a quote target. */
+        }
+        const quote = zaloAccountQuoteSchema.safeParse({
+          providerMessageId,
+          senderId: account?.zaloUid,
+          text: parent.text,
+          msgType: "webchat",
+          timestampMs: parent.createdAt.getTime(),
+        })
+        if (quote.success) {
+          groupQuote = quote.data
+        }
+      }
+    }
+    if (!groupQuote) {
+      throw notFoundException("Group reply target not found")
+    }
+  }
   let uploadedFiles: UploadedFile[] = []
+  if (props.prepareAttachment) {
+    uploadedFiles = [await props.prepareAttachment()]
+  } else if (props.preparedAttachment) {
+    uploadedFiles = [props.preparedAttachment]
+  }
   if (
     "files" in parsedInput &&
     parsedInput.files &&
@@ -475,14 +662,13 @@ export const createOutgoing = async (props: {
     )
   }
 
-  const repository = await createMessageRepository()
   const parentId = isSmtpEmailReply
     ? null
     : (parsedInput.replyToMessageId ?? null)
 
   const plainText = "text" in parsedInput ? (parsedInput.text ?? null) : null
 
-  const now = new Date()
+  const now = props.deliveryIdentity?.createdAt ?? new Date()
   const baseContentAttributes = withSentFromInbox(
     withReplyTargetCreatedAt(
       withBypassThreadControlLock(
@@ -496,13 +682,26 @@ export const createOutgoing = async (props: {
     ),
     sendFrom,
   )
-  const contentAttributes = isSmtpEmailReply
+  let replyContentAttributes = baseContentAttributes
+  if (isSmtpEmailReply) {
+    replyContentAttributes = {
+      ...(baseContentAttributes ?? {}),
+      emailReplyToMessageId: parsedInput.replyToMessageId,
+    }
+  } else if (groupQuote) {
+    replyContentAttributes = {
+      ...baseContentAttributes,
+      zaloAccountQuote: groupQuote,
+    }
+  }
+  const contentAttributes = props.deliveryIdentity?.commandId
     ? {
-        ...(baseContentAttributes ?? {}),
-        emailReplyToMessageId: parsedInput.replyToMessageId,
+        ...replyContentAttributes,
+        zaloAccountCommandId: props.deliveryIdentity.commandId,
       }
-    : baseContentAttributes
+    : replyContentAttributes
   const messageInput = {
+    ...(props.deliveryIdentity ? { id: props.deliveryIdentity.id } : {}),
     text: productMessage ? productMessage.text : plainText,
     messageType: "outgoing" as const,
     workspaceId: conversation.workspaceId,
@@ -513,7 +712,7 @@ export const createOutgoing = async (props: {
     contentType: "text" as const,
     createdAt: now,
     type:
-      parsedInput.replyToMessageId && !isSmtpEmailReply
+      parsedInput.replyToMessageId && !isSmtpEmailReply && !isGroup
         ? ("comment" as const)
         : ("message" as const),
     parentId,
@@ -526,20 +725,35 @@ export const createOutgoing = async (props: {
     ...file,
   }))
 
+  const prepared = props.deliveryIdentity
+    ? await repository.createWithStableIdentity(
+        { ...messageInput, id: props.deliveryIdentity.id },
+        attachmentInputs,
+      )
+    : undefined
   const message =
-    attachmentInputs.length > 0
+    prepared?.result ??
+    (attachmentInputs.length > 0
       ? await repository.createWithAttachments(messageInput, attachmentInputs)
-      : await repository.create(messageInput)
+      : await repository.create(messageInput))
 
-  await contactInboxService.updateTracking({
-    contactInboxId: contactInbox.id,
-    contactId: contactInbox.contactId,
-    workspaceId: conversation.workspaceId,
-    data: {
-      firstInteractionAt: message.createdAt,
-      lastMessageAt: message.createdAt,
-    },
-  })
+  if (contactInbox.contactKind === "channelGroup") {
+    await conversationService.updateFlowStepState({
+      workspaceId: conversation.workspaceId,
+      conversationId: targetConversation.id,
+      lastActivityAt: message.createdAt,
+    })
+  } else {
+    await contactInboxService.updateTracking({
+      contactInboxId: contactInbox.id,
+      contactId: contactInbox.contactId,
+      workspaceId: conversation.workspaceId,
+      data: {
+        firstInteractionAt: message.createdAt,
+        lastMessageAt: message.createdAt,
+      },
+    })
+  }
 
   const attachments =
     "attachments" in message && Array.isArray(message.attachments)
@@ -553,15 +767,23 @@ export const createOutgoing = async (props: {
     })),
   }
 
-  await queueMessageCreatedEvent(
-    messageWithAttachments.workspaceId,
-    {
-      ...messageWithAttachments,
-      clientId: parsedInput.clientId,
-    },
-    targetConversation,
-  )
+  if (prepared?.isNew !== false) {
+    await queueMessageCreatedEvent(
+      messageWithAttachments.workspaceId,
+      {
+        ...messageWithAttachments,
+        clientId: parsedInput.clientId,
+      },
+      targetConversation,
+    )
+  }
 
+  let sendJobOptions: { jobId?: string; attempts?: number }[] = []
+  if (props.deliveryIdentity) {
+    sendJobOptions = [{ jobId: `zalo-api-message-${message.id}` }]
+  } else if (contactInbox.channel === "threads" && message.type === "comment") {
+    sendJobOptions = [{ attempts: 1 }]
+  }
   const jobs: {
     jobType: (typeof ChatJobAction)[keyof typeof ChatJobAction]
     promise: Promise<unknown>
@@ -582,14 +804,16 @@ export const createOutgoing = async (props: {
             },
             quickReplies: parsedInput.quickReplies,
             sendFrom,
+            ...(groupAudience ? { groupAudience } : {}),
           },
         },
-        ...(contactInbox.channel === "threads" && message.type === "comment"
-          ? [{ attempts: 1 }]
-          : []),
+        ...sendJobOptions,
       ),
     },
-    ...(user && messageInput.text && !productMessage
+    ...(contactInbox.contactKind !== "channelGroup" &&
+    user &&
+    messageInput.text &&
+    !productMessage
       ? [
           {
             jobType: ChatJobAction.checkOutboundAutomatedResponse,
@@ -641,6 +865,7 @@ export const createOutgoing = async (props: {
       conversation: targetConversation,
       clientId: parsedInput.clientId,
       sendFrom,
+      retainMessage: !!props.deliveryIdentity || isGroup,
     })
     throw sendChannelMessageError
   }

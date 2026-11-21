@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   findFlow: vi.fn(),
   integrationAdd: vi.fn().mockResolvedValue(undefined),
   recordKeywordMatch: vi.fn().mockResolvedValue(true),
+  canRunGroupFlow: vi.fn().mockResolvedValue(false),
+}))
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountGroupService: { canRunFlow: mocks.canRunGroupFlow },
 }))
 
 vi.mock("@chatbotx.io/business/leaderboard", () => ({
@@ -81,6 +85,63 @@ const dispatch = (
   })
 
 describe("dispatchAutomatedResponseReply contact activity", () => {
+  test("refuses group flows with unsupported actions before enqueue", async () => {
+    await dispatchAutomatedResponseReply({
+      conversation,
+      contactInbox: { id: "ci-1", contactKind: "channelGroup" } as never,
+      groupAudience: {
+        workspaceId: "ws-1",
+        contactInboxId: "ci-1",
+        conversationId: "conversation-1",
+      } as never,
+      messageId: "m1",
+      text: "hello",
+      rules: [rule({ flowId: "flow-1" })] as never,
+      triggerType: "group_message_in",
+    })
+    expect(mocks.canRunGroupFlow).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      flowId: "flow-1",
+    })
+    expect(mocks.integrationAdd).not.toHaveBeenCalled()
+  })
+  test("group replies carry audience context without recording customer keyword activity", async () => {
+    const groupAudience = {
+      kind: "zaloAccountGroup" as const,
+      workspaceId: "ws-1",
+      accountId: "a1",
+      groupId: "g1",
+      providerGroupId: "provider-g1",
+      contactInboxId: "ci-1",
+      conversationId: "conversation-1",
+      accountPolicyEpoch: 1,
+      groupPolicyEpoch: 1,
+      origin: "automation" as const,
+    }
+    await dispatchAutomatedResponseReply({
+      conversation,
+      contactInbox: {
+        id: "ci-1",
+        inboxId: "inbox-1",
+        contactId: "contact-1",
+        channel: "zaloAccount",
+        contactKind: "channelGroup",
+      } as never,
+      messageId: "message-1",
+      text: "hello",
+      rules: [rule()] as never,
+      triggerType: "group_message_in",
+      groupAudience,
+    })
+    expect(mocks.recordKeywordMatch).not.toHaveBeenCalled()
+    expect(mocks.chatAdd).toHaveBeenCalledWith(
+      "sendChatMessage",
+      expect.objectContaining({
+        data: expect.objectContaining({ groupAudience }),
+      }),
+      expect.objectContaining({ jobId: "zalo-group-keyword-message-1" }),
+    )
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.findFlow.mockResolvedValue({ id: "flow-1" })

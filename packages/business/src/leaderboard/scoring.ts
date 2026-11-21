@@ -527,7 +527,11 @@ class LeaderboardScoringService {
     // shared), so they need not be a participant — but they must be a
     // contact of THIS workspace, and not banned.
     const referrerContact = await db.query.contactModel.findFirst({
-      where: { id: input.referrerContactId, workspaceId: input.workspaceId },
+      where: {
+        id: input.referrerContactId,
+        workspaceId: input.workspaceId,
+        kind: "person",
+      },
       columns: { id: true },
     })
     if (!referrerContact) {

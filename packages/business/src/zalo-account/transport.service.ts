@@ -7,7 +7,9 @@ import {
   type ZaloAccountLabel,
   type ZaloAccountLabelSnapshot,
   type ZaloAccountOutboundMessage,
+  ZaloAccountPreDispatchError,
   zaloAccountCommandResultSchema,
+  zaloAccountFriendSyncSchema,
   zaloAccountOutboundMessageSchema,
   zaloAccountTransportKeys,
 } from "@chatbotx.io/sdk"
@@ -48,12 +50,80 @@ const readLease = (value: string | null) => {
 }
 
 export class ZaloAccountCommandTransport {
+  async syncFriendsAndWait(
+    input: AccountCommandInput & { cursor: number; waitTimeoutMs: number },
+  ) {
+    const lease = await this.requireLease(input)
+    const command = this.command({
+      commandId: input.commandId,
+      kind: "sync_friends",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      cursor: input.cursor,
+      ttlMs: input.ttlMs,
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const result = await this.waitForResult(
+      input.commandId,
+      input.waitTimeoutMs,
+      "friend sync",
+    )
+    return zaloAccountFriendSyncSchema.parse(result.result.friendSync)
+  }
   private readonly now: () => Date
   private readonly redis: RedisPort
 
   constructor(redis: RedisPort, options: { now?: () => Date } = {}) {
     this.redis = redis
     this.now = options.now ?? (() => new Date())
+  }
+  async sendTyping(
+    input: AccountCommandInput & {
+      threadType: "user" | "group"
+      threadId: string
+      accountPolicyEpoch?: number
+      groupPolicyEpoch?: number
+    },
+  ): Promise<void> {
+    const lease = await this.requireLease(input)
+    const throttle = `zalo-typing:${input.workspaceId}:${input.accountId}:${input.threadType}:${encodeURIComponent(input.threadId)}`
+    if (
+      !(await this.redis.eval(
+        "return redis.call('SET', KEYS[1], '1', 'PX', 5000, 'NX')",
+        1,
+        throttle,
+      ))
+    ) {
+      return
+    }
+    const command = this.command({
+      commandId: input.commandId,
+      threadType: input.threadType,
+      threadId: input.threadId,
+      accountPolicyEpoch: input.accountPolicyEpoch,
+      groupPolicyEpoch: input.groupPolicyEpoch,
+      ttlMs: input.ttlMs,
+      kind: "send_typing",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
   }
 
   async startQr(input: {
@@ -232,7 +302,9 @@ export class ZaloAccountCommandTransport {
       ),
     )
     if (!lease) {
-      throw new Error("Zalo Account runtime is not connected")
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account runtime is not connected",
+      )
     }
     const command = this.command({
       commandId: input.commandId,
@@ -261,7 +333,11 @@ export class ZaloAccountCommandTransport {
 
   async syncGroupsAndWait(
     input: AccountCommandInput & { waitTimeoutMs: number },
-  ): Promise<ZaloAccountGroup[]> {
+  ): Promise<{
+    groups: ZaloAccountGroup[]
+    complete: boolean
+    reason?: string
+  }> {
     const lease = await this.requireLease(input)
     const command = this.command({
       commandId: input.commandId,
@@ -284,12 +360,20 @@ export class ZaloAccountCommandTransport {
       input.waitTimeoutMs,
       "group sync",
     )
-    return result.result.groups ?? []
+    return (
+      result.result.groupSync ?? {
+        groups: result.result.groups ?? [],
+        complete: false,
+        reason: "legacy_unknown",
+      }
+    )
   }
 
   async sendGroupAndWait(
     input: AccountCommandInput & {
       groupId: string
+      accountPolicyEpoch: number
+      groupPolicyEpoch: number
       message: ZaloAccountOutboundMessage
       waitTimeoutMs: number
     },
@@ -302,6 +386,8 @@ export class ZaloAccountCommandTransport {
     const command = this.command({
       commandId: input.commandId,
       kind: "send_group",
+      accountPolicyEpoch: input.accountPolicyEpoch,
+      groupPolicyEpoch: input.groupPolicyEpoch,
       route: {
         kind: "account",
         workspaceId: input.workspaceId,
@@ -365,6 +451,7 @@ export class ZaloAccountCommandTransport {
 
   async updateLabelsAndWait(
     input: AccountCommandInput & {
+      operationToken?: string
       expectedVersion: number
       labelData: ZaloAccountLabel[]
       waitTimeoutMs: number
@@ -374,6 +461,7 @@ export class ZaloAccountCommandTransport {
     const command = this.command({
       commandId: input.commandId,
       kind: "update_labels",
+      operationToken: input.operationToken,
       route: {
         kind: "account",
         workspaceId: input.workspaceId,
@@ -403,11 +491,17 @@ export class ZaloAccountCommandTransport {
   }
 
   private command(input: {
+    cursor?: number
+    threadType?: "user" | "group"
+    threadId?: string
+    operationToken?: string
     commandId: string
     kind: ZaloAccountCommandEnvelope["kind"]
     route: ZaloAccountCommandEnvelope["route"]
     target?: { ownerId: string; fenceToken: string }
     groupId?: string
+    accountPolicyEpoch?: number
+    groupPolicyEpoch?: number
     expectedVersion?: number
     labelData?: ZaloAccountLabel[]
     message?: ZaloAccountOutboundMessage
@@ -422,7 +516,18 @@ export class ZaloAccountCommandTransport {
       createdAt: createdAt.toISOString(),
       expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
       ...(input.target ? { target: input.target } : {}),
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(input.operationToken ? { operationToken: input.operationToken } : {}),
       ...(input.groupId ? { groupId: input.groupId } : {}),
+      ...(input.threadId
+        ? { threadId: input.threadId, threadType: input.threadType }
+        : {}),
+      ...(input.accountPolicyEpoch === undefined
+        ? {}
+        : { accountPolicyEpoch: input.accountPolicyEpoch }),
+      ...(input.groupPolicyEpoch === undefined
+        ? {}
+        : { groupPolicyEpoch: input.groupPolicyEpoch }),
       ...(input.expectedVersion === undefined
         ? {}
         : { expectedVersion: input.expectedVersion }),
@@ -441,7 +546,9 @@ export class ZaloAccountCommandTransport {
       ),
     )
     if (!lease) {
-      throw new Error("Zalo Account runtime is not connected")
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account runtime is not connected",
+      )
     }
     return lease
   }
@@ -467,7 +574,7 @@ export class ZaloAccountCommandTransport {
             `Zalo Account ${operation} outcome is unknown; do not retry automatically`,
           )
         }
-        throw new Error(
+        throw new ZaloAccountPreDispatchError(
           result.status === "failed"
             ? `Zalo Account ${operation} failed: ${result.error}`
             : `Zalo Account runtime ${operation} was not confirmed: ${result.status}`,
@@ -521,6 +628,9 @@ const withTransport = async <T>(
 }
 
 export const zaloAccountCommandTransportService = {
+  sendTyping: (
+    input: Parameters<ZaloAccountCommandTransport["sendTyping"]>[0],
+  ) => withTransport((transport) => transport.sendTyping(input)),
   startQr: (input: Parameters<ZaloAccountCommandTransport["startQr"]>[0]) =>
     withTransport((transport) => transport.startQr(input)),
   reconnect: (input: Parameters<ZaloAccountCommandTransport["reconnect"]>[0]) =>
@@ -539,6 +649,9 @@ export const zaloAccountCommandTransportService = {
   syncGroupsAndWait: (
     input: Parameters<ZaloAccountCommandTransport["syncGroupsAndWait"]>[0],
   ) => withTransport((transport) => transport.syncGroupsAndWait(input)),
+  syncFriendsAndWait: (
+    input: Parameters<ZaloAccountCommandTransport["syncFriendsAndWait"]>[0],
+  ) => withTransport((transport) => transport.syncFriendsAndWait(input)),
   sendGroupAndWait: (
     input: Parameters<ZaloAccountCommandTransport["sendGroupAndWait"]>[0],
   ) => withTransport((transport) => transport.sendGroupAndWait(input)),

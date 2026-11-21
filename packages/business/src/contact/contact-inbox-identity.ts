@@ -5,6 +5,7 @@ import {
   type ContactIdentityKind,
 } from "@chatbotx.io/utils/inbound-webhook-channel"
 import { randomString } from "remeda"
+import { validationException } from "../errors"
 
 /** What a caller knows about a contact; each channel picks the identity it keys on. */
 export type ContactInboxIdentities = {
@@ -61,7 +62,7 @@ const SOURCE_ID_NORMALIZER: Record<
   instagram: asSent,
   telegram: asSent,
   zalo: asSent,
-  zaloAccount: asSent,
+  zaloAccount: (raw) => (raw.startsWith("za:group:") ? null : raw),
   line: asSent,
   tiktok: asSent,
   api: asSent,
@@ -149,6 +150,12 @@ export const resolveNewContactInboxSourceId = (
   channel: ChannelType,
   identities: ContactInboxIdentities,
 ): string => {
+  if (
+    channel === "zaloAccount" &&
+    identities.channelUserId?.startsWith("za:group:")
+  ) {
+    throw validationException("contactId", "Reserved Zalo group identity")
+  }
   const derived = deriveContactInboxSourceId(channel, identities)
   if (derived !== null) {
     return derived

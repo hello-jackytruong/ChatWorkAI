@@ -1,5 +1,9 @@
 import { macAnalyticsService, macTrackingService } from "@chatbotx.io/analytics"
-import { db, type Transaction } from "@chatbotx.io/database/client"
+import {
+  type DatabaseClient,
+  db,
+  type Transaction,
+} from "@chatbotx.io/database/client"
 import { ROOT_TENANT_ID } from "@chatbotx.io/database/schema"
 import { distributedLock, withCache } from "@chatbotx.io/redis"
 import { tenantService } from "../enterprise/tenant/service"
@@ -98,6 +102,35 @@ const minRemaining = (a: number | null, b: number | null): number | null => {
  * write-through (see `LiveCounterStore.consume`).
  */
 class QuotaEnforcementService {
+  async contactCounterUserIds(ownerId: string): Promise<string[]> {
+    return this.levelsForCtx(await this.resolveContext(ownerId), ownerId).map(
+      (level) => level.userId,
+    )
+  }
+
+  async incrementImportedContacts(
+    input: { workspaceId: string; userIds: string[]; count: number },
+    tx: DatabaseClient,
+  ): Promise<void> {
+    for (const userId of [...new Set(input.userIds)].sort()) {
+      await userQuotaService.incrementImportedContacts(userId, input.count, tx)
+    }
+    await workspaceUsageService.incrementImportedContacts(
+      input.workspaceId,
+      input.count,
+      tx,
+    )
+  }
+
+  async invalidateImportedContacts(input: {
+    workspaceId: string
+    userIds: string[]
+  }): Promise<void> {
+    for (const userId of [...new Set(input.userIds)]) {
+      await userQuotaService.invalidateImportedContacts(userId)
+    }
+    await workspaceUsageService.invalidateImportedContacts(input.workspaceId)
+  }
   private readonly macAdmitters: Record<MacAdmissionStrategy, MacAdmitter> = {
     atomic: (args) => this.admitAtomically(args),
     lock: (args) => this.admitWithLock(args),

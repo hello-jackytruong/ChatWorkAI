@@ -2,6 +2,7 @@ import {
   and,
   count,
   countDistinct,
+  type DatabaseClient,
   db,
   eq,
   inArray,
@@ -132,6 +133,17 @@ export interface AccessState {
 }
 
 class UserQuotaService extends BaseService {
+  async incrementImportedContacts(
+    userId: string,
+    count: number,
+    tx: DatabaseClient,
+  ): Promise<void> {
+    await this.store.upsertMetricBy(userId, "contacts", count, tx)
+  }
+
+  async invalidateImportedContacts(userId: string): Promise<void> {
+    await this.store.invalidateMetricStrict(userId, "contacts")
+  }
   /** Shared Redis-counter + row-cache + upsert mechanics (per-user scope). */
   private readonly store = new LiveCounterStore<UserQuotaModel>({
     label: USER_QUOTA_LABEL,
@@ -836,7 +848,7 @@ class UserQuotaService extends BaseService {
             workspaceModel,
             eq(contactModel.workspaceId, workspaceModel.id),
           )
-          .where(where),
+          .where(and(where, eq(contactModel.kind, "person"))),
 
         db.select({ count: count() }).from(workspaceModel).where(where),
 

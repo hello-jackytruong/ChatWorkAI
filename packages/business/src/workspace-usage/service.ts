@@ -2,6 +2,7 @@ import {
   count as countFn,
   type DatabaseClient,
   db,
+  eq,
   sql,
 } from "@chatbotx.io/database/client"
 import {
@@ -31,6 +32,17 @@ export type WorkspaceUsageMetric =
 const WORKSPACE_USAGE_LABEL = "workspace-usage"
 
 class WorkspaceUsageService {
+  async incrementImportedContacts(
+    workspaceId: string,
+    count: number,
+    tx: DatabaseClient,
+  ): Promise<void> {
+    await this.store.upsertMetricBy(workspaceId, "contacts", count, tx)
+  }
+
+  async invalidateImportedContacts(workspaceId: string): Promise<void> {
+    await this.store.invalidateMetricStrict(workspaceId, "contacts")
+  }
   private readonly store = new LiveCounterStore<WorkspaceUsageModel>({
     label: WORKSPACE_USAGE_LABEL,
     table: workspaceUsageModel,
@@ -143,6 +155,7 @@ class WorkspaceUsageService {
         db
           .select({ workspaceId: contactModel.workspaceId, used: countFn() })
           .from(contactModel)
+          .where(eq(contactModel.kind, "person"))
           .groupBy(contactModel.workspaceId),
         db
           .select({ workspaceId: inboxModel.workspaceId, used: countFn() })

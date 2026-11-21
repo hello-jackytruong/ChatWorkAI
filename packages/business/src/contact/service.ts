@@ -22,6 +22,7 @@ import {
 import {
   contactInboxRepository,
   contactRepository,
+  personContactWhere,
   pipelineActivityRepository,
 } from "@chatbotx.io/database/repositories"
 import { contactInfoCaptureRepository } from "@chatbotx.io/database/repositories/contact-info-capture"
@@ -293,7 +294,10 @@ class ContactService extends BaseService {
 
     return await withCache(
       key,
-      async () => await tx.query.contactModel.findFirst({ where }),
+      async () =>
+        await tx.query.contactModel.findFirst({
+          where: personContactWhere(where),
+        }),
       {
         dynamicTags: (result) =>
           result ? [`contacts:${result.id}`] : undefined,
@@ -387,7 +391,7 @@ class ContactService extends BaseService {
     })
     const match = await db.query.contactModel.findFirst({
       columns: { id: true },
-      where: { ...where, id: contactId },
+      where: personContactWhere({ ...where, id: contactId }),
     })
 
     return Boolean(match)
@@ -442,7 +446,10 @@ class ContactService extends BaseService {
     phoneNumber: string
   }): Promise<ContactModel | undefined> {
     return await db.query.contactModel.findFirst({
-      where: { workspaceId: props.workspaceId, phoneNumber: props.phoneNumber },
+      where: personContactWhere({
+        workspaceId: props.workspaceId,
+        phoneNumber: props.phoneNumber,
+      }),
     })
   }
 
@@ -456,7 +463,7 @@ class ContactService extends BaseService {
     const { workspaceId, data, tx = db } = props
     const [contact] = await tx
       .insert(contactModel)
-      .values({ id: createId(), workspaceId, ...data })
+      .values({ id: createId(), workspaceId, ...data, kind: "person" })
       .returning()
     await this.invalidate({ workspaceId })
     return contact
@@ -1381,7 +1388,7 @@ function withContactAccessScope<TWhere extends Record<string, unknown>>(
     accessScope?.restrictToAssignedUserId === undefined &&
     accessScope?.restrictToTeamIds === undefined
   ) {
-    return where
+    return personContactWhere(where)
   }
 
   const conversation =
@@ -1400,11 +1407,13 @@ function withContactAccessScope<TWhere extends Record<string, unknown>>(
   ]
 
   return {
-    ...where,
-    conversation: {
-      ...conversation,
-      OR: assignmentScopes,
-    },
+    ...personContactWhere({
+      ...where,
+      conversation: {
+        ...conversation,
+        OR: assignmentScopes,
+      },
+    }),
   }
 }
 

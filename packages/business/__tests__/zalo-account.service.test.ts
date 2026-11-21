@@ -1,3 +1,6 @@
+const PRIVATE_STATUS_FIELDS_PATTERN =
+  /internal-token|fenceToken|encryptedAuth|cookie|imei|userAgent/
+
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -9,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   findByUidForWorkspace: vi.fn(),
   listActiveRuntimeAccounts: vi.fn(),
   updateAuthorizationAndProfile: vi.fn(),
+  connection: vi.fn(),
+  lease: vi.fn(),
 }))
 
 vi.mock("@chatbotx.io/encryption", async (importOriginal) => ({
@@ -20,6 +25,7 @@ vi.mock("@chatbotx.io/encryption", async (importOriginal) => ({
 }))
 
 vi.mock("@chatbotx.io/database/repositories", () => ({
+  connectionRepository: { findByInboxId: mocks.connection },
   integrationZaloAccountRepository: {
     findByInboxIdForWorkspace: mocks.findByInboxIdForWorkspace,
     findByIdForWorkspace: mocks.findByIdForWorkspace,
@@ -28,6 +34,9 @@ vi.mock("@chatbotx.io/database/repositories", () => ({
     listActiveRuntimeAccounts: mocks.listActiveRuntimeAccounts,
     updateAuthorizationAndProfile: mocks.updateAuthorizationAndProfile,
   },
+}))
+vi.mock("@chatbotx.io/redis", () => ({
+  cacheConnections: { useExisting: async () => ({ get: mocks.lease }) },
 }))
 
 const { decryptZaloAccountAuth, encryptZaloAccountAuth } = await import(
@@ -78,6 +87,29 @@ describe("Zalo Account authorization", () => {
       },
     ])
     mocks.updateAuthorizationAndProfile.mockResolvedValue(row)
+  })
+  it("reports missing gateway ownership without leaking credentials or operation tokens", async () => {
+    mocks.findByIdForWorkspace.mockResolvedValue({
+      ...row,
+      groupMessagingEnabled: true,
+      operations: {
+        labels: { token: "internal-token", version: 2 },
+        runtime: { fenceToken: "111" },
+      },
+    })
+    mocks.connection.mockResolvedValue({
+      workspaceId: "workspace-1",
+      provider: "zaloAccount",
+      status: "connected",
+      statusReason: null,
+    })
+    mocks.lease.mockResolvedValue(null)
+    const result = await zaloAccountService.status({
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+    })
+    expect(result.gatewayAvailable).toBe(false)
+    expect(JSON.stringify(result)).not.toMatch(PRIVATE_STATUS_FIELDS_PATTERN)
   })
 
   it("binds ciphertext to provider, workspace, and inbox", async () => {

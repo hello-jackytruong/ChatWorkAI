@@ -55,7 +55,7 @@ const assertContactInWorkspace = async (
   contactId: string,
 ) => {
   const contact = await db.query.contactModel.findFirst({
-    where: { id: contactId, workspaceId },
+    where: { id: contactId, workspaceId, kind: "person" },
     columns: { id: true },
   })
   if (!contact) {

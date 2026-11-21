@@ -11,8 +11,60 @@ const transport = new ZaloAccountCommandTransport(redis as never)
 
 describe("ZaloAccountCommandTransport", () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
+    redis.eval.mockResolvedValue(1)
     redis.get.mockResolvedValue(null)
+  })
+
+  it("preserves the friend page cursor in the dispatched command", async () => {
+    redis.get.mockResolvedValueOnce("owner-1:9").mockResolvedValueOnce(
+      JSON.stringify({
+        status: "applied",
+        result: {
+          status: "synced",
+          friendSync: { friends: [], complete: true },
+        },
+      }),
+    )
+    await transport.syncFriendsAndWait({
+      commandId: "friends-1",
+      workspaceId: "w",
+      accountId: "a",
+      inboxId: "i",
+      cursor: 2,
+      ttlMs: 30_000,
+      waitTimeoutMs: 100,
+    })
+    expect(JSON.parse(String(redis.eval.mock.calls[0]?.at(-1)))).toMatchObject({
+      kind: "sync_friends",
+      cursor: 2,
+    })
+  })
+
+  it("dispatches group typing without leaking the caller's local group ID", async () => {
+    redis.get.mockResolvedValueOnce("owner-1:9")
+    const input = {
+      commandId: "typing-1",
+      workspaceId: "w",
+      accountId: "a",
+      inboxId: "i",
+      groupId: "local-group",
+      providerGroupId: "provider-group",
+      threadId: "provider-group",
+      threadType: "group" as const,
+      accountPolicyEpoch: 1,
+      groupPolicyEpoch: 2,
+      ttlMs: 5000,
+    }
+    await transport.sendTyping(input)
+    const command = JSON.parse(String(redis.eval.mock.calls.at(-1)?.at(-1)))
+    expect(command).toMatchObject({
+      kind: "send_typing",
+      threadId: "provider-group",
+      accountPolicyEpoch: 1,
+      groupPolicyEpoch: 2,
+    })
+    expect(command).not.toHaveProperty("groupId")
   })
 
   it("publishes QR startup to the shared acquisition stream", async () => {

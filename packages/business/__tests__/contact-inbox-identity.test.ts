@@ -69,6 +69,16 @@ describe("deriveContactInboxSourceId", () => {
 })
 
 describe("resolveNewContactInboxSourceId", () => {
+  test("reserves Zalo group identities for the group anchor service", () => {
+    expect(
+      normalizeContactInboxSourceId("zaloAccount", "za:group:g1"),
+    ).toBeNull()
+    expect(() =>
+      resolveNewContactInboxSourceId("zaloAccount", {
+        channelUserId: "za:group:g1",
+      }),
+    ).toThrow("Reserved Zalo group identity")
+  })
   test("uses the derived source id when there is one", () => {
     expect(resolveNewContactInboxSourceId("whatsapp", identities)).toBe(
       "84901234567",

@@ -19,13 +19,17 @@ type ReplySender = { kind: "agent"; userId: string } | { kind: "other" }
 export async function recordAgentReply(props: {
   conversationId: string
   workspaceId: string
-  contactInbox: Pick<ContactInboxModel, "contactId" | "channel" | "inboxId">
+  contactInbox: Pick<ContactInboxModel, "contactId" | "channel" | "inboxId"> &
+    Partial<Pick<ContactInboxModel, "contactKind">>
   at: Date
   sender: ReplySender
   eventId: string
 }): Promise<void> {
   const { conversationId, workspaceId, contactInbox, at, sender, eventId } =
     props
+  if (contactInbox.contactKind === "channelGroup") {
+    return
+  }
   try {
     const claim = await conversationService.markAgentReplied({
       id: conversationId,

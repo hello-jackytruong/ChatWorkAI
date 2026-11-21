@@ -5,6 +5,7 @@ import {
 import { createMessageRepository } from "@chatbotx.io/database/repositories"
 import type { MessageModel } from "@chatbotx.io/database/types"
 import type { MessageButtonTemplate } from "@chatbotx.io/sdk"
+import { createId } from "@chatbotx.io/utils"
 import type { SendFrom } from "@chatbotx.io/utils/send-from"
 import { ChatJobAction, chatQueue } from "@chatbotx.io/worker-config"
 import { contactInboxService } from "../contact-inbox/service"
@@ -13,6 +14,9 @@ import { conflictException, notFoundException } from "../errors"
 import { logger } from "../logger"
 import { resolveTenantSettings } from "../platform/settings"
 import { getPublicFileUrl } from "../utils"
+import { zaloAccountGroupService } from "../zalo-account/group.service"
+import { zaloAccountSendAttemptService } from "../zalo-account/send-attempt.service"
+import { zaloAccountService } from "../zalo-account/service"
 
 const NOT_RESENDABLE_CODE = "messageNotResendable"
 
@@ -100,13 +104,50 @@ export const resendOutgoing = async (props: {
   if (!contactInbox) {
     throw notFoundException("Contact inbox not found")
   }
+  const groupAudience =
+    contactInbox.contactKind === "channelGroup"
+      ? await zaloAccountGroupService.createAudience({
+          workspaceId,
+          contactInboxId: contactInbox.id,
+          conversationId: conversation.id,
+          origin: sendFrom === "inbox" ? "inbox" : "api",
+        })
+      : undefined
+  if (contactInbox.contactKind === "channelGroup") {
+    if (!groupAudience) {
+      throw conflictException(
+        "Zalo Account group sending is disabled",
+        NOT_RESENDABLE_CODE,
+      )
+    }
+    await zaloAccountSendAttemptService.assertCanResend({
+      workspaceId,
+      accountId: groupAudience.accountId,
+      messageId: message.id,
+      createdAt: message.createdAt,
+    })
+  } else if (contactInbox.channel === "zaloAccount") {
+    const account = await zaloAccountService.findByInboxId({
+      workspaceId,
+      inboxId: contactInbox.inboxId,
+    })
+    if (!account) {
+      throw notFoundException("Zalo Account not found")
+    }
+    await zaloAccountSendAttemptService.assertCanResend({
+      workspaceId,
+      accountId: account.id,
+      messageId: message.id,
+      createdAt: message.createdAt,
+    })
+  }
 
   // Everything that can throw is done before the claim, so a failure here
   // never leaves the message claimed (no error, no job) with no way back.
   // The worker finds the comment a private reply answers by its id and
   // createdAt; `createOutgoing` kept the createdAt on the row.
   let parentCreatedAt: Date | null = null
-  if (message.parentId) {
+  if (message.parentId && !groupAudience) {
     parentCreatedAt = readReplyTargetCreatedAt(message.contentAttributes)
     if (!parentCreatedAt) {
       throw conflictException(
@@ -138,14 +179,25 @@ export const resendOutgoing = async (props: {
   }
 
   try {
+    const retryAttributes = { ...messageWithAttachments.contentAttributes }
+    if (contactInbox.channel === "zaloAccount") {
+      retryAttributes.zaloAccountCommandId = undefined
+    }
     await chatQueue.add(ChatJobAction.sendChannelMessage, {
       type: ChatJobAction.sendChannelMessage,
       data: {
         conversation,
         contactInbox,
-        message: { ...messageWithAttachments, parentCreatedAt },
+        message: {
+          ...messageWithAttachments,
+          parentCreatedAt,
+          ...(contactInbox.channel === "zaloAccount"
+            ? { clientId: createId(), contentAttributes: retryAttributes }
+            : {}),
+        },
         quickReplies: readStoredButtons(message.contentAttributes),
         sendFrom,
+        ...(groupAudience ? { groupAudience } : {}),
       },
     })
   } catch (error) {

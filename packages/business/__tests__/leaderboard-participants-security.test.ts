@@ -59,7 +59,7 @@ describe("manual adjust", () => {
     ).rejects.toMatchObject({ code: "notFound" })
     expect(mocks.contactFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "foreign-contact", workspaceId: "ws-1" },
+        where: { id: "foreign-contact", workspaceId: "ws-1", kind: "person" },
       }),
     )
     expect(mocks.applyChangeInTransaction).not.toHaveBeenCalled()

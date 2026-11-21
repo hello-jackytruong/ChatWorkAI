@@ -231,6 +231,13 @@ export class LiveCounterStore<TRow> {
     }
   }
 
+  /** Durable import outboxes acknowledge this only after both deletes succeed. */
+  async invalidateMetricStrict(id: string, metric: QuotaMetric): Promise<void> {
+    const client = await cacheConnections.useExisting()
+    await client.hdel(this.liveKey(id), metric)
+    await client.del(this.cacheKey(id))
+  }
+
   /**
    * Forget all volatile state for a scope: delete the live-counter hash and the
    * cached row. Use when the underlying entity no longer exists (e.g. a deleted

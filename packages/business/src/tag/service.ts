@@ -97,7 +97,10 @@ class TagService extends BaseService {
               contactsCount: (table) =>
                 db.$count(
                   contactsToTagsModel,
-                  eq(contactsToTagsModel.tagId, table.id),
+                  and(
+                    eq(contactsToTagsModel.tagId, table.id),
+                    sql`EXISTS (SELECT 1 FROM ${contactModel} WHERE ${contactModel.id} = ${contactsToTagsModel.contactId} AND ${contactModel.kind} = 'person')`,
+                  ),
                 ),
             },
           }),
@@ -1185,8 +1188,10 @@ class TagService extends BaseService {
     workspaceId: string
     id: string
     name: string
+    tx?: DatabaseClient
   }): Promise<boolean> {
-    const existing = await db.query.tagModel.findFirst({
+    const tx = props.tx ?? db
+    const existing = await tx.query.tagModel.findFirst({
       where: {
         workspaceId: props.workspaceId,
         name: props.name,
@@ -1198,7 +1203,7 @@ class TagService extends BaseService {
     if (existing) {
       return false
     }
-    const [updated] = await db
+    const [updated] = await tx
       .update(tagModel)
       .set({ name: props.name, updatedAt: new Date() })
       .where(

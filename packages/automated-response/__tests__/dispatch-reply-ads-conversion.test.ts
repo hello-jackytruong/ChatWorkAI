@@ -193,3 +193,6 @@ describe("dispatchAutomatedResponseReply ads conversion keywordMatched trigger",
     )
   })
 })
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountGroupService: { canRunFlow: vi.fn().mockResolvedValue(false) },
+}))
