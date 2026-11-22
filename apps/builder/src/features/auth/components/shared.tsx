@@ -29,6 +29,7 @@ export const AuthHeader = ({ title }: AuthHeaderProps) => {
         {mounted ? (
           <Image
             alt={name}
+            className="h-auto max-w-full"
             height={80}
             priority={true}
             src={logoUrl}
