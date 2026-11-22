@@ -1,0 +1,170 @@
+name: Deploy Chatwork AI to Ubuntu
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize the whole release: a slow build cannot activate after a newer one.
+concurrency:
+  group: chatworkai-production
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/dev'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  build:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [builder, worker, realtime, mcp, javascript-executor, zalo-account-gateway]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Resolve repository-scoped image namespace
+        id: namespace
+        shell: bash
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Add builder swap when the runner has sufficient disk
+        if: matrix.service == 'builder'
+        shell: bash
+        run: |
+          set -euo pipefail
+          free_gb=$(df -BG --output=avail /mnt | tail -1 | tr -dc '0-9')
+          if [ "$free_gb" -ge 24 ]; then
+            sudo fallocate -l 8G /mnt/chatworkai-build.swap
+            sudo chmod 600 /mnt/chatworkai-build.swap
+            sudo mkswap /mnt/chatworkai-build.swap
+            sudo swapon /mnt/chatworkai-build.swap
+          fi
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate deployment configuration
+        if: matrix.service == 'builder'
+        run: |
+          bash -n scripts/deployment/production.sh
+          python3 -m py_compile scripts/deployment/validate-production.py
+          node --test scripts/deployment/*.test.mjs deploy/r2/*.test.mjs
+      - name: Resolve Dockerfile
+        id: dockerfile
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          app="$SERVICE"
+          if [ "$app" = mcp ]; then app=mcp-server; fi
+          echo "path=apps/$app/docker/Dockerfile" >> "$GITHUB_OUTPUT"
+      - name: Preserve an existing commit image
+        id: existing
+        env:
+          IMAGE: ${{ steps.namespace.outputs.prefix }}/chatworkai-${{ matrix.service }}:sha-${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if result=$(docker buildx imagetools inspect "$IMAGE" 2>&1); then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          elif grep -Eqi 'manifest unknown|not found' <<< "$result"; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo 'Image lookup failed; refusing to overwrite a commit tag' >&2
+            exit 1
+          fi
+      - uses: docker/build-push-action@v7
+        if: steps.existing.outputs.found != 'true'
+        with:
+          context: .
+          file: ${{ steps.dockerfile.outputs.path }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.namespace.outputs.prefix }}/chatworkai-${{ matrix.service }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=chatworkai-${{ matrix.service }}
+          cache-to: type=gha,scope=chatworkai-${{ matrix.service }},mode=min
+
+  deploy:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Package exact release and configure SSH
+        env:
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${PROD_SSH_KEY:?Missing PROD_SSH_KEY}"
+          : "${PROD_SSH_KNOWN_HOSTS:?Missing verified PROD_SSH_KNOWN_HOSTS}"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$PROD_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/production"
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/production" "$HOME/.ssh/known_hosts"
+          node scripts/deployment/migration-digest.mjs > migrations.sha256
+          printf 'ghcr.io/%s\n' "${GITHUB_REPOSITORY,,}" > image-prefix
+          tar -czf "$RUNNER_TEMP/release.tar.gz" docker-compose.production.yml scripts/deployment/production.sh scripts/deployment/validate-production.py migrations.sha256 image-prefix
+      - name: Transfer and activate release
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_PORT: ${{ secrets.PROD_PORT }}
+          RELEASE_SHA: ${{ github.sha }}
+          DEPLOY_ROOT: ${{ vars.PROD_DEPLOY_ROOT || '/opt/chatworkai' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${PROD_HOST:?Missing PROD_HOST}"
+          : "${PROD_USER:?Missing PROD_USER}"
+          PROD_PORT="${PROD_PORT:-22}"
+          [[ "$PROD_HOST" =~ ^[a-zA-Z0-9.-]+$ ]] || exit 1
+          [[ "$PROD_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || exit 1
+          [[ "$PROD_PORT" =~ ^[0-9]+$ ]] || exit 1
+          [[ "$DEPLOY_ROOT" =~ ^/[a-zA-Z0-9/_-]+$ ]] || exit 1
+          ssh_opts=(-i "$HOME/.ssh/production" -p "$PROD_PORT" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          # shellcheck disable=SC2029
+          ssh "${ssh_opts[@]}" "$PROD_USER@$PROD_HOST" "umask 077; mkdir -p '$DEPLOY_ROOT/incoming'"
+          scp -i "$HOME/.ssh/production" -P "$PROD_PORT" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$RUNNER_TEMP/release.tar.gz" "$PROD_USER@$PROD_HOST:$DEPLOY_ROOT/incoming/$RELEASE_SHA.tar.gz"
+          # shellcheck disable=SC2029
+          ssh "${ssh_opts[@]}" "$PROD_USER@$PROD_HOST" "bash -s -- '$DEPLOY_ROOT' '$RELEASE_SHA'" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          root="$1"; sha="$2"
+          mkdir -p "$root/releases/$sha" "$root/logs"
+          # A second lock covers extraction, including manual operations that use
+          # this activation entry point. production.sh owns the datastore lock.
+          exec 8>"$root/activation.lock"
+          flock -n 8
+          tar -xzf "$root/incoming/$sha.tar.gz" -C "$root/releases/$sha"
+          rm "$root/incoming/$sha.tar.gz"
+          if CHATWORK_DEPLOY_ROOT="$root" bash "$root/releases/$sha/scripts/deployment/production.sh" deploy "$sha" >"$root/logs/deploy-$sha.log" 2>&1; then
+            echo "Release $sha passed host readiness checks"
+          else
+            echo 'Deployment failed; diagnostics are retained in the restricted host deploy log' >&2
+            exit 1
+          fi
+          REMOTE
+      - name: Remove runner SSH credentials
+        if: always()
+        run: rm -f "$HOME/.ssh/production" "$HOME/.ssh/known_hosts"

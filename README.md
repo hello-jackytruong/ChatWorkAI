@@ -193,6 +193,9 @@ To have the project up and running, please follow the [Quick Start Guide](https:
 `-- turbo.json
 ```
 
+For this fork's Ubuntu automation and Cloudflare R2 setup, see
+[the deployment runbook](docs/deployment.md).
+
 ## Development Commands
 
 ```bash

@@ -159,6 +159,11 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Deployment regression tests
+        run: |
+          bash -n scripts/deployment/production.sh
+          node --test scripts/deployment/*.test.mjs deploy/r2/*.test.mjs
+
   # Tests are split into eight shards, each on its own 4-vCPU runner. Import cost,
   # not test bodies, dominates every suite (business measured `import 2812s`
   # vs `tests 86s` on CI), and a change to `database` or `business` makes
@@ -223,8 +228,9 @@ jobs:
       - name: Test affected workspaces
         if: github.event_name == 'pull_request'
         run: |
-          export TURBO_SCM_BASE="$(git rev-parse HEAD^1)"
-          export TURBO_SCM_HEAD="$(git rev-parse HEAD)"
+          TURBO_SCM_BASE="$(git rev-parse HEAD^1)"
+          TURBO_SCM_HEAD="$(git rev-parse HEAD)"
+          export TURBO_SCM_BASE TURBO_SCM_HEAD
           pnpm turbo run test --affected --concurrency=2 -- --shard=${{ matrix.shard }}/${{ matrix.total }}
 
       # Turbo does not parallelize *within* a suite, so wall clock is bounded
