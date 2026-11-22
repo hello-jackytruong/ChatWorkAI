@@ -162,6 +162,7 @@ jobs:
       - name: Deployment regression tests
         run: |
           bash -n scripts/deployment/production.sh
+          bash -n scripts/deployment/bootstrap.sh
           node --test scripts/deployment/*.test.mjs deploy/r2/*.test.mjs
 
   # Tests are split into eight shards, each on its own 4-vCPU runner. Import cost,

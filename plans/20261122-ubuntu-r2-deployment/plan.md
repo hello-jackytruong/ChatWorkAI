@@ -13,3 +13,5 @@ Acceptance: clean commits on dev; main ancestor of dev; quality-gated SHA-addres
 Execution: [phase-01-delivery.md](phase-01-delivery.md).
 
 Evidence and activation limits: [verification.md](reports/verification.md).
+
+Follow-up: [GitHub-managed environment and bootstrap](phase-02-github-managed-env.md).

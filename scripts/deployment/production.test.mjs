@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { execFileSync, spawnSync } from "node:child_process"
 import {
   chmodSync,
+  copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -26,12 +28,25 @@ for (const scenario of [
   "revision-mismatch",
   "migration-failed",
   "unchanged-schema",
+  "env-update-same-commit",
+  "env-rollback",
+  "credential-change",
+  "fresh-seed",
+  "seed-failed",
 ]) {
   test(`host release ordering and recovery: ${scenario}`, () => {
     const root = mkdtempSync(join(tmpdir(), "chatwork-deploy-"))
     try {
-      const old = "a".repeat(40),
-        sha = "b".repeat(40),
+      const versioned = [
+        "env-update-same-commit",
+        "env-rollback",
+        "credential-change",
+      ].includes(scenario)
+      const old =
+          scenario === "env-update-same-commit"
+            ? `${"b".repeat(40)}-10-1`
+            : "a".repeat(40),
+        sha = versioned ? `${"b".repeat(40)}-20-1` : "b".repeat(40),
         digest = "c".repeat(64)
       mkdirSync(join(root, "bin"))
       if (process.platform === "darwin") {
@@ -61,26 +76,79 @@ for (const scenario of [
         )
         writeFileSync(join(dir, "image-prefix"), "ghcr.io/owner/chatworkai")
         writeFileSync(join(dir, "migrations.sha256"), digest)
+        copyFileSync(
+          "scripts/deployment/compare-production.py",
+          join(dir, "scripts/deployment/compare-production.py"),
+        )
+        if (versioned) {
+          writeFileSync(
+            join(dir, ".env"),
+            release === old ? "OLD_ENV=1\n" : "NEW_ENV=1\n",
+            { mode: 0o600 },
+          )
+        }
         writeFileSync(
           join(dir, "scripts/deployment/validate-production.py"),
           "import sys\nsys.stdin.read()\n",
         )
       }
       writeFileSync(join(root, ".env"), "", { mode: 0o600 })
-      symlinkSync(`releases/${old}`, join(root, "current"))
+      if (!["fresh-seed", "seed-failed"].includes(scenario)) {
+        symlinkSync(`releases/${old}`, join(root, "current"))
+      }
+      const config = (encryptionKey) =>
+        JSON.stringify({
+          services: {
+            builder: {
+              environment: {
+                APPROVED_MIGRATION_DIGEST: [
+                  "unapproved",
+                  "unchanged-schema",
+                ].includes(scenario)
+                  ? ""
+                  : digest,
+                INITIAL_SEED_APPROVED: ["fresh-seed", "seed-failed"].includes(
+                  scenario,
+                )
+                  ? "true"
+                  : "false",
+                ENCRYPTION_KEY: encryptionKey,
+                DATABASE_URL: "same-db",
+              },
+            },
+            postgres: {
+              environment: {
+                POSTGRES_DB: "db",
+                POSTGRES_USER: "user",
+                POSTGRES_PASSWORD: "password",
+              },
+            },
+          },
+          volumes: {
+            "postgres-data": { name: "db" },
+            "redis-data": { name: "redis" },
+          },
+        })
       const docker = join(root, "bin/docker")
       writeFileSync(
         docker,
         `#!/bin/bash
 set -eu
-printf '%s %s\\n' "$CHATWORK_RELEASE_SHA" "$*" >> "$CHATWORK_DEPLOY_ROOT/calls"
+[[ "$1" != compose || -z "\${APP_URL:-}" ]] || exit 42
+printf '%s %s env=%s\\n' "$CHATWORK_RELEASE_SHA" "$*" "$CHATWORK_ENV_FILE" >> "$CHATWORK_DEPLOY_ROOT/calls"
 case "$*" in
-  *'config --format json'*) printf '%s' '{"services":{"builder":{"environment":{"APPROVED_MIGRATION_DIGEST":"${["unapproved", "unchanged-schema"].includes(scenario) ? "" : digest}"}}}}' ;;
+  *'config --format json'*)
+    if [[ "${scenario}" == credential-change && "$CHATWORK_ENV_FILE" == *"${sha}/.env" ]]; then
+      printf '%s' '${config("new-key")}'
+    else
+      printf '%s' '${config("old-key")}'
+    fi ;;
   *'image inspect'*) echo "${scenario === "revision-mismatch" ? "wrong-revision" : "$CHATWORK_RELEASE_SHA"}" ;;
+  *'builder seed'*) ${scenario === "seed-failed" ? "exit 1" : ":"} ;;
   *'builder migrate'*) ${scenario === "migration-failed" ? "exit 1" : ":"} ;;
   *'pg_dump'*) ${scenario === "backup-failed" ? "exit 1" : "echo archive"} ;;
   *'pg_restore'*) cat >/dev/null ;;
-  *'up -d --no-build'*builder*) ${scenario === "activation-failed" ? `[[ "$CHATWORK_RELEASE_SHA" != "${sha}" ]]` : ":"} ;;
+  *'up -d --no-build'*builder*) ${["activation-failed", "env-rollback"].includes(scenario) ? `[[ "$CHATWORK_RELEASE_SHA" != "${sha.slice(0, 40)}" ]]` : ":"} ;;
 esac
 `,
       )
@@ -92,6 +160,7 @@ esac
           env: {
             ...process.env,
             CHATWORK_DEPLOY_ROOT: root,
+            APP_URL: "https://stale-host-export.example",
             PATH: `${join(root, "bin")}:${process.env.PATH}`,
           },
           encoding: "utf8",
@@ -100,9 +169,40 @@ esac
       const calls = readFileSync(join(root, "calls"), "utf8")
       assert.equal(
         result.status === 0,
-        ["success", "unchanged-schema"].includes(scenario),
+        [
+          "success",
+          "unchanged-schema",
+          "env-update-same-commit",
+          "fresh-seed",
+        ].includes(scenario),
         result.stderr,
       )
+      if (scenario === "fresh-seed") {
+        assert.ok(calls.includes("builder seed"))
+        assert.ok(existsSync(join(root, "state/seeded")))
+      }
+      if (scenario === "seed-failed") {
+        assert.ok(!existsSync(join(root, "state/seeded")))
+        assert.ok(!calls.includes("up -d --no-build"))
+      }
+      if (scenario === "credential-change") {
+        assert.ok(!calls.includes("pull "))
+      }
+      if (scenario === "env-update-same-commit") {
+        assert.equal(readFileSync(join(root, ".env"), "utf8"), "NEW_ENV=1\n")
+        assert.equal(
+          readFileSync(join(root, "releases", old, ".env"), "utf8"),
+          "OLD_ENV=1\n",
+        )
+      }
+      if (scenario === "env-rollback") {
+        assert.ok(calls.includes(`env=${join(root, "releases", old, ".env")}`))
+        assert.equal(readFileSync(join(root, ".env"), "utf8"), "")
+        assert.equal(
+          readFileSync(join(root, "releases", old, ".env"), "utf8"),
+          "OLD_ENV=1\n",
+        )
+      }
       if (scenario === "unapproved") {
         assert.ok(!calls.includes("pull "))
       }

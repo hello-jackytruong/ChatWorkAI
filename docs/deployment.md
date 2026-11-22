@@ -2,8 +2,9 @@
 
 Production releases come from **dev** via `.github/workflows/deploy-production.yml`.
 The workflow reuses the full CI gate, builds six application images on GitHub,
-then transfers a small release bundle to Ubuntu. The server only pulls images;
-it never builds source. There is no push/deploy performed by local validation.
+then bootstraps Ubuntu, synchronizes the exact source revision and the production
+dotenv from GitHub Secrets, and pulls images. The server never compiles source.
+Local validation does not push code or deploy to a real server.
 
 ## Design and reference
 
@@ -23,48 +24,101 @@ and is not necessary for the initial deployment. The existing release workflow
 continues to publish upstream-style images on main; production uses a distinct
 repository-scoped namespace: `ghcr.io/<owner>/<repo>/chatworkai-<service>:sha-<sha>`.
 
-## One-time Ubuntu preparation
+## Configure GitHub once; server bootstrap is automatic
 
-Use Ubuntu with Docker Engine, Compose v2.24+ (or v5), Python 3, Bash, `flock`,
-and host Nginx. Plan at least 8 GB RAM and enough disk for database, backups,
-current and previous images. Database/Redis have no public ports. Only Nginx
-should be internet-facing (80/443); app ports bind to loopback. The executor
-uses a private internal network; only the worker can access it.
+The Ubuntu server needs **Docker Engine + Compose, Nginx, and SSH access**.
+Use x86_64 Ubuntu (images target `linux/amd64`). The SSH account must be able to
+run Docker and write the deploy directory. Root works; a dedicated user can use
+passwordless `sudo -n` for first-run package installation and creating `/opt/chatworkai`.
+The bootstrap installs Git, Python 3, util-linux and CA certificates when missing.
+No host Node.js, pnpm, repository clone, dotenv copy or permanent GHCR login is required.
+Plan at least 8 GB RAM and enough disk for database, backups and current/previous
+images. Only Nginx should be internet-facing; app ports bind to loopback and
+Postgres/Redis have no published ports.
+
+Configure the GitHub **production** environment (Settings → Environments →
+production). Use **Secrets** for all credentials and the full dotenv:
+
+| Setting | Kind | Value |
+| --- | --- | --- |
+| `PROD_HOST` | Secret | Ubuntu IP/DNS name |
+| `PROD_USER` | Secret | SSH user with the permissions above |
+| `PROD_SSH_KEY` | Secret | Dedicated private key; install its public half for the SSH user |
+| `PROD_SSH_KNOWN_HOSTS` | Secret | Independently verified SSH host-key entry |
+| `PROD_ENV_FILE` | Secret | Entire production `.env`, including R2 and application secrets |
+| `PROD_PORT` | Optional secret | SSH port; defaults to `22` |
+| `PROD_DEPLOY_ROOT` | Optional variable | Absolute deploy folder; defaults to `/opt/chatworkai` |
+
+The deploy root must have at least two path segments and contain only letters,
+digits, `_`, `-` and `/`, for example `/opt/chatworkai` or `/home/deploy/chatworkai`.
+Root/system directories and trailing slashes are rejected. Pin the actual server
+host key via a trusted route; do not blindly trust an unverified ssh-keyscan.
+Do not require environment reviewers if unattended releases are desired.
+
+Copy `scripts/deployment/production.env.example` into a **private local file**, fill
+it with production values, then paste its entire content into `PROD_ENV_FILE`.
+Alternatively, upload it without echoing values:
 
 ```bash
-sudo install -d -m 700 -o "$USER" -g "$(id -gn)" /opt/chatworkai
-# Copy scripts/deployment/production.env.example to /opt/chatworkai/.env
-chmod 600 /opt/chatworkai/.env
+gh secret set PROD_ENV_FILE --env production < /private/path/production.env
 ```
 
-Fill the env template with real secrets and **retain existing integration,
-mail, edition and Zalo transport settings** from the current `.env`. The
-example is deployment-specific, not a replacement for all optional settings in
-`.env.example`. Generate separate random secrets; `ENCRYPTION_KEY` is 32 random
-bytes encoded as 64 hex characters. Preserve the existing encryption key and
-auth secrets when upgrading. URI-encode the password in `DATABASE_URL`.
+This secret is the source of truth; stale application env exported by the SSH
+account is excluded when Compose runs. To change mail/provider settings or another
+ordinary env value, edit the GitHub secret and rerun the workflow on `dev`; no SSH
+session or new code commit is needed. GitHub's per-secret size limit is 48 KB.
+Use dotenv quoting: values containing literal `$` must be single-quoted so Compose
+does not interpolate them. Do not put this dotenv in GitHub Variables, the Git
+repository, Docker build arguments, logs, artifacts or caches. See
+[GitHub Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets).
 
-If adopting an existing installation, inventory containers and volumes first.
-Set `POSTGRES_VOLUME_NAME` and `REDIS_VOLUME_NAME` to the actual existing names.
-Do not start a second Postgres against a live volume. Stop the old datastore
-containers during the planned one-time adoption, retaining volumes and backups.
-Match the existing Postgres/Timescale major and extension version before
-adoption; this Compose file follows the repository's existing PG18 image.
-Normal deploys use `--no-recreate` for datastores and never pull/upgrade them.
-Pin the verified datastore image digest before a separate database upgrade.
+Retain existing application/integration settings from `.env.example` as needed.
+Generate separate strong secrets. `ENCRYPTION_KEY` is 32 random bytes encoded as
+64 hex characters. Preserve the existing encryption key and database credentials
+when adopting an installation; URI-encode passwords in `DATABASE_URL`.
 
-Install the dedicated Actions SSH public key in the deploy user's
-`authorized_keys`. Docker group membership is effectively root access; use a
-dedicated deploy account. Log that account into GHCR with a read-packages token
-via `docker login ghcr.io --password-stdin` if images are private. Pin the host
-key verified via an independent trusted route; do not blindly trust ssh-keyscan.
+### What each workflow run does
 
-In GitHub environment **production**, configure secrets `PROD_HOST`,
-`PROD_USER`, `PROD_PORT` (default 22), `PROD_SSH_KEY`, and
-`PROD_SSH_KNOWN_HOSTS`. Optional environment variable `PROD_DEPLOY_ROOT`
-defaults to `/opt/chatworkai`. No required reviewers on this environment if
-unattended releases are desired. Secrets stay on the host; they are never
-passed as Docker build arguments or bundled in release artifacts.
+1. Runs CI and builds revision-addressed images on GitHub, keeping existing SHA tags.
+2. Streams dotenv, the job-scoped GitHub token, bootstrap script and migration
+   fingerprint directly through verified SSH stdin into a mode-0700 temp directory.
+3. Creates the deploy root; installs missing bootstrap tools; takes host locks.
+4. Clones this repository into `repo/` if missing. Otherwise it fetches and checks
+   out the **exact CI-tested SHA**, rather than pulling a moving branch. Dirty or
+   wrong-repository checkouts fail instead of being reset or deleted.
+5. Exports the verified revision's Compose/deployment scripts to
+   `releases/<sha>-<run-id>-<attempt>/` and installs that
+   release's dotenv with mode `0600`. The full source lives in `repo/`, avoiding
+   a copy of the large source/snapshot tree per release. `.env` is never sourced as shell code.
+6. Authenticates to GHCR with the job token using a temporary Docker config,
+   validates env, pulls/verifies images, backs up the DB, runs approved migrations
+   and any explicitly approved first-install seed, and starts/checks the services.
+7. On success, switches `current` and the root `.env` link. On an activation failure,
+   restores the previous image **and env**. An env change on a rerun of the same
+   commit remains a separate deployment and preserves the previous dotenv.
+8. Deletes temporary token, askpass and registry config files on exit, including
+   error exits. No permanent Git or GHCR credentials are left on the host.
+
+The automatic job token has `contents: read` and `packages: read`. No PAT or
+server Git deploy key is needed for this repository. Repository-created GHCR
+packages must grant this repository's Actions access (normally inherited from
+the image source association). See [GHCR authentication](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+Changing an existing database's password/name/user, connection URL, data-volume
+identity or application encryption key is not an ordinary dotenv update. The
+transition validator rejects those changes before pulling/replacing services;
+perform a separately planned credential/data migration instead. This prevents a
+new secret value from disconnecting the old database or making saved tokens unreadable.
+
+### Adopting an existing installation
+
+Inventory existing volumes first. Set `POSTGRES_VOLUME_NAME` and
+`REDIS_VOLUME_NAME` in the GitHub dotenv to the actual names. Never run two
+Postgres processes against the same live volume: stop the old datastore
+containers in a planned one-time cutover, preserving data/backups. Match existing
+Postgres/Timescale versions; this Compose follows the repository's PG18 image.
+Normal releases use `--no-recreate` for datastores and never pull/upgrade them.
+An installation with real data should keep `INITIAL_SEED_APPROVED=false`.
 
 ## R2 setup and private/public separation
 
@@ -130,22 +184,25 @@ migration are ready.
 ## Deployment, migration approvals and recovery
 
 After setup, a dev push automatically runs CI, builds/pushes SHA images and
-activates the release. No source checkout or Git credentials are needed on the
-host. The workflow serializes the entire pipeline, and the host has separate
+activates the release. The source checkout and temporary Git authentication are managed automatically. The workflow serializes the entire pipeline, and the host has separate
 activation/data-operation locks. Failed pull, revision mismatch, invalid env
 or unapproved migration stops before application replacement. Backups use
 `pg_dump -Fc` and `pg_restore --list`; archive validation is not a restore drill.
 
 The repository requires explicit approval before applying migrations. Review
 pending SQL, compute `node scripts/deployment/migration-digest.mjs`, and set
-`APPROVED_MIGRATION_DIGEST` in the host env to that exact fingerprint. This is
-also required for first deployment. An unchanged migration fingerprint needs
+`APPROVED_MIGRATION_DIGEST` inside the GitHub `PROD_ENV_FILE` secret to that exact fingerprint. This is
+also required for first deployment. The Actions summary displays this non-secret
+fingerprint so approval can be configured entirely in GitHub after SQL review.
+An unchanged migration fingerprint needs
 no further approval and releases are unattended. An unapproved schema change
 fails safely; do not treat this as a fully automatic migration approval. Review
 backward compatibility before approving: image rollback does not undo schema
-changes. First-install seed is a separate, explicitly approved operation using
-the builder image's `seed` command after migration (see the existing root
-README and database seed documentation); normal releases never reseed data.
+changes. For a new empty installation, set `INITIAL_SEED_APPROVED=true` in the
+GitHub dotenv to explicitly approve the one-time `seed` command after migrations.
+The seed completion marker prevents reseeding after a failed first activation;
+normal upgrades with an existing current release never seed again. Leave it
+false when adopting an existing database.
 
 A deploy starts/reuses datastores, creates and verifies a DB backup, runs
 approved migrations, then starts executor, builder, realtime, MCP, gateway and
@@ -156,17 +213,19 @@ real inbound/outbound message and queue progression as the initial smoke test.
 
 State is in `/opt/chatworkai/current`, `/opt/chatworkai/previous`, and
 `state/migrations.sha256`. Failed activations return nonzero to Actions;
-detailed logs are retained in `logs/deploy-<sha>.log` with private permissions.
+detailed logs are retained in `logs/bootstrap-<sha>-<run-id>-<attempt>.log` with private permissions.
 
 ```bash
-# Use the host script from the current release.
+# Use the latest synchronized management code, also after rolling back to an older release.
 cd /opt/chatworkai
-./current/scripts/deployment/production.sh check
-./current/scripts/deployment/production.sh backup
-./current/scripts/deployment/production.sh rollback
+./repo/scripts/deployment/production.sh check
+./repo/scripts/deployment/production.sh backup
+./repo/scripts/deployment/production.sh rollback
 ```
 
-Keep current/previous release bundles and image tags. The script never runs
+For a custom root, export `CHATWORK_DEPLOY_ROOT` before management commands.
+Keep current/previous release directories (including their private dotenv files)
+and image tags. The root `.env` is a link to the successful active release. The script never runs
 `compose down`, deletes volumes, globally prunes images, or restores the DB.
 Schedule daily backups through the host's existing backup manager, copy dumps
 to encrypted off-host storage, set retention for dumps/logs/images, and test a

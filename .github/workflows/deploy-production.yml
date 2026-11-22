@@ -59,7 +59,8 @@ jobs:
         if: matrix.service == 'builder'
         run: |
           bash -n scripts/deployment/production.sh
-          python3 -m py_compile scripts/deployment/validate-production.py
+          bash -n scripts/deployment/bootstrap.sh
+          python3 -m py_compile scripts/deployment/validate-production.py scripts/deployment/compare-production.py
           node --test scripts/deployment/*.test.mjs deploy/r2/*.test.mjs
       - name: Resolve Dockerfile
         id: dockerfile
@@ -103,33 +104,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: production
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Package exact release and configure SSH
+      - name: Configure SSH and stage private configuration
         env:
           PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
           PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+          PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
+          DEPLOY_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+          umask 077
           : "${PROD_SSH_KEY:?Missing PROD_SSH_KEY}"
           : "${PROD_SSH_KNOWN_HOSTS:?Missing verified PROD_SSH_KNOWN_HOSTS}"
-          install -d -m 700 "$HOME/.ssh"
+          : "${PROD_ENV_FILE:?Missing PROD_ENV_FILE production dotenv secret}"
+          install -d -m 700 "$HOME/.ssh" "$RUNNER_TEMP/chatworkai-private"
           printf '%s\n' "$PROD_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/production"
           printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/production" "$HOME/.ssh/known_hosts"
-          node scripts/deployment/migration-digest.mjs > migrations.sha256
-          printf 'ghcr.io/%s\n' "${GITHUB_REPOSITORY,,}" > image-prefix
-          tar -czf "$RUNNER_TEMP/release.tar.gz" docker-compose.production.yml scripts/deployment/production.sh scripts/deployment/validate-production.py migrations.sha256 image-prefix
-      - name: Transfer and activate release
+          printf '%s\n' "$PROD_ENV_FILE" > "$RUNNER_TEMP/chatworkai-private/production.env"
+          printf '%s' "$DEPLOY_TOKEN" > "$RUNNER_TEMP/chatworkai-private/github-token"
+          cp scripts/deployment/bootstrap.sh "$RUNNER_TEMP/chatworkai-private/bootstrap.sh"
+          node scripts/deployment/migration-digest.mjs > "$RUNNER_TEMP/chatworkai-private/migrations.sha256"
+          printf 'Migration fingerprint (approve only after reviewing SQL): %s\n' "$(cat "$RUNNER_TEMP/chatworkai-private/migrations.sha256")" >> "$GITHUB_STEP_SUMMARY"
+      - name: Bootstrap host, synchronize code and env, and activate
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           PROD_USER: ${{ secrets.PROD_USER }}
           PROD_PORT: ${{ secrets.PROD_PORT }}
-          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           DEPLOY_ROOT: ${{ vars.PROD_DEPLOY_ROOT || '/opt/chatworkai' }}
         shell: bash
         run: |
@@ -140,31 +150,24 @@ jobs:
           [[ "$PROD_HOST" =~ ^[a-zA-Z0-9.-]+$ ]] || exit 1
           [[ "$PROD_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || exit 1
           [[ "$PROD_PORT" =~ ^[0-9]+$ ]] || exit 1
-          [[ "$DEPLOY_ROOT" =~ ^/[a-zA-Z0-9/_-]+$ ]] || exit 1
-          ssh_opts=(-i "$HOME/.ssh/production" -p "$PROD_PORT" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          [[ "$DEPLOY_ROOT" =~ ^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)+$ ]] || exit 1
+          ssh_opts=(-i "$HOME/.ssh/production" -p "$PROD_PORT" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
+          # The receiver contains no single quotes. Metadata is separately quoted
+          # and validated by bootstrap.sh before it is used as a path or URL.
+          # shellcheck disable=SC2016
+          receiver='set -Eeuo pipefail; umask 077; session=$(mktemp -d); cleanup() { rm -rf -- "$session"; }; trap cleanup EXIT; trap "exit 130" INT; trap "exit 143" TERM HUP; tar -xz -C "$session"; bash "$session/bootstrap.sh" "$1" "$2" "$3" "$4" "$session"'
+          # Secrets travel only through SSH stdin; no artifact, cache or command-line value.
           # shellcheck disable=SC2029
-          ssh "${ssh_opts[@]}" "$PROD_USER@$PROD_HOST" "umask 077; mkdir -p '$DEPLOY_ROOT/incoming'"
-          scp -i "$HOME/.ssh/production" -P "$PROD_PORT" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            "$RUNNER_TEMP/release.tar.gz" "$PROD_USER@$PROD_HOST:$DEPLOY_ROOT/incoming/$RELEASE_SHA.tar.gz"
-          # shellcheck disable=SC2029
-          ssh "${ssh_opts[@]}" "$PROD_USER@$PROD_HOST" "bash -s -- '$DEPLOY_ROOT' '$RELEASE_SHA'" <<'REMOTE'
-          set -Eeuo pipefail
-          umask 077
-          root="$1"; sha="$2"
-          mkdir -p "$root/releases/$sha" "$root/logs"
-          # A second lock covers extraction, including manual operations that use
-          # this activation entry point. production.sh owns the datastore lock.
-          exec 8>"$root/activation.lock"
-          flock -n 8
-          tar -xzf "$root/incoming/$sha.tar.gz" -C "$root/releases/$sha"
-          rm "$root/incoming/$sha.tar.gz"
-          if CHATWORK_DEPLOY_ROOT="$root" bash "$root/releases/$sha/scripts/deployment/production.sh" deploy "$sha" >"$root/logs/deploy-$sha.log" 2>&1; then
-            echo "Release $sha passed host readiness checks"
+          if tar -cz -C "$RUNNER_TEMP/chatworkai-private" production.env github-token bootstrap.sh migrations.sha256 | \
+            ssh "${ssh_opts[@]}" "$PROD_USER@$PROD_HOST" "bash -c '$receiver' -- '$DEPLOY_ROOT' '$RELEASE_ID' '$GITHUB_REPOSITORY' '$GITHUB_ACTOR'"; then
+            echo "Deployment $RELEASE_ID passed host checks"
           else
-            echo 'Deployment failed; diagnostics are retained in the restricted host deploy log' >&2
+            echo 'Deployment failed; inspect restricted bootstrap/deploy logs on the host' >&2
             exit 1
           fi
-          REMOTE
-      - name: Remove runner SSH credentials
+      - name: Remove runner deployment secrets
         if: always()
-        run: rm -f "$HOME/.ssh/production" "$HOME/.ssh/known_hosts"
+        shell: bash
+        run: |
+          rm -f "$HOME/.ssh/production" "$HOME/.ssh/known_hosts"
+          rm -rf -- "$RUNNER_TEMP/chatworkai-private"
