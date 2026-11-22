@@ -255,3 +255,53 @@ test("migration fingerprint is stable and covers checked-in SQL", () => {
     first,
   )
 })
+
+test("executor tmpfs options remain one absolute mount after Compose parsing", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chatwork-compose-"))
+  try {
+    const dotenv = join(dir, "fixture.env")
+    writeFileSync(dotenv, "# Synthetic Compose validation only\n", {
+      mode: 0o600,
+    })
+    const config = JSON.parse(
+      execFileSync(
+        "docker",
+        [
+          "compose",
+          "--env-file",
+          dotenv,
+          "-f",
+          resolve("docker-compose.production.yml"),
+          "config",
+          "--format",
+          "json",
+        ],
+        {
+          encoding: "utf8",
+          env: {
+            PATH: process.env.PATH,
+            HOME: process.env.HOME,
+            CHATWORK_ENV_FILE: dotenv,
+            CHATWORK_RELEASE_SHA: "a".repeat(40),
+            CHATWORK_IMAGE_PREFIX: "ghcr.io/fixture/chatworkai",
+            APP_URL: "https://app.example.test",
+            DATABASE_URL: "postgresql://fixture:fixture@postgres:5432/fixture",
+            NEXT_PUBLIC_STORAGE_URL: "https://media.example.test/",
+            S3_ENDPOINT: `https://${"a".repeat(32)}.r2.cloudflarestorage.com`,
+            S3_BUCKET: "fixture",
+            S3_ACCESS_KEY_ID: "fixture",
+            S3_SECRET_ACCESS_KEY: "fixture",
+            REALTIME_BROADCAST_SECRET: "b".repeat(32),
+            JAVASCRIPT_EXECUTOR_TOKEN: "c".repeat(32),
+            POSTGRES_PASSWORD: "d".repeat(32),
+          },
+        },
+      ),
+    )
+    assert.deepEqual(config.services["javascript-executor"].tmpfs, [
+      "/tmp:size=16m,noexec,nosuid,nodev",
+    ])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
