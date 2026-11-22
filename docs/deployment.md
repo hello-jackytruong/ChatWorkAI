@@ -91,7 +91,7 @@ when adopting an installation; URI-encode passwords in `DATABASE_URL`.
    release's dotenv with mode `0600`. The full source lives in `repo/`, avoiding
    a copy of the large source/snapshot tree per release. `.env` is never sourced as shell code.
 6. Authenticates to GHCR with the job token using a temporary Docker config,
-   validates env, pulls/verifies images, backs up the DB, runs approved migrations
+   validates env, pulls/verifies images, backs up the DB, runs pending migrations
    and any explicitly approved first-install seed, and starts/checks the services.
 7. On success, switches `current` and the root `.env` link. On an activation failure,
    restores the previous image **and env**. An env change on a rerun of the same
@@ -181,31 +181,29 @@ placeholder R2 credentials. Local RustFS Compose remains available for offline
 development; use the same real R2 settings in local `.env` when credentials and
 migration are ready.
 
-## Deployment, migration approvals and recovery
+## Deployment, automatic migrations and recovery
 
 After setup, a dev push automatically runs CI, builds/pushes SHA images and
 activates the release. The source checkout and temporary Git authentication are managed automatically. The workflow serializes the entire pipeline, and the host has separate
 activation/data-operation locks. Failed pull, revision mismatch, invalid env
-or unapproved migration stops before application replacement. Backups use
+or failed migration stops before application replacement. Backups use
 `pg_dump -Fc` and `pg_restore --list`; archive validation is not a restore drill.
 
-The repository requires explicit approval before applying migrations. Review
-pending SQL, compute `node scripts/deployment/migration-digest.mjs`, and set
-`APPROVED_MIGRATION_DIGEST` inside the GitHub `PROD_ENV_FILE` secret to that exact fingerprint. This is
-also required for first deployment. The Actions summary displays this non-secret
-fingerprint so approval can be configured entirely in GitHub after SQL review.
-An unchanged migration fingerprint needs
-no further approval and releases are unattended. An unapproved schema change
-fails safely; do not treat this as a fully automatic migration approval. Review
-backward compatibility before approving: image rollback does not undo schema
-changes. For a new empty installation, set `INITIAL_SEED_APPROVED=true` in the
+Production deployment runs the migration runner after a verified backup on every
+release. The runner records applied migrations in the database and executes only
+pending SQL; no migration approval environment variable is needed. The migration
+fingerprint is retained as diagnostic metadata, not as an approval gate. This is
+the explicitly selected production automation policy; local/manual database
+operations still follow the repository's approval rules. Image rollback does not
+undo database schema changes, so migrations should remain backward-compatible.
+For a new empty installation, set `INITIAL_SEED_APPROVED=true` in the
 GitHub dotenv to explicitly approve the one-time `seed` command after migrations.
 The seed completion marker prevents reseeding after a failed first activation;
 normal upgrades with an existing current release never seed again. Leave it
 false when adopting an existing database.
 
 A deploy starts/reuses datastores, creates and verifies a DB backup, runs
-approved migrations, then starts executor, builder, realtime, MCP, gateway and
+pending migrations, then starts executor, builder, realtime, MCP, gateway and
 worker with readiness waits. If activation fails, it attempts all previous app
 images; on first-release failure it stops the partial app set. Running worker
 checks establish process liveness, not successful queue throughput; verify a

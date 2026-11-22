@@ -11,7 +11,7 @@ dependencies: ["Items 1–9", "Explicit approval before applying migration"]
 
 ## Execution status
 
-Implementation and static verification passed on 2026-11-21. Approved staging verified real PostgreSQL anchor contention, group text send/receive, sender metadata, self-echo reconciliation, outgoing quotes and image/file delivery. Evidence and exact limits: [staging verification](./reports/staging-verification-2026-11-21.md). Additional lifecycle observation remains tracked in Phase 16.
+Implementation and static verification passed on 2026-11-21. Approved staging verified real PostgreSQL anchor contention, group text send/receive, sender metadata, self-echo reconciliation, outgoing quotes and image/file delivery. Evidence and exact limits: private staging records (not included in this repository). Additional lifecycle observation remains tracked in Phase 16.
 
 ## Goal
 

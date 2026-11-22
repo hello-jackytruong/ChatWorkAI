@@ -116,11 +116,6 @@ case "$command" in
   deploy)
     digest="$(cat "$RELEASE_DIR/migrations.sha256")"
     [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || fail 'Invalid migration digest'
-    applied="$(cat "$STATE/migrations.sha256" 2>/dev/null || true)"
-    if [[ "$digest" != "$applied" ]]; then
-      approved="$(read_env_key APPROVED_MIGRATION_DIGEST)"
-      [[ "$approved" == "$digest" ]] || fail "Migration approval required: review SQL and set APPROVED_MIGRATION_DIGEST=$digest"
-    fi
     previous="$(basename "$(readlink -f "$ROOT/current" 2>/dev/null || true)")"
     validate_transition "$previous"
     # Pull before touching live containers; verify the revision of every image.
@@ -133,11 +128,10 @@ case "$command" in
     # Existing datastores are never recreated by a normal release.
     "${COMPOSE[@]}" up -d --no-recreate --wait --wait-timeout 180 postgres redis
     backup
-    if [[ "$digest" != "$applied" ]]; then
-      "${COMPOSE[@]}" run --rm --no-deps builder migrate
-      printf '%s\n' "$digest" >"$STATE/migrations.sha256.next"
-      mv "$STATE/migrations.sha256.next" "$STATE/migrations.sha256"
-    fi
+    # The migration runner tracks applied SQL and only executes pending migrations.
+    "${COMPOSE[@]}" run --rm --no-deps builder migrate
+    printf '%s\n' "$digest" >"$STATE/migrations.sha256.next"
+    mv "$STATE/migrations.sha256.next" "$STATE/migrations.sha256"
     if [[ ! "$previous" =~ $RELEASE_PATTERN && ! -e "$STATE/seeded" && "$(read_env_key INITIAL_SEED_APPROVED)" == true ]]; then
       "${COMPOSE[@]}" run --rm --no-deps builder seed
       touch "$STATE/seeded"

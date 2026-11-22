@@ -22,7 +22,7 @@ const DIGEST = /^[0-9a-f]{64}\n$/
 // provide the GNU command semantics missing on a developer Mac.
 for (const scenario of [
   "success",
-  "unapproved",
+  "no-approval-env",
   "backup-failed",
   "activation-failed",
   "revision-mismatch",
@@ -101,12 +101,6 @@ for (const scenario of [
           services: {
             builder: {
               environment: {
-                APPROVED_MIGRATION_DIGEST: [
-                  "unapproved",
-                  "unchanged-schema",
-                ].includes(scenario)
-                  ? ""
-                  : digest,
                 INITIAL_SEED_APPROVED: ["fresh-seed", "seed-failed"].includes(
                   scenario,
                 )
@@ -171,6 +165,7 @@ esac
         result.status === 0,
         [
           "success",
+          "no-approval-env",
           "unchanged-schema",
           "env-update-same-commit",
           "fresh-seed",
@@ -203,8 +198,8 @@ esac
           "OLD_ENV=1\n",
         )
       }
-      if (scenario === "unapproved") {
-        assert.ok(!calls.includes("pull "))
+      if (scenario === "no-approval-env") {
+        assert.ok(calls.includes("builder migrate"))
       }
       if (scenario === "revision-mismatch") {
         assert.ok(!calls.includes("pg_dump"))
@@ -213,7 +208,7 @@ esac
         assert.ok(!calls.includes("up -d --no-build"))
       }
       if (scenario === "unchanged-schema") {
-        assert.ok(!calls.includes("builder migrate"))
+        assert.ok(calls.includes("builder migrate"))
       }
       if (scenario === "backup-failed") {
         assert.ok(!calls.includes("builder migrate"))

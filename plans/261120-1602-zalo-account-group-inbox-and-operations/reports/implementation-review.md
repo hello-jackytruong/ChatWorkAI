@@ -8,7 +8,7 @@ The review covered the group anchor/customer boundary, typed automation audience
 policy epochs, canonical sends/recovery, friend counter/cache ledger, lifecycle
 ordering, public/private permissions, safe projections, migrations and generated
 CLI/MCP contracts. No unresolved security finding was identified in this reviewed
-scope. Subsequent approved staging verification and runtime fixes are recorded in the [staging report](./staging-verification-2026-11-21.md); only its explicitly observed live cases are claimed.
+scope. Subsequent approved staging verification and runtime fixes are recorded in the private staging records (not included in this repository); only its explicitly observed live cases are claimed.
 
 | Finding | Resolution and evidence |
 |---|---|

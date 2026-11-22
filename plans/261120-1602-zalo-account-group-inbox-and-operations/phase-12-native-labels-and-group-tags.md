@@ -11,7 +11,7 @@ dependencies: ["Phases 10–11"]
 
 ## Execution status
 
-Implementation and static verification passed on 2026-11-21. Evidence: [progress](./reports/implementation-progress.md) and [review](./reports/implementation-review.md). Live provider/database/instance checks remain under Phase 16 and are not claimed as completed.
+Implementation and static verification passed on 2026-11-21. Evidence: [review](./reports/implementation-review.md). Live provider/database/instance checks remain under Phase 16 and are not claimed as completed.
 
 ## Goal
 

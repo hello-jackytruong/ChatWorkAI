@@ -84,7 +84,7 @@ Read and diff the generated SQL/snapshot. Never run `db:migrate` without a separ
 
 ## Acceptance criteria
 
-Checked items have source/contract/unit/static verification. Migration approval/application, real anchor contention and built CLI/MCP checks have now passed on the approved staging workspace. Live observations and remaining lifecycle limits are recorded in the [staging report](./reports/staging-verification-2026-11-21.md).
+Checked items have source/contract/unit/static verification. Migration approval/application, real anchor contention and built CLI/MCP checks have now passed on the approved staging workspace. Live observations and remaining lifecycle limits are recorded in the private staging records (not included in this repository).
 
 - [x] Each receive-enabled group has exactly one Inbox conversation; messages from different members do not create member Contacts or extra conversations.
 - [x] Group sender UID/name, mentions, reply IDs, supported image/file attachments, self echoes, and scoped dedupe survive WebSocket → gateway → worker → Message → realtime.

@@ -133,7 +133,7 @@ jobs:
           printf '%s' "$DEPLOY_TOKEN" > "$RUNNER_TEMP/chatworkai-private/github-token"
           cp scripts/deployment/bootstrap.sh "$RUNNER_TEMP/chatworkai-private/bootstrap.sh"
           node scripts/deployment/migration-digest.mjs > "$RUNNER_TEMP/chatworkai-private/migrations.sha256"
-          printf 'Migration fingerprint (approve only after reviewing SQL): %s\n' "$(cat "$RUNNER_TEMP/chatworkai-private/migrations.sha256")" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Migration fingerprint (diagnostic): %s\n' "$(cat "$RUNNER_TEMP/chatworkai-private/migrations.sha256")" >> "$GITHUB_STEP_SUMMARY"
       - name: Bootstrap host, synchronize code and env, and activate
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}

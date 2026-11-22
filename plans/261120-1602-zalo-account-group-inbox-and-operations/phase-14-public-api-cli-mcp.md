@@ -11,7 +11,7 @@ dependencies: ["Phases 11–13"]
 
 ## Execution status
 
-Implementation and static verification passed on 2026-11-21. Scoped public API sends/sync/tags and built CLI/MCP status calls passed against the approved staging API. MCP semantic discovery and exact tool-name discovery returned the correct status tool. Client checks used a temporary loopback TLS bridge for staging's FORCE_PUBLIC_HTTPS setting; no public API allowlist was widened. Evidence and limits: [staging verification](./reports/staging-verification-2026-11-21.md).
+Implementation and static verification passed on 2026-11-21. Scoped public API sends/sync/tags and built CLI/MCP status calls passed against the approved staging API. MCP semantic discovery and exact tool-name discovery returned the correct status tool. Client checks used a temporary loopback TLS bridge for staging's FORCE_PUBLIC_HTTPS setting; no public API allowlist was widened. Evidence and limits: private staging records (not included in this repository).
 
 ## Goal
 

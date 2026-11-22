@@ -34,6 +34,6 @@ Real provider checks passed for direct/group text, incoming group text, self ech
 
 Media testing found a real environment blocker: app-dev's Basic Auth protects its public storage URL and download preparation received 401. The user separately approved a temporary GET/HEAD exception for only the test workspace. Real image and file sends then passed. Restored and reloaded the exact original Caddy configuration, verified 401 again, removed temporary library assets and revoked all temporary tokens. Regular protected staging media URLs still require a suitable public storage/CDN route; the exception was not left enabled.
 
-Observed native quote metadata, reaction additions and an incoming undo with a durable tombstone. Reaction removal has not yet produced a matching event; requested the operator's actual removal and kept Phase 16 open rather than claiming it passed. Detailed current evidence and limits are in [the staging report](../261120-1602-zalo-account-group-inbox-and-operations/reports/staging-verification-2026-11-21.md).
+Observed native quote metadata, reaction additions and an incoming undo with a durable tombstone. Reaction removal has not yet produced a matching event; requested the operator's actual removal and kept Phase 16 open rather than claiming it passed. Detailed current evidence and limits are in private staging records (not included in this repository).
 
 > Historical work record — not durable authority. Prefer docs/specs/ADRs for current decisions.

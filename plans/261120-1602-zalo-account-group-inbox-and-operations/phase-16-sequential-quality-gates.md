@@ -11,7 +11,7 @@ dependencies: ["Phases 10–15"]
 
 ## Execution status
 
-All repository gates passed again after five reported runtime fixes: 38,178 tests, lint, 70 type tasks and 7 production build tasks. Approved migrations, live PostgreSQL cases, direct/group sends, incoming text, quotes, self echo, typing acknowledgement, native/local tags, image/file delivery, reaction adds and undo were observed. Reaction removal remains unconfirmed; no removal event was observed yet. Evidence and limits: [staging verification](./reports/staging-verification-2026-11-21.md). Production cohort enablement is outside the staging authorization.
+All repository gates passed again after five reported runtime fixes: 38,178 tests, lint, 70 type tasks and 7 production build tasks. Approved migrations, live PostgreSQL cases, direct/group sends, incoming text, quotes, self echo, typing acknowledgement, native/local tags, image/file delivery, reaction adds and undo were observed. Reaction removal remains unconfirmed; no removal event was observed yet. Evidence and limits: private staging records (not included in this repository). Production cohort enablement is outside the staging authorization.
 
 ## Goal
 
