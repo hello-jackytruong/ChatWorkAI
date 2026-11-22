@@ -193,6 +193,94 @@
   "errors": {
     "superAdminRequired": "Vous devez être super-administrateur de l’espace de travail pour effectuer cette action."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Traduction des conversations",
+      "description": "Traduisez les messages de vos clients pour votre équipe, et vos réponses pour vos clients, directement dans la boîte de réception.",
+      "saved": "Paramètres de traduction enregistrés",
+      "readOnly": "Seuls les administrateurs de l'espace de travail peuvent modifier ces paramètres.",
+      "languageHint": "C'est aussi la langue dans laquelle les messages des clients sont traduits lorsque la traduction des conversations est activée.",
+      "alert": {
+        "needsReconfiguration": "Reconfiguration nécessaire : l'intégration d'IA a été supprimée ou désactivée.",
+        "noIntegration": "Connectez d'abord une intégration d'IA pour utiliser la traduction.",
+        "connect": "Connecter l'IA"
+      },
+      "enabled": {
+        "label": "Traduire les conversations",
+        "description": "Les messages des clients ne sont traduits que lorsque quelqu'un ouvre la conversation. Le texte du chat est envoyé au fournisseur d'IA que vous choisissez et facturé sur votre clé d'IA."
+      },
+      "integration": {
+        "label": "Intégration d'IA",
+        "description": "Seuls les fournisseurs d'IA connectés sont listés."
+      },
+      "test": {
+        "label": "Tester la connexion",
+        "button": "Tester",
+        "result": "Terminé en {seconds} s : « {sample} » → « {translated} »",
+        "slow": "Ce modèle est lent : les messages sortants risquent de ne pas être traduits à temps et ne seront alors pas envoyés.",
+        "failed": "Le test a échoué."
+      }
+    },
+    "message": {
+      "translating": "Traduction en cours…",
+      "stillWaiting": "Toujours en attente de la traduction",
+      "requestAgain": "Redemander",
+      "failed": "Traduction impossible",
+      "translatedFrom": "Traduit de {language}. Afficher l'original",
+      "translatedFromNoLanguage": "Traduit. Afficher l'original",
+      "sentIn": "Envoyé en {language}. Afficher ce qui a été envoyé",
+      "sentInNoLanguage": "Envoyé traduit. Afficher ce qui a été envoyé",
+      "hideOriginal": "Masquer l'original",
+      "hideSent": "Masquer ce qui a été envoyé",
+      "translatedLabelNoLanguage": "Traduit",
+      "sentLabelNoLanguage": "Envoyé traduit"
+    },
+    "badge": {
+      "tooltip": "Langue du client : {language}"
+    },
+    "panel": {
+      "title": "Paramètres de traduction",
+      "statusOn": "Activée",
+      "statusOff": "Désactivée",
+      "translateConversation": "Traduire cette conversation",
+      "translateConversationHint": "Traduire les messages automatiquement",
+      "botActiveHint": "Le bot gère cette conversation, la traduction est donc désactivée. Activez-la pour la traduire.",
+      "botPausedHint": "Vous avez repris cette conversation au bot, la traduction reste donc désactivée. Activez-la pour la traduire.",
+      "displayOptions": "Options d'affichage",
+      "showOriginals": "Afficher le texte original",
+      "previewBeforeSending": "Prévisualiser la traduction avant l'envoi"
+    },
+    "composer": {
+      "hintUnknown": "Langue non détectée · Envoi tel quel",
+      "hintDetecting": "Détection de la langue du client…",
+      "chip": {
+        "aria": "Langue de traduction",
+        "target": "→ {language}",
+        "sameLanguage": "Même langue que l'espace de travail",
+        "unknown": "Langue inconnue",
+        "hasFiles": "Les messages avec fichiers ne sont pas traduits",
+        "off": "Traduction désactivée"
+      },
+      "popover": {
+        "customerLanguage": "Langue du client",
+        "chooseLanguage": "Choisir une langue"
+      },
+      "preview": {
+        "title": "Aperçu client · {language}",
+        "translating": "Traduction en cours…",
+        "needsRetranslate": "À traduire de nouveau",
+        "retranslate": "Traduire à nouveau",
+        "failed": "Traduction impossible : une nouvelle tentative aura lieu à l'envoi",
+        "done": "Terminé",
+        "ready": "Prête à l'envoi"
+      }
+    },
+    "send": {
+      "translating": "Traduction…",
+      "failed": "Échec de la traduction",
+      "turnedOff": "Traduction indisponible. La traduction a été désactivée pour cette conversation."
+    }
+  },
   "states": {
     "success": "Réussite",
     "error": "Erreur",
@@ -7418,6 +7506,7 @@
       "resourcesTitle": "Ressources installées",
       "noResources": "Rien n'a encore été créé.",
       "deletedResource": "Ressource supprimée",
+      "wholeCategory": "{count, plural, one {# élément} other {# éléments}}",
       "viewOnly": "Lecture seule",
       "created": "Créé",
       "reused": "Réutilisé",
@@ -7472,7 +7561,12 @@
           "placeCategories": "Catégories de lieux"
         }
       },
-      "viewOnlyCopyIncluded": "Un élément sélectionné (ou un élément dont il dépend) a été installé depuis un modèle en lecture seule et ne peut pas être partagé dans un nouveau modèle."
+      "viewOnlyCopyIncluded": "Un élément sélectionné (ou un élément dont il dépend) a été installé depuis un modèle en lecture seule et ne peut pas être partagé dans un nouveau modèle.",
+      "miniAppPublishedExcluded": {
+        "title": "Mini App exclue",
+        "hint": "Ces flux utilisent une Mini App publiée sur WhatsApp. Elle ne peut pas être partagée : le modèle l'exclut et l'installation supprime cette référence.",
+        "item": "{flowName} : {miniAppName}"
+      }
     },
     "categories": {
       "flows": "Flux",
@@ -7494,7 +7588,20 @@
       "aiFiles": "Fichiers de connaissances IA",
       "questionnaires": "Questionnaires",
       "couponTopics": "Thèmes de coupons",
-      "pipelines": "Pipelines"
+      "pipelines": "Pipelines",
+      "magicLinks": "Liens magiques",
+      "polls": "Sondages",
+      "dynamicImages": "Images dynamiques",
+      "placeLocations": "Lieux",
+      "miniApps": "Mini-applications",
+      "minigames": "Mini-jeux",
+      "leaderboards": "Classements",
+      "openHours": "Horaires d'ouverture",
+      "vendors": "Vendeurs",
+      "discountCodes": "Codes de réduction",
+      "storeSettings": "Paramètres de la boutique",
+      "storyAutomations": "Automatisation des stories Instagram",
+      "inboundWebhooks": "Webhook entrant"
     },
     "locked": {
       "flowBanner": "Ce flow a été installé depuis un modèle en lecture seule. Vous pouvez le consulter, mais pas le modifier.",
@@ -7571,6 +7678,7 @@
       "flowNotPublished": "Le Flow a été installé en brouillon et n’est pas publié.",
       "flowSkippedRequiredReference": "Le Flow a été ignoré car une référence obligatoire n’a pas pu être résolue.",
       "folder": "Un élément référencé est introuvable dans cet espace de travail, le lien a donc été supprimé.",
+      "inboundWebhookLimitReached": "Ce webhook entrant a été ignoré : l'espace de travail a déjà atteint le nombre maximal de webhooks entrants.",
       "inboxBindingRequired": "Choisissez une boîte de réception pour ce canal ; d’ici là, l’élément reste inactif.",
       "integration": "Un élément référencé est introuvable dans cet espace de travail, le lien a donc été supprimé.",
       "localModifiedOverwritten": "Un élément modifié localement a été écrasé. Une sauvegarde a été enregistrée et peut être restaurée.",
@@ -7591,7 +7699,25 @@
       "tag": "Un élément référencé est introuvable dans cet espace de travail, le lien a donc été supprimé.",
       "unlisted": "Élément non repris entièrement : {code}",
       "workspaceMember": "Attribué à un membre absent de cet espace de travail.",
-      "workspaceUnavailable": "Cet espace de travail n'est plus disponible, l'élément a donc été ignoré."
+      "workspaceUnavailable": "Cet espace de travail n'est plus disponible, l'élément a donc été ignoré.",
+      "scheduleExpired": "Les dates de cet élément sont déjà passées ; définissez-en de nouvelles avant de l'utiliser.",
+      "linkNotRemapped": "Un lien vers un outil absent du modèle a été laissé tel quel.",
+      "dynamicImage": "Cette image dynamique a été ignorée car son arrière-plan n'a pas pu être copié.",
+      "dynamicImageFieldNotBound": "Choisissez un champ personnalisé pour mettre cette image en cache ; le champ d'origine existait déjà dans votre espace de travail.",
+      "dynamicImageRerenderFailed": "Cette image dynamique a été désactivée car son arrière-plan n'a pas pu être régénéré avec vos liens copiés. Réactivez-la pour réessayer.",
+      "pollImage": "Une image n'a pas pu être copiée.",
+      "leaderboardInvalid": "La configuration de ce classement n'a pas pu être installée, il a donc été ignoré.",
+      "placeLocationInvalid": "Ce lieu a été ignoré car son nom est vide.",
+      "minigame": "Le mini-jeu dont ce classement tire ses points ne fait pas partie du modèle, il a donc été ignoré.",
+      "minigameImage": "Une image n'a pas pu être copiée.",
+      "leaderboardImage": "Une image n'a pas pu être copiée.",
+      "leaderboardHostMissing": "Le classement a besoin d'un canal (ou mini-jeu) propre que cette installation n'a pas fourni, il a donc été ignoré.",
+      "externalStoreSkipped": "Cet espace de travail vend depuis une boutique connectée (Shopify ou WooCommerce) : les produits, vendeurs, codes de réduction, horaires et paramètres de la boutique n'ont donc pas été installés.",
+      "discountCodeSkipped": "Ce code de réduction a été ignoré : les produits ou la catégorie auxquels il s'applique ne font pas partie du modèle, ou ses réglages ont été refusés.",
+      "storeSettingsKept": "Cet espace de travail avait déjà des paramètres de boutique, ils ont été conservés tels quels.",
+      "vendorImage": "Une image n'a pas pu être copiée.",
+      "storeSettingsCurrencyKept": "L'espace de travail a des produits dans une autre devise : sa devise a été conservée à la place de celle du modèle.",
+      "storySelectionRequired": "Sélectionnez à nouveau les stories : les stories d'origine n'ont pas pu être reprises."
     },
     "tabs": {
       "mine": "Mes modèles",
@@ -12084,7 +12210,7 @@
     "add": "Ajouter",
     "addCategory": "Ajouter une catégorie",
     "renameCategory": "Renommer",
-    "editCategories": "Modifier les catégories",
+    "editListing": "Modifier l'entrée",
     "templateId": "ID du modèle",
     "template": "Modèle",
     "categories": "Catégories",
@@ -12092,9 +12218,12 @@
     "close": "Fermer",
     "removeChip": "Retirer {name}",
     "categoriesHint": "Facultatif. Sans catégorie, le modèle n'apparaît que dans « Tous ».",
+    "languages": "Langues",
+    "allLanguages": "Toutes les langues",
+    "languagesHint": "Facultatif. Laissez vide pour afficher le modèle dans toutes les langues.",
     "noCategoriesYet": "Aucune catégorie pour le moment.",
     "added": "Modèle ajouté à la boutique",
-    "updated": "Catégories mises à jour",
+    "updated": "Entrée mise à jour",
     "removed": "Modèle retiré de la boutique",
     "removeError": "Impossible de retirer le modèle",
     "removeTitle": "Retirer {name} ?",
@@ -12142,10 +12271,13 @@
       "search": "Rechercher des modèles",
       "all": "Tous",
       "categories": "Catégories de la boutique",
-      "noResults": "Aucun modèle ne correspond à votre recherche.",
-      "clearSearch": "Effacer la recherche",
+      "noResults": "Aucun modèle ne correspond à vos filtres.",
+      "clearSearch": "Effacer les filtres",
       "by": "Par {publisherName}",
-      "loadFailed": "Impossible de charger les modèles. Réessayez plus tard."
+      "loadFailed": "Impossible de charger les modèles. Réessayez plus tard.",
+      "language": "Langue",
+      "allLanguages": "Toutes les langues",
+      "otherLanguages": "Autres langues"
     },
     "picker": {
       "placeholder": "Choisir un modèle",
@@ -12154,6 +12286,16 @@
       "error": "Impossible de charger les modèles.",
       "retry": "Réessayer",
       "meta": "ID {id} · {workspace}"
+    },
+    "bulk": {
+      "setCategories": "Définir les catégories",
+      "setLanguages": "Définir les langues",
+      "categoriesHint": "Remplace les catégories des modèles sélectionnés ({count}). Laissez vide pour retirer toutes les catégories.",
+      "languagesHint": "Remplace les langues des modèles sélectionnés ({count}). Laissez vide pour les afficher dans toutes les langues.",
+      "updated": "Modèles sélectionnés mis à jour",
+      "removeTitle": "Retirer les modèles sélectionnés ?",
+      "removeDescription": "Sélectionnés : {count}. Ils disparaissent de la boutique ; les modèles eux-mêmes et leurs installations ne sont pas affectés.",
+      "removed": "Modèles sélectionnés retirés de la boutique"
     }
   },
   "accountDeletion": {

@@ -1913,6 +1913,94 @@
     },
     "title": "DeepSeek"
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "会话翻译",
+      "description": "在收件箱中，为团队翻译客户的消息，并为客户翻译你的回复。",
+      "saved": "翻译设置已保存",
+      "readOnly": "只有工作区管理员可以更改这些设置。",
+      "languageHint": "也是开启会话翻译后，客户消息所翻译成的语言。",
+      "alert": {
+        "needsReconfiguration": "需要重新配置：AI 集成已被移除或已关闭。",
+        "noIntegration": "请先连接 AI 集成以使用翻译。",
+        "connect": "连接 AI"
+      },
+      "enabled": {
+        "label": "翻译会话",
+        "description": "仅当有人打开会话时才会翻译客户消息。聊天文本会发送给你选择的 AI 提供商，并按你的 AI 密钥计费。"
+      },
+      "integration": {
+        "label": "AI 集成",
+        "description": "仅列出已连接的 AI 提供商。"
+      },
+      "test": {
+        "label": "测试连接",
+        "button": "测试",
+        "result": "用时 {seconds} 秒：“{sample}” → “{translated}”",
+        "slow": "此模型较慢：发出的消息可能来不及翻译，届时将不会发送。",
+        "failed": "测试失败。"
+      }
+    },
+    "message": {
+      "translating": "正在翻译…",
+      "stillWaiting": "仍在等待翻译",
+      "requestAgain": "重新请求",
+      "failed": "无法翻译",
+      "translatedFrom": "译自{language}。显示原文",
+      "translatedFromNoLanguage": "已翻译。显示原文",
+      "sentIn": "以{language}发送。显示已发送内容",
+      "sentInNoLanguage": "已翻译发送。显示已发送内容",
+      "hideOriginal": "隐藏原文",
+      "hideSent": "隐藏已发送内容",
+      "translatedLabelNoLanguage": "已翻译",
+      "sentLabelNoLanguage": "已翻译发送"
+    },
+    "badge": {
+      "tooltip": "客户语言：{language}"
+    },
+    "panel": {
+      "title": "翻译设置",
+      "statusOn": "开启",
+      "statusOff": "关闭",
+      "translateConversation": "翻译此会话",
+      "translateConversationHint": "自动翻译消息",
+      "botActiveHint": "此会话由机器人处理，因此翻译已关闭。开启后即可翻译此会话。",
+      "botPausedHint": "你已从机器人接管此对话，因此翻译保持关闭。开启即可翻译此对话。",
+      "displayOptions": "显示选项",
+      "showOriginals": "显示原文",
+      "previewBeforeSending": "发送前预览译文"
+    },
+    "composer": {
+      "hintUnknown": "未检测到语言 · 将按原文发送",
+      "hintDetecting": "正在识别客户的语言…",
+      "chip": {
+        "aria": "翻译语言",
+        "target": "→ {language}",
+        "sameLanguage": "与工作区语言相同",
+        "unknown": "语言未知",
+        "hasFiles": "带文件的消息不会被翻译",
+        "off": "翻译已关闭"
+      },
+      "popover": {
+        "customerLanguage": "客户语言",
+        "chooseLanguage": "选择语言"
+      },
+      "preview": {
+        "title": "客户预览 · {language}",
+        "translating": "正在翻译…",
+        "needsRetranslate": "需要重新翻译",
+        "retranslate": "重新翻译",
+        "failed": "无法翻译——发送时会再次尝试",
+        "done": "完成",
+        "ready": "可以发送"
+      }
+    },
+    "send": {
+      "translating": "正在翻译…",
+      "failed": "翻译失败",
+      "turnedOff": "翻译不可用。已为此对话关闭翻译。"
+    }
+  },
   "muse": {
     "autoReply": {
       "description": "激活人工智能自动回复，通过您的业务数据支持的人工智能自然地回复用户。",
@@ -7431,6 +7519,7 @@
       "resourcesTitle": "已安装的资源",
       "noResources": "尚未创建任何内容。",
       "deletedResource": "已删除的资源",
+      "wholeCategory": "{count, plural, one {# 项} other {# 项}}",
       "viewOnly": "仅查看",
       "created": "已创建",
       "reused": "已复用",
@@ -7485,7 +7574,12 @@
           "placeCategories": "地点分类"
         }
       },
-      "viewOnlyCopyIncluded": "你选择的项目（或其依赖的项目）是从仅查看范本安装的，因此无法在新范本中共享。"
+      "viewOnlyCopyIncluded": "你选择的项目（或其依赖的项目）是从仅查看范本安装的，因此无法在新范本中共享。",
+      "miniAppPublishedExcluded": {
+        "title": "已排除的迷你应用",
+        "hint": "这些流程使用了已发布到 WhatsApp 的迷你应用。它无法共享，因此模板不包含它，安装时会移除该引用。",
+        "item": "{flowName}：{miniAppName}"
+      }
     },
     "categories": {
       "flows": "流程",
@@ -7507,7 +7601,20 @@
       "aiFiles": "AI 知识文件",
       "questionnaires": "Questionnaires",
       "couponTopics": "优惠券主题",
-      "pipelines": "管道"
+      "pipelines": "管道",
+      "magicLinks": "魔法链接",
+      "polls": "投票",
+      "dynamicImages": "动态图片",
+      "placeLocations": "地点",
+      "miniApps": "迷你应用",
+      "minigames": "小游戏",
+      "leaderboards": "排行榜",
+      "openHours": "营业时间",
+      "vendors": "供应商",
+      "discountCodes": "折扣码",
+      "storeSettings": "店铺设置",
+      "storyAutomations": "Instagram 限时动态自动化",
+      "inboundWebhooks": "入站 Webhook"
     },
     "locked": {
       "flowBanner": "此流程来自仅查看的模板。你可以查看，但无法编辑。",
@@ -7584,6 +7691,7 @@
       "flowNotPublished": "Flow 已作为草稿安装，尚未发布。",
       "flowSkippedRequiredReference": "由于无法解析必需的引用，已跳过该 Flow。",
       "folder": "在此工作区中未找到被引用的项目，因此已移除该链接。",
+      "inboundWebhookLimitReached": "已跳过此入站 Webhook：工作区的入站 Webhook 数量已达上限。",
       "inboxBindingRequired": "请为此频道选择收件匣；在此之前该项目保持未启用状态。",
       "integration": "在此工作区中未找到被引用的项目，因此已移除该链接。",
       "localModifiedOverwritten": "本地编辑过的项目已被覆盖。已保存备份，可以还原。",
@@ -7604,7 +7712,25 @@
       "tag": "在此工作区中未找到被引用的项目，因此已移除该链接。",
       "unlisted": "项目未完全导入：{code}",
       "workspaceMember": "已分配给不在此工作区的成员。",
-      "workspaceUnavailable": "此工作区已不可用，因此跳过了该项。"
+      "workspaceUnavailable": "此工作区已不可用，因此跳过了该项。",
+      "scheduleExpired": "此项目的日期已过；使用前请设置新的日期。",
+      "linkNotRemapped": "指向未包含在模板中的工具的链接已保持不变。",
+      "dynamicImage": "由于无法复制背景，已跳过此动态图片。",
+      "dynamicImageFieldNotBound": "请选择一个自定义字段来缓存此图片；原字段已存在于你的工作区中。",
+      "dynamicImageRerenderFailed": "此动态图片已关闭，因为无法使用复制后的链接重新渲染其背景。再次打开即可重试。",
+      "pollImage": "无法复制一张图片。",
+      "leaderboardInvalid": "无法安装此排行榜的配置，已跳过。",
+      "placeLocationInvalid": "此地点的名称为空，已跳过。",
+      "minigame": "此排行榜计分所用的小游戏不在模板中，已跳过。",
+      "minigameImage": "无法复制一张图片。",
+      "leaderboardImage": "无法复制一张图片。",
+      "leaderboardHostMissing": "此排行榜需要专属的渠道（或小游戏），本次安装未提供，已跳过。",
+      "externalStoreSkipped": "此工作区通过已连接的店铺（Shopify 或 WooCommerce）销售，因此未安装商品、供应商、折扣码、营业时间和店铺设置。",
+      "discountCodeSkipped": "已跳过此折扣码：它适用的商品或分类不在模板中，或其设置被拒绝。",
+      "storeSettingsKept": "此工作区已有店铺设置，已保持原样。",
+      "vendorImage": "无法复制一张图片。",
+      "storeSettingsCurrencyKept": "工作区有其他币种的商品，因此保留了其币种而非模板的币种。",
+      "storySelectionRequired": "请重新选择快拍：无法带入原有的快拍。"
     },
     "tabs": {
       "mine": "我的模板",
@@ -12084,7 +12210,7 @@
     "add": "添加",
     "addCategory": "添加分类",
     "renameCategory": "重命名",
-    "editCategories": "编辑分类",
+    "editListing": "编辑条目",
     "templateId": "模板 ID",
     "template": "模板",
     "categories": "分类",
@@ -12092,9 +12218,12 @@
     "close": "关闭",
     "removeChip": "移除 {name}",
     "categoriesHint": "可选。没有分类的模板只显示在“全部”中。",
+    "languages": "语言",
+    "allLanguages": "所有语言",
+    "languagesHint": "可选。留空则模板在所有语言下显示。",
     "noCategoriesYet": "还没有分类。",
     "added": "模板已添加到商店",
-    "updated": "分类已更新",
+    "updated": "条目已更新",
     "removed": "模板已从商店移除",
     "removeError": "无法移除模板",
     "removeTitle": "移除 {name}？",
@@ -12142,10 +12271,13 @@
       "search": "搜索模板",
       "all": "全部",
       "categories": "商店分类",
-      "noResults": "没有与搜索匹配的模板。",
-      "clearSearch": "清除搜索",
+      "noResults": "没有符合筛选条件的模板。",
+      "clearSearch": "清除筛选",
       "by": "作者：{publisherName}",
-      "loadFailed": "无法加载模板。请稍后再试。"
+      "loadFailed": "无法加载模板。请稍后再试。",
+      "language": "语言",
+      "allLanguages": "所有语言",
+      "otherLanguages": "其他语言"
     },
     "picker": {
       "placeholder": "选择模板",
@@ -12154,6 +12286,16 @@
       "error": "无法加载模板。",
       "retry": "重试",
       "meta": "ID {id} · {workspace}"
+    },
+    "bulk": {
+      "setCategories": "设置分类",
+      "setLanguages": "设置语言",
+      "categoriesHint": "替换所选模板（{count}）的分类。留空则移除所有分类。",
+      "languagesHint": "替换所选模板（{count}）的语言。留空则在所有语言下显示。",
+      "updated": "已更新所选模板",
+      "removeTitle": "移除所选模板？",
+      "removeDescription": "已选：{count}。它们将从商店消失；模板本身及其安装不受影响。",
+      "removed": "已从商店移除所选模板"
     }
   },
   "accountDeletion": {

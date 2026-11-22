@@ -12,6 +12,7 @@ import { useTranslations } from "next-intl"
 import { useAction } from "next-safe-action/hooks"
 import { toast } from "sonner"
 import { contactDisplayName } from "@/features/contacts/lib/contact-display-name"
+import { withoutTranslationTurnedOn } from "@/features/translation/lib/conversation-translation"
 import { getZaloGroupConversation } from "@/features/zalo-accounts/lib/group-content"
 import { useWorkspaceId } from "@/hooks/routing"
 import { useChatStore } from "../chat/store/chat-store-provider"
@@ -82,6 +83,9 @@ export default function MessageHead({
           updateConversation(activeConversation.id, {
             botEnabled: true,
             botResumeAt: null,
+            additionalAttributes: withoutTranslationTurnedOn(
+              activeConversation.additionalAttributes,
+            ),
           })
         }
       },

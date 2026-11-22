@@ -193,6 +193,94 @@
   "errors": {
     "superAdminRequired": "Bunu etmək üçün iş sahəsinin super administratoru olmalısınız."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Söhbətlərin tərcüməsi",
+      "description": "Müştərilərinizin mesajlarını komandanız üçün, cavablarınızı isə müştərilər üçün birbaşa gələnlər qutusunda tərcümə edin.",
+      "saved": "Tərcümə parametrləri saxlanıldı",
+      "readOnly": "Bu parametrləri yalnız iş sahəsinin administratorları dəyişə bilər.",
+      "languageHint": "Söhbətlərin tərcüməsi aktiv olduqda müştəri mesajlarının tərcümə olunduğu dildir.",
+      "alert": {
+        "needsReconfiguration": "Yenidən konfiqurasiya tələb olunur: Sİ inteqrasiyası silinib və ya söndürülüb.",
+        "noIntegration": "Tərcümədən istifadə etmək üçün əvvəlcə Sİ inteqrasiyasını qoşun.",
+        "connect": "Sİ qoşun"
+      },
+      "enabled": {
+        "label": "Söhbətləri tərcümə et",
+        "description": "Müştəri mesajları yalnız kimsə söhbəti açdıqda tərcümə olunur. Çat mətni seçdiyiniz Sİ provayderinə göndərilir və Sİ açarınız üzərindən hesablanır."
+      },
+      "integration": {
+        "label": "Sİ inteqrasiyası",
+        "description": "Yalnız qoşulmuş Sİ provayderləri göstərilir."
+      },
+      "test": {
+        "label": "Bağlantını yoxla",
+        "button": "Yoxla",
+        "result": "{seconds} san.-də tamamlandı: «{sample}» → «{translated}»",
+        "slow": "Bu model yavaşdır: göndərilən mesajlar vaxtında tərcümə olunmaya bilər və onda göndərilməyəcək.",
+        "failed": "Yoxlama uğursuz oldu."
+      }
+    },
+    "message": {
+      "translating": "Tərcümə olunur…",
+      "stillWaiting": "Tərcümə hələ də gözlənilir",
+      "requestAgain": "Yenidən tələb et",
+      "failed": "Tərcümə etmək mümkün olmadı",
+      "translatedFrom": "{language} dilindən tərcümə edilib. Orijinalı göstər",
+      "translatedFromNoLanguage": "Tərcümə edilib. Orijinalı göstər",
+      "sentIn": "{language} dilində göndərilib. Göndərilənləri göstər",
+      "sentInNoLanguage": "Tərcümə edilərək göndərilib. Göndərilənləri göstər",
+      "hideOriginal": "Orijinalı gizlət",
+      "hideSent": "Göndərilənləri gizlət",
+      "translatedLabelNoLanguage": "Tərcümə edilib",
+      "sentLabelNoLanguage": "Tərcümə edilərək göndərilib"
+    },
+    "badge": {
+      "tooltip": "Müştəri dili: {language}"
+    },
+    "panel": {
+      "title": "Tərcümə parametrləri",
+      "statusOn": "Aktiv",
+      "statusOff": "Deaktiv",
+      "translateConversation": "Bu söhbəti tərcümə et",
+      "translateConversationHint": "Mesajları avtomatik tərcümə et",
+      "botActiveHint": "Bot bu söhbəti idarə edir, ona görə tərcümə söndürülüb. Tərcümə etmək üçün aktiv edin.",
+      "botPausedHint": "Bu söhbəti botdan götürmüsünüz, ona görə tərcümə söndürülü qalır. Tərcümə etmək üçün onu yandırın.",
+      "displayOptions": "Görünüş seçimləri",
+      "showOriginals": "Orijinal mətni göstər",
+      "previewBeforeSending": "Göndərməzdən əvvəl tərcüməyə bax"
+    },
+    "composer": {
+      "hintUnknown": "Dil müəyyən edilmədi · Yazıldığı kimi göndərilir",
+      "hintDetecting": "Müştərinin dili müəyyən edilir…",
+      "chip": {
+        "aria": "Tərcümə dili",
+        "target": "→ {language}",
+        "sameLanguage": "İş sahəsi ilə eyni dil",
+        "unknown": "Dil məlum deyil",
+        "hasFiles": "Faylı olan mesajlar tərcümə olunmur",
+        "off": "Tərcümə söndürülüb"
+      },
+      "popover": {
+        "customerLanguage": "Müştəri dili",
+        "chooseLanguage": "Dil seçin"
+      },
+      "preview": {
+        "title": "Müştəri önizləməsi · {language}",
+        "translating": "Tərcümə olunur…",
+        "needsRetranslate": "Yenidən tərcümə etmək lazımdır",
+        "retranslate": "Yenidən tərcümə et",
+        "failed": "Tərcümə etmək mümkün olmadı — göndərərkən yenidən cəhd ediləcək",
+        "done": "Hazır",
+        "ready": "Göndərməyə hazırdır"
+      }
+    },
+    "send": {
+      "translating": "Tərcümə olunur…",
+      "failed": "Tərcümə alınmadı",
+      "turnedOff": "Tərcümə əlçatan deyil. Bu söhbət üçün tərcümə söndürüldü."
+    }
+  },
   "states": {
     "success": "Uğurlu",
     "error": "Xəta",
@@ -8296,6 +8384,7 @@
       "resourcesTitle": "Quraşdırılmış resurslar",
       "noResources": "Hələ heç nə yaradılmayıb.",
       "deletedResource": "Silinmiş resurs",
+      "wholeCategory": "{count, plural, one {# element} other {# element}}",
       "viewOnly": "Yalnız baxış",
       "created": "Yaradıldı",
       "reused": "Təkrar istifadə edildi",
@@ -8350,7 +8439,12 @@
           "placeCategories": "Məkan kateqoriyaları"
         }
       },
-      "viewOnlyCopyIncluded": "Seçdiyiniz element (və ya onun ehtiyac duyduğu element) yalnız baxış şablonundan quraşdırılıb, ona görə yeni şablonda paylaşıla bilməz."
+      "viewOnlyCopyIncluded": "Seçdiyiniz element (və ya onun ehtiyac duyduğu element) yalnız baxış şablonundan quraşdırılıb, ona görə yeni şablonda paylaşıla bilməz.",
+      "miniAppPublishedExcluded": {
+        "title": "Mini tətbiq kənarda qaldı",
+        "hint": "Bu axınlar WhatsApp-da dərc olunmuş Mini tətbiqdən istifadə edir. Onu paylaşmaq olmur, buna görə şablon onu çıxarır və quraşdırma zamanı bu istinad silinir.",
+        "item": "{flowName}: {miniAppName}"
+      }
     },
     "categories": {
       "flows": "Axınlar",
@@ -8372,7 +8466,20 @@
       "aiFiles": "AI bilik faylları",
       "questionnaires": "Questionnaires",
       "couponTopics": "Kupon mövzuları",
-      "pipelines": "Satış xətləri"
+      "pipelines": "Satış xətləri",
+      "magicLinks": "Sehrli linklər",
+      "polls": "Sorğular",
+      "dynamicImages": "Dinamik şəkillər",
+      "placeLocations": "Məkanlar",
+      "miniApps": "Mini tətbiqlər",
+      "minigames": "Mini oyunlar",
+      "leaderboards": "Liderlər cədvəli",
+      "openHours": "İş saatları",
+      "vendors": "Satıcılar",
+      "discountCodes": "Endirim kodları",
+      "storeSettings": "Mağaza ayarları",
+      "storyAutomations": "Instagram hekayə avtomatlaşdırılması",
+      "inboundWebhooks": "Daxil olan webhook"
     },
     "locked": {
       "flowBanner": "Bu axın yalnız baxış şablonundan quraşdırılıb. Onu görə bilərsiniz, lakin redaktə edə bilməzsiniz.",
@@ -8449,6 +8556,7 @@
       "flowNotPublished": "Axın qaralama kimi quraşdırıldı və dərc edilməyib.",
       "flowSkippedRequiredReference": "Tələb olunan istinad həll edilə bilmədiyi üçün axın atlandı.",
       "folder": "İstinad edilən element bu iş sahəsində tapılmadı, ona görə keçid silindi.",
+      "inboundWebhookLimitReached": "Bu daxil olan webhook buraxıldı: iş sahəsi daxil olan webhook-ların maksimum sayına çatıb.",
       "inboxBindingRequired": "Bu kanal üçün gələnlər qutusu seçin; o vaxta qədər element qeyri-aktiv qalır.",
       "integration": "İstinad edilən element bu iş sahəsində tapılmadı, ona görə keçid silindi.",
       "localModifiedOverwritten": "Yerli olaraq redaktə edilmiş element üzərinə yazıldı. Ehtiyat nüsxə saxlanıldı və bərpa edilə bilər.",
@@ -8469,7 +8577,25 @@
       "tag": "İstinad edilən element bu iş sahəsində tapılmadı, ona görə keçid silindi.",
       "unlisted": "Element tam köçürülmədi: {code}",
       "workspaceMember": "Bu iş sahəsində olmayan üzvə təyin edilib.",
-      "workspaceUnavailable": "Bu iş sahəsi artıq mövcud deyil, ona görə bu element ötürüldü."
+      "workspaceUnavailable": "Bu iş sahəsi artıq mövcud deyil, ona görə bu element ötürüldü.",
+      "scheduleExpired": "Bu elementin tarixləri keçib; istifadədən əvvəl yenilərini təyin edin.",
+      "linkNotRemapped": "Şablona daxil olmayan alətə link dəyişdirilmədən saxlanıldı.",
+      "dynamicImage": "Fon şəkli kopyalana bilmədiyi üçün bu dinamik şəkil buraxıldı.",
+      "dynamicImageFieldNotBound": "Bu şəkil üçün keş saxlanacaq xüsusi sahə seçin; orijinal sahə artıq iş sahənizdə var idi.",
+      "dynamicImageRerenderFailed": "Bu dinamik şəkil söndürüldü, çünki arxa fonu kopyalanmış keçidlərlə yenidən yaradıla bilmədi. Yenidən cəhd etmək üçün onu aktiv edin.",
+      "pollImage": "Şəkil kopyalana bilmədi.",
+      "leaderboardInvalid": "Bu liderlər cədvəlinin konfiqurasiyası quraşdırıla bilmədi, buna görə buraxıldı.",
+      "placeLocationInvalid": "Bu yer adı boş olduğu üçün atlandı.",
+      "minigame": "Bu liderlər cədvəlinin xal hesabladığı mini oyun şablona daxil deyil, buna görə buraxıldı.",
+      "minigameImage": "Şəkil kopyalana bilmədi.",
+      "leaderboardImage": "Şəkil kopyalana bilmədi.",
+      "leaderboardHostMissing": "Liderlər cədvəli bu quraşdırmanın təmin etmədiyi öz kanalına (və ya mini oyuna) ehtiyac duyur, buna görə buraxıldı.",
+      "externalStoreSkipped": "Bu iş sahəsi qoşulmuş mağazadan (Shopify və ya WooCommerce) satış edir, buna görə məhsullar, satıcılar, endirim kodları, iş saatları və mağaza ayarları quraşdırılmadı.",
+      "discountCodeSkipped": "Bu endirim kodu buraxıldı: tətbiq olunduğu məhsullar və ya kateqoriya şablona daxil deyil, yaxud ayarları rədd edildi.",
+      "storeSettingsKept": "Bu iş sahəsində artıq mağaza ayarları var idi, ona görə olduğu kimi saxlanıldı.",
+      "vendorImage": "Şəkil kopyalana bilmədi.",
+      "storeSettingsCurrencyKept": "İş sahəsində başqa valyutada məhsullar var, buna görə şablonun valyutası əvəzinə mövcud valyuta saxlanıldı.",
+      "storySelectionRequired": "Hekayələri yenidən seçin: orijinal hekayələri köçürmək mümkün olmadı."
     },
     "tabs": {
       "mine": "Şablonlarım",
@@ -12100,7 +12226,7 @@
     "add": "Əlavə et",
     "addCategory": "Kateqoriya əlavə et",
     "renameCategory": "Adını dəyiş",
-    "editCategories": "Kateqoriyaları redaktə et",
+    "editListing": "Qeydi redaktə et",
     "templateId": "Şablon ID-si",
     "template": "Şablon",
     "categories": "Kateqoriyalar",
@@ -12108,9 +12234,12 @@
     "close": "Bağla",
     "removeChip": "{name} sil",
     "categoriesHint": "İstəyə bağlı. Kateqoriyasız şablon yalnız “Hamısı” altında görünür.",
+    "languages": "Dillər",
+    "allLanguages": "Bütün dillər",
+    "languagesHint": "İstəyə bağlı. Şablonu bütün dillərdə göstərmək üçün boş buraxın.",
     "noCategoriesYet": "Hələ kateqoriya yoxdur.",
     "added": "Şablon mağazaya əlavə edildi",
-    "updated": "Kateqoriyalar yeniləndi",
+    "updated": "Qeyd yeniləndi",
     "removed": "Şablon mağazadan silindi",
     "removeError": "Şablon silinə bilmədi",
     "removeTitle": "{name} silinsin?",
@@ -12158,10 +12287,13 @@
       "search": "Şablon axtar",
       "all": "Hamısı",
       "categories": "Mağaza kateqoriyaları",
-      "noResults": "Axtarışınıza uyğun şablon yoxdur.",
-      "clearSearch": "Axtarışı təmizlə",
+      "noResults": "Filtrlərinizə uyğun şablon yoxdur.",
+      "clearSearch": "Filtrləri təmizlə",
       "by": "Naşir: {publisherName}",
-      "loadFailed": "Şablonlar yüklənə bilmədi. Bir az sonra yenidən cəhd edin."
+      "loadFailed": "Şablonlar yüklənə bilmədi. Bir az sonra yenidən cəhd edin.",
+      "language": "Dil",
+      "allLanguages": "Bütün dillər",
+      "otherLanguages": "Digər dillər"
     },
     "picker": {
       "placeholder": "Şablon seçin",
@@ -12170,6 +12302,16 @@
       "error": "Şablonlar yüklənmədi.",
       "retry": "Yenidən cəhd et",
       "meta": "ID {id} · {workspace}"
+    },
+    "bulk": {
+      "setCategories": "Kateqoriyaları təyin et",
+      "setLanguages": "Dilləri təyin et",
+      "categoriesHint": "Seçilmiş şablonların ({count}) kateqoriyalarını əvəz edir. Bütün kateqoriyaları silmək üçün boş buraxın.",
+      "languagesHint": "Seçilmiş şablonların ({count}) dillərini əvəz edir. Bütün dillərdə göstərmək üçün boş buraxın.",
+      "updated": "Seçilmiş şablonlar yeniləndi",
+      "removeTitle": "Seçilmiş şablonlar silinsin?",
+      "removeDescription": "Seçilib: {count}. Onlar mağazadan yox olur; şablonların özləri və quraşdırmaları təsirlənmir.",
+      "removed": "Seçilmiş şablonlar mağazadan silindi"
     }
   },
   "accountDeletion": {

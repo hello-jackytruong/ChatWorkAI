@@ -13,6 +13,7 @@ import { outboundCallModeQueryKeys } from "../integration-whatsapp/calling/voip/
 import { useWhatsappVoipCallStore } from "../integration-whatsapp/calling/voip/voip-call-store"
 import type { MessageResourceWithRelations } from "../messages/schema/resource"
 import { useResponseSlaEnabled } from "../response-sla/provider/response-sla-hook"
+import { useTranslationUiStore } from "../translation/store/translation-ui-store"
 import { zaloMessageStateKey } from "../zalo-accounts/queries/use-group-message-state"
 import { useChatStore } from "./store/chat-store-provider"
 
@@ -33,6 +34,7 @@ export function ChatRealtime() {
 
   const {
     applyAgentLastReadAt,
+    applyMessageTranslations,
     assignMessageCommentId,
     bubbleConversationToTop,
     handleNewMessages,
@@ -51,6 +53,7 @@ export function ChatRealtime() {
   } = useChatStore(
     useShallow((state) => ({
       applyAgentLastReadAt: state.applyAgentLastReadAt,
+      applyMessageTranslations: state.applyMessageTranslations,
       assignMessageCommentId: state.assignMessageCommentId,
       bubbleConversationToTop: state.bubbleConversationToTop,
       handleNewMessages: state.handleNewMessages,
@@ -250,6 +253,26 @@ export function ChatRealtime() {
         newAttachmentHeight: data.newAttachmentHeight,
         removedAttachment: data.removedAttachment ?? false,
       })
+    },
+    messageTranslationUpdated: (event) => {
+      flushPendingCreatedMessages()
+      const {
+        conversationId,
+        items,
+        conversationLanguage,
+        conversationEnabledOverride,
+      } = event.data
+      applyMessageTranslations(
+        conversationId,
+        items,
+        conversationLanguage,
+        conversationEnabledOverride,
+      )
+      // The answer is in: drop "translating"/"still waiting" so a `failed` row
+      // shows as failed (with Retry) and nothing keeps waiting for it.
+      useTranslationUiStore
+        .getState()
+        .clear(items.map((item) => item.messageId))
     },
     messageContentUpdated: (event) => {
       flushPendingCreatedMessages()

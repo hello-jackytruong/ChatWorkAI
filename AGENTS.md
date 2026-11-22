@@ -180,6 +180,8 @@ One line each; the full text (reasons, file paths, edge cases) is in `docs/agent
 25. **Keep Node-only code out of builder router imports** — split it into a server-only package subpath; Edge instrumentation traces the full router graph. See `apps/builder/__tests__/edge-instrumentation-graph.test.ts`.
 
 26. **`User.connectionAuthorizations` is a secret column** — the encrypted backup of each user's latest provider authorization, kept independently of `Connection`/channel rows. Every `User` read that reaches a client, cache, log or `ctx` goes through `userColumnsWithoutSecrets` (`UserModel` omits the column); never declare it in better-auth `additionalFields`; write only through `userService.recordConnectionAuthorization`; guarded by `packages/database/__tests__/user-secret-projection.test.ts`.
+
+27. **Every resource a user builds has a template decision** — declare `TOOL_TEMPLATE_COVERAGE` for a new Tools card, classify every column of a template-copied table in the adapter map, and keep shared `insertInTx`/`deleteInTx` cores; see `template-integration`.
 <!-- END GENERATED: SHARED-INVARIANTS -->
 
 ## Git conventions
@@ -225,6 +227,7 @@ See **`.agents/rules/git.md`** for the full canonical rules (commit format, bran
 - Contact activity store (channel-agnostic activity tables, eleven activity-backed contact filters, since-tracking semantics, bounded counts, kill switches, ops runbook): `docs/contact-activity.md`
 - Templates (creating, sharing, what an install copies, folders and list order, warning audiences, View Analytics, updates, uninstall, public API, deploy notes): `docs/templates.md`
 - Templates regression testing (rule → test map, public-API end-to-end script `scripts/templates-e2e.mjs`, manual UI checklist): `docs/templates-testing.md`
+- Inbox translation (two-way AI translation of direct text: on-view inbound only, 10 s outbound wait and a failed translation is never sent, per-conversation language, shared `aiAgent` queue, privacy and cost, public API/CLI/MCP, data lifecycle): `docs/inbox-translation.md`
 - Failed outgoing messages (kept with `sendError` only for a member's Inbox send; every other failed send — API/CLI/MCP, automations, broadcasts — is removed with a `messageRemoved` realtime event and logged to the Error Log; `sendFrom: "inbox" | "api"`, `sentFromInbox` stamp, `settleFailedOutgoingMessage`): `docs/failed-outgoing-messages.md`
 - Email channel (SMTP inbox as a two-way channel: threading identity, send/flow support, IMAP polling cursor and fairness, inbound-parse webhooks for SendGrid/Mailgun/Postmark/Brevo, loop protection, size caps, setup guide): `docs/email-channel.md`
 - Pipelines (CRM kanban boards: data model, access scope/ACL, mutation engine and post-commit effects, locking order, queued stage deletion, keyset cursors, caching policy, pipelineItem* events/webhooks/realtime, Pipelines flow step, `pipelineItem` contact filter, `{{pipelines.*}}` variables, templates, public API/CLI/MCP, analytics, limits): `docs/pipelines.md`

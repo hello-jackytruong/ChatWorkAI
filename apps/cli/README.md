@@ -330,12 +330,40 @@ chatbotx conversations message delete <conversationId> <messageId> --createdAt <
 chatbotx conversations resend add <conversationId> <messageId> --createdAt <createdAt>  # Resend a failed message (409 if it did not fail or was delivered)
 chatbotx conversations attribute add <conversationId> <messageId> --createdAt <createdAt>  # [--liked --hidden]
 
+# Inbox translation (scope `inbox`; workspace switch and model: see `translation`)
+chatbotx conversations translation list <conversationId>      # The customer's language, its source and the on/off state
+chatbotx conversations translation update <conversationId>    # [--enabledOverride <true|false|null> --language <code>]
+                                                     # --enabledOverride false stops translating this conversation, true turns it on in the Inbox while the bot is on duty; null clears it
+                                                     # --language sets the customer's language by hand (never overwritten by detection)
+chatbotx conversations translation request <conversationId> --messages <messages>
+                                                     # [--retryFailed]  JSON array (max 20) of {"id","createdAt"} from `messages list`;
+                                                     # queues customer text for translation, read it back in `messages list` -> `translation`
+chatbotx conversations translation preview <conversationId> --text <text>
+                                                     # Translate a draft into the customer's language without sending it
+# `conversations message send --translate true` translates the text into the customer's language
+# (waits up to 10 s; if it cannot be translated nothing is sent and it fails with `translationNotSent`);
+# `--editedTranslation '{"text","targetLanguage"}'` sends a translation you already reviewed.
+
 # Appointment booking link (scope `appointments`; `--send true` also needs `inbox`)
 chatbotx conversations appointment-booking-link add <conversationId> --calendarId <calendarId>
                                                      # [--inboxId --send --bypassThreadControlLock]
                                                      # Returns {url, expiresAt (24 hours), calendar, messageId};
                                                      # --send true also sends it as a message with a booking button
 ```
+
+---
+
+### `translation` (scope `settings`; `settings get` also with `inbox`)
+
+```bash
+chatbotx translation settings get                    # enabled, integration + model, workspace language, status
+chatbotx translation settings update --enabled <true|false> --modelConfig <modelConfig>
+                                                     # modelConfig: JSON {"provider","model"} or {"kind":"openaiCompatible","integrationId","model"}, null clears
+                                                     # Needs a connected, enabled AI integration; the workspace pays with its own key
+chatbotx translation settings-test --modelConfig <modelConfig>  # [--sampleText] Translate a sample, report latency (warns on slow models)
+```
+
+Per-conversation commands live under `conversations translation` above.
 
 ---
 
@@ -422,7 +450,7 @@ chatbotx templates analytics <id>                    # Installation counts by st
 chatbotx templates installers <id>                   # [--search --cursor --limit]  who installed it: workspace name, installs, oldest version, auto-update, installedAutomatically (a white-label default installed it; that workspace stays unnamed) (publisherRef is opaque)
 chatbotx templates uninstall-preview <id> <installerId>  # What removing the template from that installer would do (counts by outcome, edited copies listed as `deletedModified`); only if they allowed it
 chatbotx templates uninstall-installer <id> <installerId>  # Start removing it (202, runs in the background; follow `uninstallState` in `templates installers`): everything the install created is deleted, edited copies included; shared tags/fields/folders and items something else depends on are kept
-chatbotx template-store list                         # [--categoryId --keyword]  the template store of the token workspace's tenant: `categories` and `templates` with `shareToken` (feed it to `template-previews get` and `template-installations create`) and `shareUrl`; read only
+chatbotx template-store list                         # [--categoryId --language --keyword]  the template store of the token workspace's tenant: `categories` and `templates` (each with the `languages` it is made for; `--language` keeps those and the ones with none) with `shareToken` (feed it to `template-previews get` and `template-installations create`) and `shareUrl`; read only
 chatbotx template-previews get <shareToken>          # Can this link be installed into the token's workspace? (installable / reason) + requiredInboxes / requiredChannels to bind + collisions / collisionSummary (what the install would reuse, create or rename here)
 chatbotx template-installations create --shareToken <token>  # [--allowDuplicate --inboxBindings <json>]  queue an install → { installationId }; an already installed template is updated in place → { installationId, syncId } (use --allowDuplicate for a separate copy)
                                                      # inboxBindings: {"<templateInboxId>":"<yourInboxId>"} (ids from `template-previews get` / `inboxes list`); an unbound comment automation installs inactive

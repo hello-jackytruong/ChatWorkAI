@@ -1725,6 +1725,94 @@
     },
     "title": "DeepSeek"
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Översättning av konversationer",
+      "description": "Översätt kundernas meddelanden åt ditt team, och dina svar åt dina kunder, direkt i inkorgen.",
+      "saved": "Översättningsinställningarna har sparats",
+      "readOnly": "Endast arbetsytans administratörer kan ändra dessa inställningar.",
+      "languageHint": "Det är också språket som kundmeddelanden översätts till när översättning av konversationer är på.",
+      "alert": {
+        "needsReconfiguration": "Ny konfiguration krävs: AI-integrationen har tagits bort eller stängts av.",
+        "noIntegration": "Anslut först en AI-integration för att använda översättning.",
+        "connect": "Anslut AI"
+      },
+      "enabled": {
+        "label": "Översätt konversationer",
+        "description": "Kundmeddelanden översätts bara när någon öppnar konversationen. Chattexten skickas till den AI-leverantör du väljer och debiteras på din AI-nyckel."
+      },
+      "integration": {
+        "label": "AI-integration",
+        "description": "Bara anslutna AI-leverantörer visas."
+      },
+      "test": {
+        "label": "Testa anslutning",
+        "button": "Testa",
+        "result": "Klart på {seconds} s: ”{sample}” → ”{translated}”",
+        "slow": "Den här modellen är långsam: utgående meddelanden kanske inte hinner översättas och skickas då inte.",
+        "failed": "Testet misslyckades."
+      }
+    },
+    "message": {
+      "translating": "Översätter…",
+      "stillWaiting": "Väntar fortfarande på översättningen",
+      "requestAgain": "Begär igen",
+      "failed": "Kunde inte översätta",
+      "translatedFrom": "Översatt från {language}. Visa original",
+      "translatedFromNoLanguage": "Översatt. Visa original",
+      "sentIn": "Skickat på {language}. Visa det som skickades",
+      "sentInNoLanguage": "Skickat översatt. Visa det som skickades",
+      "hideOriginal": "Dölj original",
+      "hideSent": "Dölj det som skickades",
+      "translatedLabelNoLanguage": "Översatt",
+      "sentLabelNoLanguage": "Skickat översatt"
+    },
+    "badge": {
+      "tooltip": "Kundens språk: {language}"
+    },
+    "panel": {
+      "title": "Översättningsinställningar",
+      "statusOn": "På",
+      "statusOff": "Av",
+      "translateConversation": "Översätt den här konversationen",
+      "translateConversationHint": "Översätt meddelanden automatiskt",
+      "botActiveHint": "Boten hanterar den här konversationen, så översättning är avstängd. Slå på den för att översätta konversationen.",
+      "botPausedHint": "Du har tagit över den här konversationen från boten, så översättningen förblir avstängd. Slå på den för att översätta den.",
+      "displayOptions": "Visningsalternativ",
+      "showOriginals": "Visa originaltext",
+      "previewBeforeSending": "Förhandsgranska översättningen innan du skickar"
+    },
+    "composer": {
+      "hintUnknown": "Språket kunde inte identifieras · Skickas som det är skrivet",
+      "hintDetecting": "Identifierar kundens språk…",
+      "chip": {
+        "aria": "Översättningsspråk",
+        "target": "→ {language}",
+        "sameLanguage": "Samma språk som arbetsytan",
+        "unknown": "Språket är okänt",
+        "hasFiles": "Meddelanden med filer översätts inte",
+        "off": "Översättning av"
+      },
+      "popover": {
+        "customerLanguage": "Kundens språk",
+        "chooseLanguage": "Välj ett språk"
+      },
+      "preview": {
+        "title": "Kundförhandsvisning · {language}",
+        "translating": "Översätter…",
+        "needsRetranslate": "Behöver översättas igen",
+        "retranslate": "Översätt igen",
+        "failed": "Kunde inte översätta – nytt försök görs när du skickar",
+        "done": "Klar",
+        "ready": "Redo att skickas"
+      }
+    },
+    "send": {
+      "translating": "Översätter…",
+      "failed": "Översättningen misslyckades",
+      "turnedOff": "Översättning är inte tillgänglig. Översättning har stängts av för den här konversationen."
+    }
+  },
   "muse": {
     "autoReply": {
       "description": "Aktivera automatiska AI-svar för att svara användare naturligt med AI som drivs av dina företagsdata.",
@@ -7431,6 +7519,7 @@
       "resourcesTitle": "Installerade resurser",
       "noResources": "Inget har skapats än.",
       "deletedResource": "Borttagen resurs",
+      "wholeCategory": "{count, plural, one {# objekt} other {# objekt}}",
       "viewOnly": "Endast visning",
       "created": "Skapad",
       "reused": "Återanvänd",
@@ -7485,7 +7574,12 @@
           "placeCategories": "Platskategorier"
         }
       },
-      "viewOnlyCopyIncluded": "Något du valt (eller något det behöver) installerades från en mall som bara kan visas och kan inte delas i en ny mall."
+      "viewOnlyCopyIncluded": "Något du valt (eller något det behöver) installerades från en mall som bara kan visas och kan inte delas i en ny mall.",
+      "miniAppPublishedExcluded": {
+        "title": "Mini-app utelämnad",
+        "hint": "De här flödena använder en mini-app som är publicerad på WhatsApp. Den kan inte delas, så mallen utelämnar den och installationen tar bort referensen.",
+        "item": "{flowName}: {miniAppName}"
+      }
     },
     "categories": {
       "flows": "Flöden",
@@ -7507,7 +7601,20 @@
       "aiFiles": "AI-kunskapsfiler",
       "questionnaires": "Frågeformulär",
       "couponTopics": "Kupongämnen",
-      "pipelines": "Pipelines"
+      "pipelines": "Pipelines",
+      "magicLinks": "Magiska länkar",
+      "polls": "Omröstningar",
+      "dynamicImages": "Dynamiska bilder",
+      "placeLocations": "Platser",
+      "miniApps": "Miniappar",
+      "minigames": "Minispel",
+      "leaderboards": "Topplistor",
+      "openHours": "Öppettider",
+      "vendors": "Säljare",
+      "discountCodes": "Rabattkoder",
+      "storeSettings": "Butiksinställningar",
+      "storyAutomations": "Automatisering av Instagram Stories",
+      "inboundWebhooks": "Inkommande webhook"
     },
     "locked": {
       "flowBanner": "Det här flödet installerades från en skrivskyddad mall. Du kan titta på det men inte redigera det.",
@@ -7584,6 +7691,7 @@
       "flowNotPublished": "Flowet installerades som utkast och är inte publicerat.",
       "flowSkippedRequiredReference": "Flowet hoppades över eftersom en obligatorisk referens inte kunde lösas.",
       "folder": "Ett refererat objekt hittades inte i denna arbetsyta, så länken togs bort.",
+      "inboundWebhookLimitReached": "Den här inkommande webhooken hoppades över: arbetsytan har redan det maximala antalet inkommande webhooks.",
       "inboxBindingRequired": "Välj en inkorg för denna kanal; tills dess förblir objektet inaktivt.",
       "integration": "Ett refererat objekt hittades inte i denna arbetsyta, så länken togs bort.",
       "localModifiedOverwritten": "Ett lokalt redigerat objekt skrevs över. En säkerhetskopia sparades och kan återställas.",
@@ -7604,7 +7712,25 @@
       "tag": "Ett refererat objekt hittades inte i denna arbetsyta, så länken togs bort.",
       "unlisted": "Objektet fördes inte över helt: {code}",
       "workspaceMember": "Tilldelad en medlem som inte finns i den här arbetsytan.",
-      "workspaceUnavailable": "Den här arbetsytan är inte längre tillgänglig, så objektet hoppades över."
+      "workspaceUnavailable": "Den här arbetsytan är inte längre tillgänglig, så objektet hoppades över.",
+      "scheduleExpired": "Datumen för det här objektet har redan passerat; ange nya innan du använder det.",
+      "linkNotRemapped": "En länk till ett verktyg som inte ingick i mallen lämnades oförändrad.",
+      "dynamicImage": "Den här dynamiska bilden hoppades över eftersom bakgrunden inte kunde kopieras.",
+      "dynamicImageFieldNotBound": "Välj ett anpassat fält som bilden cachas i; det ursprungliga fanns redan i din arbetsyta.",
+      "dynamicImageRerenderFailed": "Den här dynamiska bilden stängdes av eftersom bakgrunden inte kunde renderas om med dina kopierade länkar. Slå på den igen för att försöka på nytt.",
+      "pollImage": "En bild kunde inte kopieras.",
+      "leaderboardInvalid": "Den här topplistans konfiguration kunde inte installeras och hoppades över.",
+      "placeLocationInvalid": "Den här platsen hoppades över eftersom namnet är tomt.",
+      "minigame": "Minispelet som topplistan får sina poäng från ingår inte i mallen och hoppades över.",
+      "minigameImage": "En bild kunde inte kopieras.",
+      "leaderboardImage": "En bild kunde inte kopieras.",
+      "leaderboardHostMissing": "Topplistan behöver en egen kanal (eller ett minispel) som den här installationen inte gav och hoppades över.",
+      "externalStoreSkipped": "Den här arbetsytan säljer från en ansluten butik (Shopify eller WooCommerce), så produkter, säljare, rabattkoder, öppettider och butiksinställningar installerades inte.",
+      "discountCodeSkipped": "Den här rabattkoden hoppades över: produkterna eller kategorin den gäller ingår inte i mallen, eller så avvisades dess inställningar.",
+      "storeSettingsKept": "Den här arbetsytan hade redan butiksinställningar, så de behölls som de är.",
+      "vendorImage": "En bild kunde inte kopieras.",
+      "storeSettingsCurrencyKept": "Arbetsytan har produkter i en annan valuta, så dess valuta behölls i stället för mallens.",
+      "storySelectionRequired": "Välj berättelserna igen: de ursprungliga berättelserna kunde inte tas med."
     },
     "tabs": {
       "mine": "Mina mallar",
@@ -12084,7 +12210,7 @@
     "add": "Lägg till",
     "addCategory": "Lägg till kategori",
     "renameCategory": "Byt namn",
-    "editCategories": "Redigera kategorier",
+    "editListing": "Redigera post",
     "templateId": "Mall-ID",
     "template": "Mall",
     "categories": "Kategorier",
@@ -12092,9 +12218,12 @@
     "close": "Stäng",
     "removeChip": "Ta bort {name}",
     "categoriesHint": "Valfritt. Utan kategori visas mallen bara under “Alla”.",
+    "languages": "Språk",
+    "allLanguages": "Alla språk",
+    "languagesHint": "Valfritt. Lämna tomt för att visa mallen på alla språk.",
     "noCategoriesYet": "Inga kategorier ännu.",
     "added": "Mallen har lagts till i butiken",
-    "updated": "Kategorierna har uppdaterats",
+    "updated": "Posten uppdaterad",
     "removed": "Mallen har tagits bort från butiken",
     "removeError": "Det gick inte att ta bort mallen",
     "removeTitle": "Ta bort {name}?",
@@ -12142,10 +12271,13 @@
       "search": "Sök mallar",
       "all": "Alla",
       "categories": "Butikskategorier",
-      "noResults": "Inga mallar matchar din sökning.",
-      "clearSearch": "Rensa sökningen",
+      "noResults": "Inga mallar matchar dina filter.",
+      "clearSearch": "Rensa filter",
       "by": "Av {publisherName}",
-      "loadFailed": "Det gick inte att läsa in mallarna. Försök igen senare."
+      "loadFailed": "Det gick inte att läsa in mallarna. Försök igen senare.",
+      "language": "Språk",
+      "allLanguages": "Alla språk",
+      "otherLanguages": "Andra språk"
     },
     "picker": {
       "placeholder": "Välj en mall",
@@ -12154,6 +12286,16 @@
       "error": "Det gick inte att läsa in mallar.",
       "retry": "Försök igen",
       "meta": "ID {id} · {workspace}"
+    },
+    "bulk": {
+      "setCategories": "Ange kategorier",
+      "setLanguages": "Ange språk",
+      "categoriesHint": "Ersätter kategorierna för de valda mallarna ({count}). Lämna tomt för att ta bort alla kategorier.",
+      "languagesHint": "Ersätter språken för de valda mallarna ({count}). Lämna tomt för att visa dem på alla språk.",
+      "updated": "De valda mallarna har uppdaterats",
+      "removeTitle": "Ta bort de valda mallarna?",
+      "removeDescription": "Valda: {count}. De försvinner från butiken; själva mallarna och deras installationer påverkas inte.",
+      "removed": "De valda mallarna har tagits bort från butiken"
     }
   },
   "accountDeletion": {

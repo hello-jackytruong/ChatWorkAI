@@ -1886,6 +1886,94 @@
   "errors": {
     "superAdminRequired": "Devi essere super admin dello spazio di lavoro per farlo."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Traduzione delle conversazioni",
+      "description": "Traduci i messaggi dei tuoi clienti per il tuo team e le tue risposte per i tuoi clienti, direttamente nella Inbox.",
+      "saved": "Impostazioni di traduzione salvate",
+      "readOnly": "Solo gli amministratori del workspace possono modificare queste impostazioni.",
+      "languageHint": "È anche la lingua in cui vengono tradotti i messaggi dei clienti quando la traduzione delle conversazioni è attiva.",
+      "alert": {
+        "needsReconfiguration": "Riconfigurazione necessaria: l'integrazione IA è stata rimossa o disattivata.",
+        "noIntegration": "Collega prima un'integrazione IA per usare la traduzione.",
+        "connect": "Collega IA"
+      },
+      "enabled": {
+        "label": "Traduci le conversazioni",
+        "description": "I messaggi dei clienti vengono tradotti solo quando qualcuno apre la conversazione. Il testo della chat viene inviato al provider IA che scegli e addebitato sulla tua chiave IA."
+      },
+      "integration": {
+        "label": "Integrazione IA",
+        "description": "Vengono mostrati solo i provider IA collegati."
+      },
+      "test": {
+        "label": "Testa la connessione",
+        "button": "Testa",
+        "result": "Fatto in {seconds} s: «{sample}» → «{translated}»",
+        "slow": "Questo modello è lento: i messaggi in uscita potrebbero non essere tradotti in tempo e in quel caso non verranno inviati.",
+        "failed": "Il test non è riuscito."
+      }
+    },
+    "message": {
+      "translating": "Traduzione in corso…",
+      "stillWaiting": "Ancora in attesa della traduzione",
+      "requestAgain": "Richiedi di nuovo",
+      "failed": "Impossibile tradurre",
+      "translatedFrom": "Tradotto da {language}. Mostra originale",
+      "translatedFromNoLanguage": "Tradotto. Mostra originale",
+      "sentIn": "Inviato in {language}. Mostra ciò che è stato inviato",
+      "sentInNoLanguage": "Inviato tradotto. Mostra ciò che è stato inviato",
+      "hideOriginal": "Nascondi originale",
+      "hideSent": "Nascondi ciò che è stato inviato",
+      "translatedLabelNoLanguage": "Tradotto",
+      "sentLabelNoLanguage": "Inviato tradotto"
+    },
+    "badge": {
+      "tooltip": "Lingua del cliente: {language}"
+    },
+    "panel": {
+      "title": "Impostazioni di traduzione",
+      "statusOn": "Attiva",
+      "statusOff": "Disattiva",
+      "translateConversation": "Traduci questa conversazione",
+      "translateConversationHint": "Traduci automaticamente i messaggi",
+      "botActiveHint": "Il bot sta gestendo questa conversazione, quindi la traduzione è disattivata. Attivala per tradurla.",
+      "botPausedHint": "Hai preso in carico questa conversazione al posto del bot, quindi la traduzione resta disattivata. Attivala per tradurla.",
+      "displayOptions": "Opzioni di visualizzazione",
+      "showOriginals": "Mostra testo originale",
+      "previewBeforeSending": "Anteprima della traduzione prima dell'invio"
+    },
+    "composer": {
+      "hintUnknown": "Lingua non rilevata · Invio così com'è",
+      "hintDetecting": "Rilevamento della lingua del cliente…",
+      "chip": {
+        "aria": "Lingua di traduzione",
+        "target": "→ {language}",
+        "sameLanguage": "Stessa lingua del workspace",
+        "unknown": "Lingua sconosciuta",
+        "hasFiles": "I messaggi con file non vengono tradotti",
+        "off": "Traduzione disattivata"
+      },
+      "popover": {
+        "customerLanguage": "Lingua del cliente",
+        "chooseLanguage": "Scegli una lingua"
+      },
+      "preview": {
+        "title": "Anteprima per il cliente · {language}",
+        "translating": "Traduzione in corso…",
+        "needsRetranslate": "Da tradurre di nuovo",
+        "retranslate": "Traduci di nuovo",
+        "failed": "Impossibile tradurre: verrà riprovato all'invio",
+        "done": "Fatto",
+        "ready": "Pronta per l'invio"
+      }
+    },
+    "send": {
+      "translating": "Traduzione in corso…",
+      "failed": "Traduzione non riuscita",
+      "turnedOff": "Traduzione non disponibile. La traduzione è stata disattivata per questa conversazione."
+    }
+  },
   "states": {
     "success": "Successo",
     "error": "Errore",
@@ -7418,6 +7506,7 @@
       "resourcesTitle": "Risorse installate",
       "noResources": "Non è stato ancora creato nulla.",
       "deletedResource": "Risorsa eliminata",
+      "wholeCategory": "{count, plural, one {# elemento} other {# elementi}}",
       "viewOnly": "Sola lettura",
       "created": "Creato",
       "reused": "Riutilizzato",
@@ -7472,7 +7561,12 @@
           "placeCategories": "Categorie di luoghi"
         }
       },
-      "viewOnlyCopyIncluded": "Un elemento selezionato (o un elemento di cui ha bisogno) è stato installato da un modello in sola lettura, quindi non può essere condiviso in un nuovo modello."
+      "viewOnlyCopyIncluded": "Un elemento selezionato (o un elemento di cui ha bisogno) è stato installato da un modello in sola lettura, quindi non può essere condiviso in un nuovo modello.",
+      "miniAppPublishedExcluded": {
+        "title": "Mini App esclusa",
+        "hint": "Questi flussi usano una Mini App pubblicata su WhatsApp. Non può essere condivisa, quindi il modello la esclude e l'installazione rimuove il riferimento.",
+        "item": "{flowName}: {miniAppName}"
+      }
     },
     "categories": {
       "flows": "Flussi",
@@ -7494,7 +7588,20 @@
       "aiFiles": "File di conoscenza IA",
       "questionnaires": "Questionnaires",
       "couponTopics": "Argomenti dei coupon",
-      "pipelines": "Pipeline"
+      "pipelines": "Pipeline",
+      "magicLinks": "Link magici",
+      "polls": "Sondaggi",
+      "dynamicImages": "Immagini dinamiche",
+      "placeLocations": "Luoghi",
+      "miniApps": "Mini app",
+      "minigames": "Minigiochi",
+      "leaderboards": "Classifiche",
+      "openHours": "Orari di apertura",
+      "vendors": "Venditori",
+      "discountCodes": "Codici sconto",
+      "storeSettings": "Impostazioni del negozio",
+      "storyAutomations": "Automazione Storie di Instagram",
+      "inboundWebhooks": "Webhook in entrata"
     },
     "locked": {
       "flowBanner": "Questo flusso è stato installato da un modello in sola lettura. Puoi vederlo ma non modificarlo.",
@@ -7571,6 +7678,7 @@
       "flowNotPublished": "Il Flow è stato installato come bozza e non è pubblicato.",
       "flowSkippedRequiredReference": "Il Flow è stato saltato perché non è stato possibile risolvere un riferimento obbligatorio.",
       "folder": "Un elemento referenziato non è stato trovato in questo spazio di lavoro, quindi il collegamento è stato rimosso.",
+      "inboundWebhookLimitReached": "Questo webhook in entrata è stato saltato: lo spazio di lavoro ha già il numero massimo di webhook in entrata.",
       "inboxBindingRequired": "Scegli una posta in arrivo per questo canale; fino ad allora l’elemento resta inattivo.",
       "integration": "Un elemento referenziato non è stato trovato in questo spazio di lavoro, quindi il collegamento è stato rimosso.",
       "localModifiedOverwritten": "Un elemento modificato localmente è stato sovrascritto. È stato salvato un backup che può essere ripristinato.",
@@ -7591,7 +7699,25 @@
       "tag": "Un elemento referenziato non è stato trovato in questo spazio di lavoro, quindi il collegamento è stato rimosso.",
       "unlisted": "Elemento non importato del tutto: {code}",
       "workspaceMember": "Assegnato a un membro che non fa parte di questo workspace.",
-      "workspaceUnavailable": "Questo workspace non è più disponibile, quindi l'elemento è stato saltato."
+      "workspaceUnavailable": "Questo workspace non è più disponibile, quindi l'elemento è stato saltato.",
+      "scheduleExpired": "Le date di questo elemento sono già passate; impostane di nuove prima di usarlo.",
+      "linkNotRemapped": "Un link a uno strumento non incluso nel modello è stato lasciato invariato.",
+      "dynamicImage": "Questa immagine dinamica è stata saltata perché non è stato possibile copiarne lo sfondo.",
+      "dynamicImageFieldNotBound": "Scegli un campo personalizzato in cui memorizzare in cache l'immagine; quello originale era già nel tuo workspace.",
+      "dynamicImageRerenderFailed": "Questa immagine dinamica è stata disattivata perché non è stato possibile rigenerarne lo sfondo con i link copiati. Riattivala per riprovare.",
+      "pollImage": "Non è stato possibile copiare un'immagine.",
+      "leaderboardInvalid": "La configurazione di questa classifica non ha potuto essere installata, quindi è stata saltata.",
+      "placeLocationInvalid": "Questo luogo è stato saltato perché il suo nome è vuoto.",
+      "minigame": "Il minigioco da cui questa classifica ricava il punteggio non fa parte del modello, quindi è stata saltata.",
+      "minigameImage": "Non è stato possibile copiare un'immagine.",
+      "leaderboardImage": "Non è stato possibile copiare un'immagine.",
+      "leaderboardHostMissing": "La classifica richiede un canale (o minigioco) proprio che questa installazione non ha fornito, quindi è stata saltata.",
+      "externalStoreSkipped": "Questo workspace vende da un negozio collegato (Shopify o WooCommerce), quindi prodotti, venditori, codici sconto, orari e impostazioni del negozio non sono stati installati.",
+      "discountCodeSkipped": "Questo codice sconto è stato saltato: i prodotti o la categoria a cui si applica non fanno parte del modello, oppure le sue impostazioni sono state rifiutate.",
+      "storeSettingsKept": "Questo workspace aveva già impostazioni del negozio, quindi sono state mantenute così come sono.",
+      "vendorImage": "Non è stato possibile copiare un'immagine.",
+      "storeSettingsCurrencyKept": "Il workspace ha prodotti in un'altra valuta, quindi è stata mantenuta la sua valuta invece di quella del modello.",
+      "storySelectionRequired": "Seleziona di nuovo le storie: non è stato possibile portare quelle originali."
     },
     "tabs": {
       "mine": "I miei modelli",
@@ -12084,7 +12210,7 @@
     "add": "Aggiungi",
     "addCategory": "Aggiungi categoria",
     "renameCategory": "Rinomina",
-    "editCategories": "Modifica categorie",
+    "editListing": "Modifica voce",
     "templateId": "ID template",
     "template": "Template",
     "categories": "Categorie",
@@ -12092,9 +12218,12 @@
     "close": "Chiudi",
     "removeChip": "Rimuovi {name}",
     "categoriesHint": "Facoltativo. Senza categoria il template compare solo in «Tutti».",
+    "languages": "Lingue",
+    "allLanguages": "Tutte le lingue",
+    "languagesHint": "Facoltativo. Lascia vuoto per mostrare il modello in tutte le lingue.",
     "noCategoriesYet": "Ancora nessuna categoria.",
     "added": "Template aggiunto allo store",
-    "updated": "Categorie aggiornate",
+    "updated": "Voce aggiornata",
     "removed": "Template rimosso dallo store",
     "removeError": "Impossibile rimuovere il template",
     "removeTitle": "Rimuovere {name}?",
@@ -12142,10 +12271,13 @@
       "search": "Cerca template",
       "all": "Tutti",
       "categories": "Categorie dello store",
-      "noResults": "Nessun template corrisponde alla ricerca.",
-      "clearSearch": "Cancella ricerca",
+      "noResults": "Nessun modello corrisponde ai filtri.",
+      "clearSearch": "Cancella filtri",
       "by": "Di {publisherName}",
-      "loadFailed": "Impossibile caricare i template. Riprova più tardi."
+      "loadFailed": "Impossibile caricare i template. Riprova più tardi.",
+      "language": "Lingua",
+      "allLanguages": "Tutte le lingue",
+      "otherLanguages": "Altre lingue"
     },
     "picker": {
       "placeholder": "Seleziona un template",
@@ -12154,6 +12286,16 @@
       "error": "Impossibile caricare i template.",
       "retry": "Riprova",
       "meta": "ID {id} · {workspace}"
+    },
+    "bulk": {
+      "setCategories": "Imposta categorie",
+      "setLanguages": "Imposta lingue",
+      "categoriesHint": "Sostituisce le categorie dei modelli selezionati ({count}). Lascia vuoto per rimuovere tutte le categorie.",
+      "languagesHint": "Sostituisce le lingue dei modelli selezionati ({count}). Lascia vuoto per mostrarli in tutte le lingue.",
+      "updated": "Modelli selezionati aggiornati",
+      "removeTitle": "Rimuovere i modelli selezionati?",
+      "removeDescription": "Selezionati: {count}. Scompaiono dallo store; i modelli stessi e le loro installazioni non sono interessati.",
+      "removed": "Modelli selezionati rimossi dallo store"
     }
   },
   "accountDeletion": {

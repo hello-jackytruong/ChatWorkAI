@@ -193,6 +193,94 @@
   "errors": {
     "superAdminRequired": "Anda harus menjadi super admin workspace untuk melakukan ini."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Terjemahan percakapan",
+      "description": "Terjemahkan pesan pelanggan untuk tim Anda, dan balasan Anda untuk pelanggan, langsung di Kotak Masuk.",
+      "saved": "Pengaturan terjemahan disimpan",
+      "readOnly": "Hanya admin workspace yang dapat mengubah pengaturan ini.",
+      "languageHint": "Juga bahasa tujuan terjemahan pesan pelanggan saat terjemahan percakapan aktif.",
+      "alert": {
+        "needsReconfiguration": "Perlu dikonfigurasi ulang: integrasi AI telah dihapus atau dimatikan.",
+        "noIntegration": "Hubungkan integrasi AI terlebih dahulu untuk menggunakan terjemahan.",
+        "connect": "Hubungkan AI"
+      },
+      "enabled": {
+        "label": "Terjemahkan percakapan",
+        "description": "Pesan pelanggan hanya diterjemahkan saat seseorang membuka percakapan. Teks chat dikirim ke penyedia AI yang Anda pilih dan ditagihkan ke kunci AI Anda."
+      },
+      "integration": {
+        "label": "Integrasi AI",
+        "description": "Hanya penyedia AI yang terhubung yang ditampilkan."
+      },
+      "test": {
+        "label": "Uji koneksi",
+        "button": "Uji",
+        "result": "Selesai dalam {seconds} dtk: \"{sample}\" → \"{translated}\"",
+        "slow": "Model ini lambat: pesan keluar mungkin tidak sempat diterjemahkan dan tidak akan dikirim.",
+        "failed": "Pengujian gagal."
+      }
+    },
+    "message": {
+      "translating": "Menerjemahkan…",
+      "stillWaiting": "Masih menunggu terjemahan",
+      "requestAgain": "Minta lagi",
+      "failed": "Tidak dapat diterjemahkan",
+      "translatedFrom": "Diterjemahkan dari {language}. Tampilkan asli",
+      "translatedFromNoLanguage": "Diterjemahkan. Tampilkan asli",
+      "sentIn": "Dikirim dalam {language}. Tampilkan yang dikirim",
+      "sentInNoLanguage": "Dikirim terjemahan. Tampilkan yang dikirim",
+      "hideOriginal": "Sembunyikan asli",
+      "hideSent": "Sembunyikan yang dikirim",
+      "translatedLabelNoLanguage": "Diterjemahkan",
+      "sentLabelNoLanguage": "Dikirim terjemahan"
+    },
+    "badge": {
+      "tooltip": "Bahasa pelanggan: {language}"
+    },
+    "panel": {
+      "title": "Pengaturan terjemahan",
+      "statusOn": "Aktif",
+      "statusOff": "Nonaktif",
+      "translateConversation": "Terjemahkan percakapan ini",
+      "translateConversationHint": "Terjemahkan pesan secara otomatis",
+      "botActiveHint": "Bot sedang menangani percakapan ini sehingga terjemahan nonaktif. Aktifkan untuk menerjemahkannya.",
+      "botPausedHint": "Anda mengambil alih percakapan ini dari bot, jadi terjemahan tetap nonaktif. Aktifkan untuk menerjemahkannya.",
+      "displayOptions": "Opsi tampilan",
+      "showOriginals": "Tampilkan teks asli",
+      "previewBeforeSending": "Pratinjau terjemahan sebelum dikirim"
+    },
+    "composer": {
+      "hintUnknown": "Bahasa tidak terdeteksi · Dikirim apa adanya",
+      "hintDetecting": "Mendeteksi bahasa pelanggan…",
+      "chip": {
+        "aria": "Bahasa terjemahan",
+        "target": "→ {language}",
+        "sameLanguage": "Bahasa yang sama dengan workspace",
+        "unknown": "Bahasa tidak diketahui",
+        "hasFiles": "Pesan dengan file tidak diterjemahkan",
+        "off": "Terjemahan mati"
+      },
+      "popover": {
+        "customerLanguage": "Bahasa pelanggan",
+        "chooseLanguage": "Pilih bahasa"
+      },
+      "preview": {
+        "title": "Pratinjau pelanggan · {language}",
+        "translating": "Menerjemahkan…",
+        "needsRetranslate": "Perlu diterjemahkan ulang",
+        "retranslate": "Terjemahkan lagi",
+        "failed": "Tidak dapat diterjemahkan — akan dicoba lagi saat Anda mengirim",
+        "done": "Selesai",
+        "ready": "Siap dikirim"
+      }
+    },
+    "send": {
+      "translating": "Menerjemahkan…",
+      "failed": "Gagal menerjemahkan",
+      "turnedOff": "Terjemahan tidak tersedia. Terjemahan telah dinonaktifkan untuk percakapan ini."
+    }
+  },
   "states": {
     "success": "Berhasil",
     "error": "Kesalahan",
@@ -7418,6 +7506,7 @@
       "resourcesTitle": "Sumber daya terinstal",
       "noResources": "Belum ada yang dibuat.",
       "deletedResource": "Sumber daya dihapus",
+      "wholeCategory": "{count, plural, one {# item} other {# item}}",
       "viewOnly": "Hanya lihat",
       "created": "Dibuat",
       "reused": "Digunakan ulang",
@@ -7472,7 +7561,12 @@
           "placeCategories": "Kategori tempat"
         }
       },
-      "viewOnlyCopyIncluded": "Sesuatu yang Anda pilih (atau yang dibutuhkannya) dipasang dari templat hanya-lihat, jadi tidak dapat dibagikan dalam templat baru."
+      "viewOnlyCopyIncluded": "Sesuatu yang Anda pilih (atau yang dibutuhkannya) dipasang dari templat hanya-lihat, jadi tidak dapat dibagikan dalam templat baru.",
+      "miniAppPublishedExcluded": {
+        "title": "Mini App dikecualikan",
+        "hint": "Alur ini memakai Mini App yang dipublikasikan ke WhatsApp. Mini App itu tidak dapat dibagikan, jadi template mengecualikannya dan instalasi menghapus referensinya.",
+        "item": "{flowName}: {miniAppName}"
+      }
     },
     "categories": {
       "flows": "Flow",
@@ -7494,7 +7588,20 @@
       "aiFiles": "File pengetahuan AI",
       "questionnaires": "Questionnaires",
       "couponTopics": "Topik kupon",
-      "pipelines": "Pipeline"
+      "pipelines": "Pipeline",
+      "magicLinks": "Tautan ajaib",
+      "polls": "Polling",
+      "dynamicImages": "Gambar dinamis",
+      "placeLocations": "Lokasi",
+      "miniApps": "Mini App",
+      "minigames": "Minigame",
+      "leaderboards": "Papan peringkat",
+      "openHours": "Jam buka",
+      "vendors": "Vendor",
+      "discountCodes": "Kode diskon",
+      "storeSettings": "Pengaturan toko",
+      "storyAutomations": "Otomatisasi Story Instagram",
+      "inboundWebhooks": "Webhook masuk"
     },
     "locked": {
       "flowBanner": "Alur ini dipasang dari templat hanya-lihat. Anda dapat melihatnya tetapi tidak dapat mengeditnya.",
@@ -7571,6 +7678,7 @@
       "flowNotPublished": "Flow dipasang sebagai draf dan belum diterbitkan.",
       "flowSkippedRequiredReference": "Flow dilewati karena referensi yang diperlukan tidak dapat diselesaikan.",
       "folder": "Item yang dirujuk tidak ditemukan di workspace ini, sehingga tautannya dihapus.",
+      "inboundWebhookLimitReached": "Webhook masuk ini dilewati: ruang kerja sudah mencapai jumlah maksimum webhook masuk.",
       "inboxBindingRequired": "Pilih inbox untuk kanal ini; sampai saat itu item tetap tidak aktif.",
       "integration": "Item yang dirujuk tidak ditemukan di workspace ini, sehingga tautannya dihapus.",
       "localModifiedOverwritten": "Item yang diedit secara lokal telah ditimpa. Cadangan disimpan dan dapat dipulihkan.",
@@ -7591,7 +7699,25 @@
       "tag": "Item yang dirujuk tidak ditemukan di workspace ini, sehingga tautannya dihapus.",
       "unlisted": "Item tidak sepenuhnya terbawa: {code}",
       "workspaceMember": "Ditugaskan ke anggota yang tidak ada di workspace ini.",
-      "workspaceUnavailable": "Workspace ini sudah tidak tersedia, jadi item ini dilewati."
+      "workspaceUnavailable": "Workspace ini sudah tidak tersedia, jadi item ini dilewati.",
+      "scheduleExpired": "Tanggal item ini sudah lewat; atur tanggal baru sebelum menggunakannya.",
+      "linkNotRemapped": "Tautan ke alat yang bukan bagian dari templat dibiarkan apa adanya.",
+      "dynamicImage": "Gambar dinamis ini dilewati karena latar belakangnya tidak dapat disalin.",
+      "dynamicImageFieldNotBound": "Pilih bidang kustom untuk menyimpan cache gambar ini; bidang aslinya sudah ada di workspace Anda.",
+      "dynamicImageRerenderFailed": "Gambar dinamis ini dinonaktifkan karena latar belakangnya tidak dapat dirender ulang dengan tautan yang disalin. Aktifkan lagi untuk mencoba ulang.",
+      "pollImage": "Sebuah gambar tidak dapat disalin.",
+      "leaderboardInvalid": "Konfigurasi papan peringkat ini tidak dapat dipasang, jadi dilewati.",
+      "placeLocationInvalid": "Tempat ini dilewati karena namanya kosong.",
+      "minigame": "Minigame sumber skor papan peringkat ini bukan bagian dari templat, jadi dilewati.",
+      "minigameImage": "Sebuah gambar tidak dapat disalin.",
+      "leaderboardImage": "Sebuah gambar tidak dapat disalin.",
+      "leaderboardHostMissing": "Papan peringkat membutuhkan kanal (atau minigame) sendiri yang tidak disediakan instalasi ini, jadi dilewati.",
+      "externalStoreSkipped": "Workspace ini berjualan dari toko yang terhubung (Shopify atau WooCommerce), jadi produk, vendor, kode diskon, jam buka, dan pengaturan toko tidak dipasang.",
+      "discountCodeSkipped": "Kode diskon ini dilewati: produk atau kategori yang dikenainya bukan bagian dari templat, atau pengaturannya ditolak.",
+      "storeSettingsKept": "Workspace ini sudah memiliki pengaturan toko, jadi dibiarkan apa adanya.",
+      "vendorImage": "Sebuah gambar tidak dapat disalin.",
+      "storeSettingsCurrencyKept": "Workspace memiliki produk dalam mata uang lain, jadi mata uangnya dipertahankan, bukan milik templat.",
+      "storySelectionRequired": "Pilih ulang story: story aslinya tidak dapat dibawa."
     },
     "tabs": {
       "mine": "Template saya",
@@ -12084,7 +12210,7 @@
     "add": "Tambah",
     "addCategory": "Tambah kategori",
     "renameCategory": "Ubah nama",
-    "editCategories": "Edit kategori",
+    "editListing": "Edit entri",
     "templateId": "ID template",
     "template": "Template",
     "categories": "Kategori",
@@ -12092,9 +12218,12 @@
     "close": "Tutup",
     "removeChip": "Hapus {name}",
     "categoriesHint": "Opsional. Tanpa kategori, template hanya muncul di “Semua”.",
+    "languages": "Bahasa",
+    "allLanguages": "Semua bahasa",
+    "languagesHint": "Opsional. Kosongkan untuk menampilkan templat dalam semua bahasa.",
     "noCategoriesYet": "Belum ada kategori.",
     "added": "Template ditambahkan ke toko",
-    "updated": "Kategori diperbarui",
+    "updated": "Entri diperbarui",
     "removed": "Template dihapus dari toko",
     "removeError": "Tidak dapat menghapus template",
     "removeTitle": "Hapus {name}?",
@@ -12142,10 +12271,13 @@
       "search": "Cari template",
       "all": "Semua",
       "categories": "Kategori toko",
-      "noResults": "Tidak ada template yang cocok dengan pencarian Anda.",
-      "clearSearch": "Hapus pencarian",
+      "noResults": "Tidak ada templat yang cocok dengan filter Anda.",
+      "clearSearch": "Hapus filter",
       "by": "Oleh {publisherName}",
-      "loadFailed": "Template tidak dapat dimuat. Coba lagi nanti."
+      "loadFailed": "Template tidak dapat dimuat. Coba lagi nanti.",
+      "language": "Bahasa",
+      "allLanguages": "Semua bahasa",
+      "otherLanguages": "Bahasa lain"
     },
     "picker": {
       "placeholder": "Pilih template",
@@ -12154,6 +12286,16 @@
       "error": "Tidak dapat memuat template.",
       "retry": "Coba lagi",
       "meta": "ID {id} · {workspace}"
+    },
+    "bulk": {
+      "setCategories": "Atur kategori",
+      "setLanguages": "Atur bahasa",
+      "categoriesHint": "Mengganti kategori templat yang dipilih ({count}). Kosongkan untuk menghapus semua kategori.",
+      "languagesHint": "Mengganti bahasa templat yang dipilih ({count}). Kosongkan untuk menampilkannya dalam semua bahasa.",
+      "updated": "Templat yang dipilih diperbarui",
+      "removeTitle": "Hapus templat yang dipilih?",
+      "removeDescription": "Dipilih: {count}. Templat hilang dari toko; templat itu sendiri dan instalasinya tidak terpengaruh.",
+      "removed": "Templat yang dipilih dihapus dari toko"
     }
   },
   "accountDeletion": {

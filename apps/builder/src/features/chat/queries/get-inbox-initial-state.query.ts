@@ -19,6 +19,7 @@ import type { ListConversationItemResource } from "@/features/conversations/sche
 import { listMessages } from "@/features/messages/queries"
 import { getZaloGroupConversation } from "@/features/zalo-accounts/lib/group-content"
 import { logger } from "@/lib/log"
+import type { ConversationAccessCheck } from "@/lib/public-api/member-scope"
 
 // Balances slow-network tolerance against blocking the page render: past this,
 // the client-side fallback (loadMoreConversations/loadInitialMessages) takes
@@ -82,13 +83,17 @@ const withAbortSignal = <T>(
 const seedMessagesState = async (
   workspaceId: string,
   conversationId: string,
+  canSeeConversation: ConversationAccessCheck | undefined,
 ): Promise<ChatStoreInitialState> => {
-  const { data, nextCursor } = await listMessages({
-    workspaceId,
-    perPage: INBOX_MESSAGES_PER_PAGE,
-    cursor: "",
-    conversationId,
-  })
+  const { data, nextCursor } = await listMessages(
+    {
+      workspaceId,
+      perPage: INBOX_MESSAGES_PER_PAGE,
+      cursor: "",
+      conversationId,
+    },
+    { includeTranslation: true, canSeeConversation },
+  )
 
   const messagesSeed: ChatStoreMessagesSeed = {
     messages: [...data].reverse(),
@@ -156,10 +161,12 @@ const loadInitialState = async ({
   workspaceId,
   urlConversation,
   contactPermissionScope,
+  canSeeConversation,
 }: {
   workspaceId: string
   urlConversation: UrlConversation
   contactPermissionScope: ContactPermissionScope
+  canSeeConversation: ConversationAccessCheck | undefined
 }): Promise<ChatStoreInitialState | null> => {
   const conversationId =
     urlConversation.kind === "valid" ? urlConversation.id : undefined
@@ -191,7 +198,7 @@ const loadInitialState = async ({
       return {}
     }
   const messagesPromise: Promise<ChatStoreInitialState> = conversationId
-    ? seedMessagesState(workspaceId, conversationId).catch(
+    ? seedMessagesState(workspaceId, conversationId, canSeeConversation).catch(
         logSeedFailure(
           "getInboxInitialState: failed to seed messages state",
           conversationId,
@@ -200,7 +207,11 @@ const loadInitialState = async ({
     : activeConversationPromise
         .then((conversation) =>
           conversation
-            ? seedMessagesState(workspaceId, conversation.id).catch(
+            ? seedMessagesState(
+                workspaceId,
+                conversation.id,
+                canSeeConversation,
+              ).catch(
                 logSeedFailure(
                   "getInboxInitialState: failed to seed messages state",
                   conversation.id,
@@ -284,10 +295,16 @@ export const getInboxInitialState = async ({
   workspaceId,
   conversationId,
   contactPermissionScope,
+  canSeeConversation,
 }: {
   workspaceId: string
   conversationId?: string
   contactPermissionScope: ContactPermissionScope
+  /**
+   * The member's conversation scope: the seeded messages of a conversation
+   * outside it carry no translation. Omitted: unscoped.
+   */
+  canSeeConversation?: ConversationAccessCheck
 }): Promise<ChatStoreInitialState | null> => {
   try {
     const signal = AbortSignal.timeout(INBOX_SEED_TIMEOUT_MS)
@@ -296,6 +313,7 @@ export const getInboxInitialState = async ({
         workspaceId,
         urlConversation: parseUrlConversation(conversationId),
         contactPermissionScope,
+        canSeeConversation,
       }),
       signal,
       "Inbox initial state seed timed out",

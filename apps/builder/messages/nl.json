@@ -193,6 +193,94 @@
   "errors": {
     "superAdminRequired": "Je moet superbeheerder van de werkruimte zijn om dit te doen."
   },
+  "inboxTranslation": {
+    "settings": {
+      "title": "Gesprekken vertalen",
+      "description": "Vertaal de berichten van je klanten voor je team en je antwoorden voor je klanten, direct in de Inbox.",
+      "saved": "Vertaalinstellingen opgeslagen",
+      "readOnly": "Alleen workspace-beheerders kunnen deze instellingen wijzigen.",
+      "languageHint": "Ook de taal waarin klantberichten worden vertaald als het vertalen van gesprekken aanstaat.",
+      "alert": {
+        "needsReconfiguration": "Opnieuw instellen nodig: de AI-integratie is verwijderd of uitgeschakeld.",
+        "noIntegration": "Koppel eerst een AI-integratie om te kunnen vertalen.",
+        "connect": "AI koppelen"
+      },
+      "enabled": {
+        "label": "Gesprekken vertalen",
+        "description": "Klantberichten worden alleen vertaald wanneer iemand het gesprek opent. De chattekst wordt naar de gekozen AI-provider gestuurd en op je AI-sleutel gefactureerd."
+      },
+      "integration": {
+        "label": "AI-integratie",
+        "description": "Alleen gekoppelde AI-providers worden getoond."
+      },
+      "test": {
+        "label": "Verbinding testen",
+        "button": "Testen",
+        "result": "Klaar in {seconds} s: \"{sample}\" → \"{translated}\"",
+        "slow": "Dit model is traag: uitgaande berichten worden mogelijk niet op tijd vertaald en worden dan niet verzonden.",
+        "failed": "De test is mislukt."
+      }
+    },
+    "message": {
+      "translating": "Vertalen…",
+      "stillWaiting": "Nog steeds wachten op de vertaling",
+      "requestAgain": "Opnieuw aanvragen",
+      "failed": "Kon niet vertalen",
+      "translatedFrom": "Vertaald uit {language}. Origineel tonen",
+      "translatedFromNoLanguage": "Vertaald. Origineel tonen",
+      "sentIn": "Verzonden in {language}. Verzonden tekst tonen",
+      "sentInNoLanguage": "Vertaald verzonden. Verzonden tekst tonen",
+      "hideOriginal": "Origineel verbergen",
+      "hideSent": "Verzonden tekst verbergen",
+      "translatedLabelNoLanguage": "Vertaald",
+      "sentLabelNoLanguage": "Vertaald verzonden"
+    },
+    "badge": {
+      "tooltip": "Taal van de klant: {language}"
+    },
+    "panel": {
+      "title": "Vertaalinstellingen",
+      "statusOn": "Aan",
+      "statusOff": "Uit",
+      "translateConversation": "Dit gesprek vertalen",
+      "translateConversationHint": "Berichten automatisch vertalen",
+      "botActiveHint": "De bot behandelt dit gesprek, dus vertalen staat uit. Zet het aan om het gesprek te vertalen.",
+      "botPausedHint": "Je hebt dit gesprek van de bot overgenomen, dus vertalen blijft uit. Zet het aan om het te vertalen.",
+      "displayOptions": "Weergave-opties",
+      "showOriginals": "Originele tekst tonen",
+      "previewBeforeSending": "Vertaling bekijken voor het verzenden"
+    },
+    "composer": {
+      "hintUnknown": "Taal niet gedetecteerd · Wordt verzonden zoals geschreven",
+      "hintDetecting": "Taal van de klant herkennen…",
+      "chip": {
+        "aria": "Vertaaltaal",
+        "target": "→ {language}",
+        "sameLanguage": "Zelfde taal als de workspace",
+        "unknown": "Taal onbekend",
+        "hasFiles": "Berichten met bestanden worden niet vertaald",
+        "off": "Vertalen uit"
+      },
+      "popover": {
+        "customerLanguage": "Taal van de klant",
+        "chooseLanguage": "Kies een taal"
+      },
+      "preview": {
+        "title": "Klantvoorbeeld · {language}",
+        "translating": "Vertalen…",
+        "needsRetranslate": "Moet opnieuw vertaald worden",
+        "retranslate": "Opnieuw vertalen",
+        "failed": "Kon niet vertalen — bij het verzenden wordt het opnieuw geprobeerd",
+        "done": "Klaar",
+        "ready": "Klaar om te verzenden"
+      }
+    },
+    "send": {
+      "translating": "Vertalen…",
+      "failed": "Vertalen mislukt",
+      "turnedOff": "Vertaling niet beschikbaar. Vertaling is uitgeschakeld voor dit gesprek."
+    }
+  },
   "states": {
     "success": "Succes",
     "error": "Fout",
@@ -7418,6 +7506,7 @@
       "resourcesTitle": "Geïnstalleerde resources",
       "noResources": "Er is nog niets aangemaakt.",
       "deletedResource": "Verwijderde resource",
+      "wholeCategory": "{count, plural, one {# item} other {# items}}",
       "viewOnly": "Alleen bekijken",
       "created": "Aangemaakt",
       "reused": "Hergebruikt",
@@ -7472,7 +7561,12 @@
           "placeCategories": "Plaatscategorieën"
         }
       },
-      "viewOnlyCopyIncluded": "Iets dat je hebt geselecteerd (of iets dat het nodig heeft) is geïnstalleerd vanuit een alleen-lezen-sjabloon en kan niet in een nieuw sjabloon worden gedeeld."
+      "viewOnlyCopyIncluded": "Iets dat je hebt geselecteerd (of iets dat het nodig heeft) is geïnstalleerd vanuit een alleen-lezen-sjabloon en kan niet in een nieuw sjabloon worden gedeeld.",
+      "miniAppPublishedExcluded": {
+        "title": "Mini-app weggelaten",
+        "hint": "Deze flows gebruiken een Mini-app die op WhatsApp is gepubliceerd. Die kan niet worden gedeeld, dus de sjabloon laat hem weg en de installatie verwijdert de verwijzing.",
+        "item": "{flowName}: {miniAppName}"
+      }
     },
     "categories": {
       "flows": "Flows",
@@ -7494,7 +7588,20 @@
       "aiFiles": "AI-kennisbestanden",
       "questionnaires": "Vragenlijsten",
       "couponTopics": "Coupononderwerpen",
-      "pipelines": "Pipelines"
+      "pipelines": "Pipelines",
+      "magicLinks": "Magische links",
+      "polls": "Peilingen",
+      "dynamicImages": "Dynamische afbeeldingen",
+      "placeLocations": "Locaties",
+      "miniApps": "Mini-apps",
+      "minigames": "Minigames",
+      "leaderboards": "Ranglijsten",
+      "openHours": "Openingstijden",
+      "vendors": "Verkopers",
+      "discountCodes": "Kortingscodes",
+      "storeSettings": "Winkelinstellingen",
+      "storyAutomations": "Instagram Story-automatisering",
+      "inboundWebhooks": "Inkomende webhook"
     },
     "locked": {
       "flowBanner": "Deze flow is geïnstalleerd vanuit een alleen-lezen sjabloon. Je kunt hem bekijken maar niet bewerken.",
@@ -7571,6 +7678,7 @@
       "flowNotPublished": "De flow is als concept geïnstalleerd en is niet gepubliceerd.",
       "flowSkippedRequiredReference": "De flow is overgeslagen omdat een vereiste verwijzing niet kon worden opgelost.",
       "folder": "Een gerefereerd item is niet gevonden in deze werkruimte, dus de koppeling is verwijderd.",
+      "inboundWebhookLimitReached": "Deze inkomende webhook is overgeslagen: de werkruimte heeft al het maximale aantal inkomende webhooks.",
       "inboxBindingRequired": "Kies een inbox voor dit kanaal; tot die tijd blijft het item inactief.",
       "integration": "Een gerefereerd item is niet gevonden in deze werkruimte, dus de koppeling is verwijderd.",
       "localModifiedOverwritten": "Een lokaal bewerkt item is overschreven. Er is een back-up opgeslagen die kan worden hersteld.",
@@ -7591,7 +7699,25 @@
       "tag": "Een gerefereerd item is niet gevonden in deze werkruimte, dus de koppeling is verwijderd.",
       "unlisted": "Item niet volledig overgenomen: {code}",
       "workspaceMember": "Toegewezen aan een lid dat niet in deze workspace zit.",
-      "workspaceUnavailable": "Deze werkruimte is niet meer beschikbaar, dus het item is overgeslagen."
+      "workspaceUnavailable": "Deze werkruimte is niet meer beschikbaar, dus het item is overgeslagen.",
+      "scheduleExpired": "De datums van dit item zijn al verstreken; stel nieuwe in voordat je het gebruikt.",
+      "linkNotRemapped": "Een link naar een tool die niet in de sjabloon zat, is ongewijzigd gelaten.",
+      "dynamicImage": "Deze dynamische afbeelding is overgeslagen omdat de achtergrond niet gekopieerd kon worden.",
+      "dynamicImageFieldNotBound": "Kies een aangepast veld om de afbeelding in te cachen; het oorspronkelijke veld bestond al in je workspace.",
+      "dynamicImageRerenderFailed": "Deze dynamische afbeelding is uitgezet omdat de achtergrond niet opnieuw kon worden gerenderd met je gekopieerde links. Zet hem weer aan om het opnieuw te proberen.",
+      "pollImage": "Een afbeelding kon niet worden gekopieerd.",
+      "leaderboardInvalid": "De configuratie van deze ranglijst kon niet worden geïnstalleerd en is overgeslagen.",
+      "placeLocationInvalid": "Deze plaats is overgeslagen omdat de naam leeg is.",
+      "minigame": "De minigame waaruit deze ranglijst zijn punten haalt, zit niet in de sjabloon en is overgeslagen.",
+      "minigameImage": "Een afbeelding kon niet worden gekopieerd.",
+      "leaderboardImage": "Een afbeelding kon niet worden gekopieerd.",
+      "leaderboardHostMissing": "De ranglijst heeft een eigen kanaal (of minigame) nodig dat deze installatie niet leverde en is overgeslagen.",
+      "externalStoreSkipped": "Deze workspace verkoopt via een gekoppelde winkel (Shopify of WooCommerce), dus producten, verkopers, kortingscodes, openingstijden en winkelinstellingen zijn niet geïnstalleerd.",
+      "discountCodeSkipped": "Deze kortingscode is overgeslagen: de producten of categorie waarvoor hij geldt zitten niet in de sjabloon, of de instellingen werden geweigerd.",
+      "storeSettingsKept": "Deze workspace had al winkelinstellingen, dus die zijn behouden zoals ze waren.",
+      "vendorImage": "Een afbeelding kon niet worden gekopieerd.",
+      "storeSettingsCurrencyKept": "De workspace heeft producten in een andere valuta, dus de eigen valuta is behouden in plaats van die van de sjabloon.",
+      "storySelectionRequired": "Selecteer de stories opnieuw: de oorspronkelijke stories konden niet worden overgenomen."
     },
     "tabs": {
       "mine": "Mijn sjablonen",
@@ -12084,7 +12210,7 @@
     "add": "Toevoegen",
     "addCategory": "Categorie toevoegen",
     "renameCategory": "Hernoemen",
-    "editCategories": "Categorieën bewerken",
+    "editListing": "Vermelding bewerken",
     "templateId": "Template-ID",
     "template": "Template",
     "categories": "Categorieën",
@@ -12092,9 +12218,12 @@
     "close": "Sluiten",
     "removeChip": "{name} verwijderen",
     "categoriesHint": "Optioneel. Zonder categorie verschijnt de template alleen onder “Alle”.",
+    "languages": "Talen",
+    "allLanguages": "Alle talen",
+    "languagesHint": "Optioneel. Laat leeg om de sjabloon in alle talen te tonen.",
     "noCategoriesYet": "Nog geen categorieën.",
     "added": "Template toegevoegd aan de winkel",
-    "updated": "Categorieën bijgewerkt",
+    "updated": "Vermelding bijgewerkt",
     "removed": "Template uit de winkel verwijderd",
     "removeError": "Template kon niet worden verwijderd",
     "removeTitle": "{name} verwijderen?",
@@ -12142,10 +12271,13 @@
       "search": "Templates zoeken",
       "all": "Alle",
       "categories": "Winkelcategorieën",
-      "noResults": "Geen templates komen overeen met je zoekopdracht.",
-      "clearSearch": "Zoekopdracht wissen",
+      "noResults": "Geen sjablonen komen overeen met je filters.",
+      "clearSearch": "Filters wissen",
       "by": "Door {publisherName}",
-      "loadFailed": "De templates konden niet worden geladen. Probeer het later opnieuw."
+      "loadFailed": "De templates konden niet worden geladen. Probeer het later opnieuw.",
+      "language": "Taal",
+      "allLanguages": "Alle talen",
+      "otherLanguages": "Andere talen"
     },
     "picker": {
       "placeholder": "Kies een template",
@@ -12154,6 +12286,16 @@
       "error": "Templates konden niet worden geladen.",
       "retry": "Opnieuw proberen",
       "meta": "ID {id} · {workspace}"
+    },
+    "bulk": {
+      "setCategories": "Categorieën instellen",
+      "setLanguages": "Talen instellen",
+      "categoriesHint": "Vervangt de categorieën van de geselecteerde sjablonen ({count}). Laat leeg om alle categorieën te verwijderen.",
+      "languagesHint": "Vervangt de talen van de geselecteerde sjablonen ({count}). Laat leeg om ze in alle talen te tonen.",
+      "updated": "Geselecteerde sjablonen bijgewerkt",
+      "removeTitle": "Geselecteerde sjablonen verwijderen?",
+      "removeDescription": "Geselecteerd: {count}. Ze verdwijnen uit de winkel; de sjablonen zelf en hun installaties blijven ongemoeid.",
+      "removed": "Geselecteerde sjablonen uit de winkel verwijderd"
     }
   },
   "accountDeletion": {
