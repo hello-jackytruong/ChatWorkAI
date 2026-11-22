@@ -3,6 +3,7 @@ import { decodeProtectedHeader, errors, importSPKI, jwtVerify } from "jose"
 import { isCloud, isEnterprise, keys } from "../../keys"
 import { logger } from "../../logger"
 import { LICENSE_ISSUER, LICENSE_PUBLIC_KEYS } from "./public-keys"
+import { isEnterpriseQcLicenseBypassEnabled } from "./qc-bypass"
 import {
   LICENSE_FEATURES,
   type LicenseFeature,
@@ -383,6 +384,10 @@ export const getLicense = loadLicense
 export const getLicenseStatus = loadLicense
 
 export const hasFeature = async (feature: LicenseFeature): Promise<boolean> => {
+  if (isEnterpriseQcLicenseBypassEnabled()) {
+    return true
+  }
+
   const license = await getLicense()
 
   return isLicenseEntitled(license.state) && license.features.includes(feature)
@@ -391,6 +396,10 @@ export const hasFeature = async (feature: LicenseFeature): Promise<boolean> => {
 export const getLimit = async (
   key: LicenseLimitKey,
 ): Promise<LicenseLimits[LicenseLimitKey] | undefined> => {
+  if (isEnterpriseQcLicenseBypassEnabled()) {
+    return null
+  }
+
   const license = await getLicense()
 
   if (!isLicenseEntitled(license.state)) {

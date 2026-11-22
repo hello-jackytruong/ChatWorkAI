@@ -1,3 +1,4 @@
+import { isEnterpriseQcLicenseBypassEnabled } from "../enterprise/license/qc-bypass"
 import {
   getLicenseStatus,
   isLicenseEntitled,
@@ -7,13 +8,17 @@ import { isCloud, isEnterprise } from "../keys"
 
 /**
  * Whether the current edition unlocks branding, email templates, and platform
- * help links. Both cloud and self-hosted enterprise must present a valid
- * license — or one still inside its 7-day post-expiry grace window — setting
- * NEXT_PUBLIC_EDITION alone never unlocks features.
+ * help links. Normal enforcement requires a valid license or its 7-day grace
+ * period. Temporary Enterprise QC bypass is controlled in
+ * enterprise/license/qc-bypass.ts.
  */
 export const hasEnterpriseFeatures = async (): Promise<boolean> => {
   if (!(isCloud() || isEnterprise())) {
     return false
+  }
+
+  if (isEnterpriseQcLicenseBypassEnabled()) {
+    return true
   }
 
   const license = await getLicenseStatus()

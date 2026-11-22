@@ -1,5 +1,6 @@
 import { isCloud, isEnterprise, keys } from "../../keys"
 import { logger } from "../../logger"
+import { isEnterpriseQcLicenseBypassEnabled } from "./qc-bypass"
 import {
   getLicenseStatus,
   LICENSE_GRACE_PERIOD_DAYS,
@@ -47,6 +48,14 @@ const logLicenseLapsedWarning = ({
 
 export const assertLicenseAtStartup = async (): Promise<void> => {
   if (!(isEnterprise() || isCloud())) {
+    return
+  }
+
+  if (isEnterpriseQcLicenseBypassEnabled()) {
+    logger.warn(
+      { edition: keys().NEXT_PUBLIC_EDITION },
+      "Enterprise license enforcement is temporarily bypassed for production QC. Re-enable it in enterprise/license/qc-bypass.ts after the license API is ready.",
+    )
     return
   }
 

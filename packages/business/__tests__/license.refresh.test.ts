@@ -9,6 +9,11 @@ import { afterEach, beforeAll, describe, expect, test, vi } from "vitest"
 import { LICENSE_ISSUER } from "../src/enterprise/license/public-keys"
 import { mockLicenseRepository } from "./helpers/license"
 
+// Exercise normal enforcement so restoring it after QC remains covered.
+vi.mock("../src/enterprise/license/qc-bypass", () => ({
+  isEnterpriseQcLicenseBypassEnabled: () => false,
+}))
+
 const KID = "test-license-key"
 const DAY_SECONDS = 24 * 60 * 60
 const LICENSE_ID = "lic_test_123"

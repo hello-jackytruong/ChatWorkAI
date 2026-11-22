@@ -7,6 +7,11 @@ import {
 } from "../src/enterprise/license/service"
 import { mockLicenseRepository } from "./helpers/license"
 
+// Exercise normal enforcement so restoring it after QC remains covered.
+vi.mock("../src/enterprise/license/qc-bypass", () => ({
+  isEnterpriseQcLicenseBypassEnabled: () => false,
+}))
+
 const KID = "test-license-key"
 const NOW = new Date("2026-01-01T00:00:00.000Z")
 const NOW_SECONDS = Math.floor(NOW.getTime() / 1000)

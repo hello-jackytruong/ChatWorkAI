@@ -3,6 +3,7 @@ import { z } from "zod"
 import { isCloud, isEnterprise, keys } from "../../keys"
 import { logger } from "../../logger"
 import { LICENSE_PUBLIC_KEYS } from "./public-keys"
+import { isEnterpriseQcLicenseBypassEnabled } from "./qc-bypass"
 import type { LicenseState } from "./service"
 import {
   getLicenseStatus,
@@ -42,7 +43,7 @@ export const refreshLicense = async (): Promise<LicenseRefreshOutcome> => {
     LICENSE_REFRESH_URL,
     NEXT_PUBLIC_EDITION,
   } = keys()
-  if (!LICENSE_REFRESH_ENABLED) {
+  if (isEnterpriseQcLicenseBypassEnabled() || !LICENSE_REFRESH_ENABLED) {
     return { status: "skipped", reason: "disabled" }
   }
 

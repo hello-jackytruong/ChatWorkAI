@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
+// Exercise normal enforcement so restoring it after QC remains covered.
+vi.mock("../src/enterprise/license/qc-bypass", () => ({
+  isEnterpriseQcLicenseBypassEnabled: () => false,
+}))
+
 const mocks = vi.hoisted(() => ({
   getLicenseStatus: vi.fn(),
   isCloud: vi.fn(),
