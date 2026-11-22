@@ -16,6 +16,8 @@ export const TRANSLATION_CHANNEL_MAX_LENGTH: Record<ChannelType, number> = {
   messenger: 2000,
   whatsapp: 4096,
   zalo: 2000,
+  // Preserve the strictest fallback used before this channel was registered.
+  zaloAccount: 1000,
   smtp: 50_000,
   telegram: 4096,
   instagram: 1000,

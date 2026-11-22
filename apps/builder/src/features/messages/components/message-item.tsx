@@ -355,16 +355,15 @@ export const MessageItem = (props: MessageItemProps) => {
                         {t("messageDeleted")}
                       </span>
                     ) : (
-                      <>
-                        {props.zaloGroup && zaloGroupMessage && (
-                          <ZaloGroupText
-                            mentions={zaloGroupMessage.mentions}
-                            text={message.text ?? ""}
-                          />
-                        )}
-                        {!(props.zaloGroup && zaloGroupMessage) &&
-                          (translation?.mainText ?? message.text)}
-                      </>
+                      (translation?.mainText ??
+                      (props.zaloGroup && zaloGroupMessage ? (
+                        <ZaloGroupText
+                          mentions={zaloGroupMessage.mentions}
+                          text={message.text ?? ""}
+                        />
+                      ) : (
+                        message.text
+                      )))
                     )}
                   </pre>
                   {!isDeleted && translation?.footer}

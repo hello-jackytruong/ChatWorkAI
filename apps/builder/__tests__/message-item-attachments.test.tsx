@@ -600,3 +600,51 @@ describe("MessageItem comment without text", () => {
     expect(el.textContent).not.toContain("commentMediaUnavailable")
   })
 })
+
+describe("Zalo group message translation", () => {
+  test.each([
+    false,
+    true,
+  ])("keeps group source text unless a translation is available (%s)", (translated) => {
+    const message = makeMessage({
+      messageType: "incoming",
+      text: "Hello @Mai",
+      contentAttributes: {
+        zaloAccount: {
+          group: {
+            providerMessageId: "provider-1",
+            threadId: "group-1",
+            threadType: "group",
+            senderId: "sender-1",
+            timestampMs: 1_790_000_000_000,
+            msgType: "webchat",
+            isSelf: false,
+            text: "Hello @Mai",
+            attachments: [],
+            mentions: [{ uid: "mai", offset: 6, length: 4, type: 0 }],
+          },
+        },
+      },
+    })
+    const element = renderComponent(
+      <MessageItem
+        message={message}
+        translation={
+          translated
+            ? {
+                mainText: "Xin chào @Mai",
+                footer: <span>original-footer</span>,
+              }
+            : undefined
+        }
+        zaloGroup
+      />,
+    )
+    expect(element.querySelector("pre")?.textContent).toBe(
+      translated ? "Xin chào @Mai" : "Hello @Mai",
+    )
+    if (translated) {
+      expect(element.textContent).toContain("original-footer")
+    }
+  })
+})

@@ -234,6 +234,11 @@ describe("channel limits", () => {
     }
   })
 
+  test("personal Zalo retains the conservative translation boundary", () => {
+    expect(isWithinChannelLimit("zaloAccount", "a".repeat(1000))).toBe(true)
+    expect(isWithinChannelLimit("zaloAccount", "a".repeat(1001))).toBe(false)
+  })
+
   test("a translation over the limit is rejected", () => {
     expect(isWithinChannelLimit("instagram", "a".repeat(1000))).toBe(true)
     expect(isWithinChannelLimit("instagram", "a".repeat(1001))).toBe(false)
