@@ -56,7 +56,7 @@ const nextConfig: NextConfig = {
     turbopackServerFastRefresh: false,
     // Persistent dev cache can replay invalidations for unchanged chunks and
     // make the HMR client restart the page indefinitely on large workspaces.
-    // turbopackFileSystemCacheForDev: false,
+    turbopackFileSystemCacheForDev: false,
     // The Docker build starts from a clean layer and `.next/cache` is not
     // persisted across CI runs, so this cache is written and never read.
     turbopackFileSystemCacheForBuild: false,
