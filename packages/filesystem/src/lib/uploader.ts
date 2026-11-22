@@ -20,10 +20,14 @@ const env = keys()
 export class Uploader {
   readonly #client: S3Client
   readonly #bucketName: string
+  readonly #isR2: boolean
 
   static instance: Uploader
 
   constructor() {
+    this.#isR2 = env.S3_ENDPOINT
+      ? new URL(env.S3_ENDPOINT).hostname.endsWith(".r2.cloudflarestorage.com")
+      : false
     this.#client = new S3Client({
       endpoint: env.S3_ENDPOINT,
       credentials:
@@ -75,11 +79,14 @@ export class Uploader {
     options?: Partial<PutObjectCommandInput>,
     abortSignal?: AbortSignal,
   ) {
+    // R2 has bucket-level access controls and rejects S3 object ACL headers.
+    const { ACL, ...rest } = options ?? {}
     const command = new PutObjectCommand({
       Bucket: this.#bucketName,
       Key: path,
       Body: body,
-      ...options,
+      ...rest,
+      ...(!this.#isR2 && ACL !== undefined ? { ACL } : {}),
       // Every server-side write funnels through here, so a caller passing a
       // non-standard type (`image/jpg`) cannot store an object Meta rejects.
       ...(options?.ContentType !== undefined && {
