@@ -203,10 +203,19 @@ normal upgrades with an existing current release never seed again. Leave it
 false when adopting an existing database.
 
 A deploy starts/reuses datastores, creates and verifies a DB backup, runs
-pending migrations, then starts executor, builder, realtime, MCP, gateway and
-worker with readiness waits. If activation fails, it attempts all previous app
-images; on first-release failure it stops the partial app set. Running worker
-checks establish process liveness, not successful queue throughput; verify a
+pending migrations, then starts executor, builder, realtime, MCP, worker and
+Zalo gateway with readiness waits. The new worker image starts before the
+new gateway can publish events. Explicit rollback, and automatic rollback after
+new gateway activation was attempted, stop the active gateway before restoring
+older applications. They wait up to 30 seconds for `zalo-account:events` to empty while the current worker
+continues consuming. Each Redis length probe is limited to five seconds. A
+shutdown/probe error, invalid result or drain deadline stops rollback before any
+older reader is restored, retaining the current worker for investigation. After
+a successful gateway stop, a drain failure leaves the gateway stopped.
+Automatic rollback after an earlier activation failure restores previous apps
+without stopping or draining the unchanged gateway. Successful rollback restores
+all previous apps in the same worker-before-gateway order. On first-release
+failure it stops the partial app set. Running worker checks establish process liveness, not successful queue throughput; verify a
 real inbound/outbound message and queue progression as the initial smoke test.
 
 State is in `/opt/chatworkai/current`, `/opt/chatworkai/previous`, and

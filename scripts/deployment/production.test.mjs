@@ -16,6 +16,8 @@ import { join, resolve } from "node:path"
 import { test } from "node:test"
 
 const UNSAFE_COMMAND = /compose.* (down|prune)/
+const ROLLBACK_STOPPED = /rollback stopped before restoring older applications/i
+const SDK_EVENT_STREAM = /eventStream: "([^"]+)"/
 const DIGEST = /^[0-9a-f]{64}\n$/
 
 // Exercise the Ubuntu script on both CI and macOS. Tiny command adapters
@@ -33,6 +35,15 @@ for (const scenario of [
   "credential-change",
   "fresh-seed",
   "seed-failed",
+  "activation-worker-failed",
+  "activation-gateway-failed",
+  "activation-drain-failed",
+  "rollback",
+  "rollback-backlog",
+  "rollback-drain-failed",
+  "rollback-probe-error",
+  "rollback-stop-failed",
+  "rollback-invalid-target",
 ]) {
   test(`host release ordering and recovery: ${scenario}`, () => {
     const root = mkdtempSync(join(tmpdir(), "chatwork-deploy-"))
@@ -48,7 +59,11 @@ for (const scenario of [
             : "a".repeat(40),
         sha = versioned ? `${"b".repeat(40)}-20-1` : "b".repeat(40),
         digest = "c".repeat(64)
+      const rollback = scenario.startsWith("rollback")
       mkdirSync(join(root, "bin"))
+      const timeout = join(root, "bin/timeout")
+      writeFileSync(timeout, '#!/bin/bash\nshift\nexec "$@"\n')
+      chmodSync(timeout, 0o755)
       if (process.platform === "darwin") {
         const adapters = {
           stat: "import os,sys; print(oct(os.stat(sys.argv[-1]).st_mode & 0o777)[2:])",
@@ -94,7 +109,13 @@ for (const scenario of [
       }
       writeFileSync(join(root, ".env"), "", { mode: 0o600 })
       if (!["fresh-seed", "seed-failed"].includes(scenario)) {
-        symlinkSync(`releases/${old}`, join(root, "current"))
+        symlinkSync(`releases/${rollback ? sha : old}`, join(root, "current"))
+        if (rollback) {
+          symlinkSync(
+            `releases/${scenario === "rollback-invalid-target" ? "invalid" : old}`,
+            join(root, "previous"),
+          )
+        }
       }
       const config = (encryptionKey) =>
         JSON.stringify({
@@ -123,6 +144,17 @@ for (const scenario of [
             "redis-data": { name: "redis" },
           },
         })
+      let probe = "echo 0"
+      if (scenario === "rollback-probe-error") {
+        probe = "exit 1"
+      } else if (
+        ["activation-drain-failed", "rollback-drain-failed"].includes(scenario)
+      ) {
+        probe = "echo invalid"
+      } else if (scenario === "rollback-backlog") {
+        probe =
+          'if [[ -e "$CHATWORK_DEPLOY_ROOT/probed" ]]; then echo 0; else touch "$CHATWORK_DEPLOY_ROOT/probed"; echo 1; fi'
+      }
       const docker = join(root, "bin/docker")
       writeFileSync(
         docker,
@@ -142,6 +174,11 @@ case "$*" in
   *'builder migrate'*) ${scenario === "migration-failed" ? "exit 1" : ":"} ;;
   *'pg_dump'*) ${scenario === "backup-failed" ? "exit 1" : "echo archive"} ;;
   *'pg_restore'*) cat >/dev/null ;;
+  *'stop zalo-account-gateway'*) ${scenario === "rollback-stop-failed" ? "exit 1" : ":"} ;;
+  *'redis-cli --raw XLEN zalo-account:events'*)
+    ${probe} ;;
+  *'up -d --no-build'*worker*) ${scenario === "activation-worker-failed" ? `[[ "$CHATWORK_RELEASE_SHA" != "${sha.slice(0, 40)}" ]]` : ":"} ;;
+  *'up -d --no-build'*zalo-account-gateway*) ${["activation-gateway-failed", "activation-drain-failed"].includes(scenario) ? `[[ "$CHATWORK_RELEASE_SHA" != "${sha.slice(0, 40)}" ]]` : ":"} ;;
   *'up -d --no-build'*builder*) ${["activation-failed", "env-rollback"].includes(scenario) ? `[[ "$CHATWORK_RELEASE_SHA" != "${sha.slice(0, 40)}" ]]` : ":"} ;;
 esac
 `,
@@ -149,7 +186,11 @@ esac
       chmodSync(docker, 0o755)
       const result = spawnSync(
         "bash",
-        [resolve("scripts/deployment/production.sh"), "deploy", sha],
+        [
+          resolve("scripts/deployment/production.sh"),
+          rollback ? "rollback" : "deploy",
+          sha,
+        ],
         {
           env: {
             ...process.env,
@@ -169,9 +210,16 @@ esac
           "unchanged-schema",
           "env-update-same-commit",
           "fresh-seed",
+          "rollback",
+          "rollback-backlog",
         ].includes(scenario),
         result.stderr,
       )
+      if (scenario === "rollback-invalid-target") {
+        assert.ok(!calls.includes("stop zalo-account-gateway"))
+        assert.ok(!calls.includes("redis-cli --raw XLEN"))
+        assert.ok(!calls.includes("up -d --no-build"))
+      }
       if (scenario === "fresh-seed") {
         assert.ok(calls.includes("builder seed"))
         assert.ok(existsSync(join(root, "state/seeded")))
@@ -212,6 +260,96 @@ esac
       }
       if (scenario === "backup-failed") {
         assert.ok(!calls.includes("builder migrate"))
+      }
+      const appCalls = calls
+        .split("\n")
+        .filter((call) => call.includes("up -d --no-build"))
+      if (scenario === "success" || scenario === "activation-gateway-failed") {
+        const worker = appCalls.findIndex((call) =>
+          call.endsWith(`worker env=${join(root, ".env")}`),
+        )
+        const gateway = appCalls.findIndex((call) =>
+          call.endsWith(`zalo-account-gateway env=${join(root, ".env")}`),
+        )
+        assert.ok(
+          worker >= 0 && gateway > worker,
+          "new worker must be ready before new gateway",
+        )
+      }
+      if (
+        ["activation-gateway-failed", "rollback", "rollback-backlog"].includes(
+          scenario,
+        )
+      ) {
+        const lines = calls.split("\n")
+        const stop = lines.findIndex((call) =>
+          call.includes("stop zalo-account-gateway"),
+        )
+        const probe = lines.findLastIndex((call) =>
+          call.includes("redis-cli --raw XLEN zalo-account:events"),
+        )
+        const restored = lines.findIndex(
+          (call) =>
+            call.startsWith(`${old.slice(0, 40)} compose`) &&
+            call.includes("up -d --no-build"),
+        )
+        assert.ok(
+          stop >= 0 && probe > stop && restored > probe,
+          "stop producer and drain before restoring any old reader",
+        )
+        const oldApps = appCalls.filter((call) =>
+          call.startsWith(`${old.slice(0, 40)} compose`),
+        )
+        assert.ok(
+          oldApps.findIndex((call) => call.includes("300 worker ")) <
+            oldApps.findIndex((call) =>
+              call.includes("300 zalo-account-gateway "),
+            ),
+        )
+        if (scenario === "rollback-backlog") {
+          assert.equal(
+            lines.filter((call) => call.includes("redis-cli --raw XLEN"))
+              .length,
+            2,
+          )
+        }
+      }
+      if (
+        [
+          "activation-drain-failed",
+          "rollback-drain-failed",
+          "rollback-probe-error",
+          "rollback-stop-failed",
+        ].includes(scenario)
+      ) {
+        assert.ok(
+          !appCalls.some((call) => call.startsWith(`${old} compose`)),
+          "failed drain must not downgrade readers",
+        )
+        assert.match(result.stderr, ROLLBACK_STOPPED)
+        assert.equal(
+          execFileSync("readlink", [join(root, "current")], {
+            encoding: "utf8",
+          }).trim(),
+          `releases/${rollback ? sha : old}`,
+        )
+      }
+      if (
+        [
+          "activation-failed",
+          "env-rollback",
+          "activation-worker-failed",
+        ].includes(scenario)
+      ) {
+        assert.ok(!calls.includes("stop zalo-account-gateway"))
+        assert.ok(!calls.includes("redis-cli --raw XLEN"))
+        assert.ok(
+          appCalls.some(
+            (call) =>
+              call.startsWith(`${old.slice(0, 40)} compose`) &&
+              call.includes("300 worker "),
+          ),
+        )
       }
       if (scenario === "success") {
         assert.ok(calls.indexOf("pg_dump") < calls.indexOf("builder migrate"))
@@ -305,4 +443,14 @@ test("production Compose preserves builder binding and executor tmpfs options", 
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test("rollback drain probes the SDK event stream", () => {
+  const sdk = readFileSync("packages/sdk/src/lib/zalo-account.ts", "utf8")
+  const stream = sdk.match(SDK_EVENT_STREAM)[1]
+  assert.ok(
+    readFileSync("scripts/deployment/production.sh", "utf8").includes(
+      `redis-cli --raw XLEN ${stream}`,
+    ),
+  )
 })

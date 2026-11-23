@@ -2,7 +2,107 @@ import { zaloAccountTransportKeys } from "@chatbotx.io/sdk"
 import { describe, expect, it, vi } from "vitest"
 import { RedisCommandConsumer } from "../src/transport/redis-command-consumer"
 
+const createStartupConsumer = () => {
+  const connected = Promise.withResolvers<void>()
+  const read = Promise.withResolvers<void>()
+  const blocking = {
+    status: "wait",
+    connect: vi.fn(async () => {
+      await connected.promise
+      blocking.status = "ready"
+    }),
+    disconnect: vi.fn(() => {
+      blocking.status = "end"
+      read.resolve()
+    }),
+    call: vi.fn(async () => {
+      if (blocking.status !== "ready") {
+        throw new Error(
+          "Stream isn't writeable and enableOfflineQueue options is false",
+        )
+      }
+      await read.promise
+      throw new Error("Connection is closed")
+    }),
+  }
+  const redis = {
+    duplicate: vi.fn(() => blocking),
+    xgroup: vi.fn(async () => "OK"),
+    call: vi.fn((operation: string) => {
+      if (operation === "XAUTOCLAIM") {
+        return ["0-0", [], []]
+      }
+      if (operation === "XINFO") {
+        return [["name", zaloAccountTransportKeys.consumerGroup, "lag", 0]]
+      }
+      throw new Error(`Unexpected Redis call: ${operation}`)
+    }),
+  }
+  const consumer = new RedisCommandConsumer({
+    executor: { execute: vi.fn() },
+    logger: { warn: vi.fn() },
+    ownerId: "owner-1",
+    redis: redis as never,
+  })
+  return { blocking, connected, consumer, redis }
+}
+
 describe("RedisCommandConsumer", () => {
+  it("connects the lazy blocking client before reading or reporting ready", async () => {
+    const { blocking, connected, consumer, redis } = createStartupConsumer()
+    const started = consumer.start()
+    const settled = started.catch((error: unknown) => error)
+    try {
+      await vi.waitFor(() => expect(redis.duplicate).toHaveBeenCalledOnce())
+      expect(blocking.call).not.toHaveBeenCalled()
+      expect(consumer.isReady()).toBe(false)
+      expect(blocking.connect).toHaveBeenCalledOnce()
+
+      connected.resolve()
+      await vi.waitFor(() => expect(blocking.call).toHaveBeenCalledOnce())
+      expect(redis.duplicate).toHaveBeenCalledWith({ lazyConnect: true })
+      expect(consumer.isReady()).toBe(true)
+      consumer.stop()
+      await expect(started).resolves.toBeUndefined()
+      expect(consumer.isReady()).toBe(false)
+    } finally {
+      consumer.stop()
+      connected.resolve()
+      await settled
+    }
+  })
+
+  it("cleans up the blocking connection when its initial connect fails", async () => {
+    const { blocking, consumer } = createStartupConsumer()
+    blocking.connect.mockRejectedValueOnce(new Error("fixture connect failed"))
+
+    await expect(consumer.start()).rejects.toThrow("fixture connect failed")
+
+    expect(blocking.call).not.toHaveBeenCalled()
+    expect(blocking.disconnect).toHaveBeenCalledOnce()
+    expect(consumer.isRunning()).toBe(false)
+    expect(consumer.isReady()).toBe(false)
+  })
+
+  it("does not start a blocking read after stop during connection setup", async () => {
+    const { blocking, connected, consumer, redis } = createStartupConsumer()
+    const started = consumer.start()
+    const settled = started.catch((error: unknown) => error)
+    try {
+      await vi.waitFor(() => expect(redis.duplicate).toHaveBeenCalledOnce())
+      consumer.stop()
+      connected.resolve()
+      await expect(started).resolves.toBeUndefined()
+      expect(blocking.call).not.toHaveBeenCalled()
+      expect(consumer.isRunning()).toBe(false)
+      expect(consumer.isReady()).toBe(false)
+    } finally {
+      consumer.stop()
+      connected.resolve()
+      await settled
+    }
+  })
+
   it("reclaims an idle pending command and acknowledges it after deduped execution", async () => {
     const command = {
       version: 1,

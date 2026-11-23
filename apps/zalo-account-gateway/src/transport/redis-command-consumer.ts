@@ -90,8 +90,9 @@ export class RedisCommandConsumer {
     await this.reclaimPending()
     await this.refreshLag()
     this.lastHeartbeatAt = Date.now()
-    this.blockingRedis = this.options.redis.duplicate()
+    this.blockingRedis = this.options.redis.duplicate({ lazyConnect: true })
     try {
+      await this.blockingRedis.connect()
       while (this.running) {
         this.lastHeartbeatAt = Date.now()
         let result: StreamReadResult | null
@@ -149,6 +150,7 @@ export class RedisCommandConsumer {
   isReady(now = Date.now(), maxHeartbeatAgeMs = 15_000): boolean {
     return (
       this.running &&
+      this.blockingRedis?.status === "ready" &&
       now - this.lastHeartbeatAt <= maxHeartbeatAgeMs &&
       this.observedLag <= this.options.readinessMaxLag
     )
