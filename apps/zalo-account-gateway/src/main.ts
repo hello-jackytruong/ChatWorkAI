@@ -5,6 +5,7 @@ import {
   zaloAccountSendAttemptService,
   zaloAccountService,
 } from "@chatbotx.io/business/zalo-account"
+import { zaloAccountRuntimeStateService } from "@chatbotx.io/business/zalo-account/runtime-state"
 import { getChildLogger } from "@chatbotx.io/logger"
 import { createRedisConnection } from "@chatbotx.io/redis"
 import type { ZaloAccountCommandEnvelope } from "@chatbotx.io/sdk"
@@ -37,6 +38,9 @@ export const main = async (): Promise<void> => {
   const env = resolveGatewayEnv()
   const redis = createRedisConnection(env.redisUrl, {
     lazyConnect: true,
+    maxRetriesPerRequest: 0,
+    commandTimeout: 10_000,
+    enableOfflineQueue: false,
   })
   let shuttingDown = false
   let transportFailed = false
@@ -54,6 +58,9 @@ export const main = async (): Promise<void> => {
       })
     : disabledEventSink
   const pool = new ZaloAccountPool({
+    onLeaseLost: () => scheduleRecovery(0),
+    claim: (input) => zaloAccountRuntimeStateService.claim(input),
+    hold: (input) => zaloAccountRuntimeStateService.hold(input),
     onGroupSendResult: (input) => zaloAccountSendAttemptService.confirm(input),
     admitLabelMutation: (input) => zaloAccountLabelService.admitMutation(input),
     admitGroupSend: (input) => zaloAccountGroupService.admitSend(input),
@@ -67,40 +74,115 @@ export const main = async (): Promise<void> => {
       load: (input) => zaloAccountService.loadRuntimeAccount(input),
     },
   })
-  const consumer = env.enabled
-    ? new RedisCommandConsumer({
-        executor: new ZaloAccountCommandExecutor({
-          admission: new ZaloAccountProviderAdmission(),
+  const createConsumer = () =>
+    env.enabled
+      ? new RedisCommandConsumer({
+          executor: new ZaloAccountCommandExecutor({
+            admission: new ZaloAccountProviderAdmission(),
+            ownerId,
+            ownsTarget: async (command: ZaloAccountCommandEnvelope) => {
+              if (command.kind === "start_qr" || !command.target) {
+                return true
+              }
+              return await leaseStore.isOwned(
+                {
+                  workspaceId: command.route.workspaceId,
+                  runtime:
+                    command.route.kind === "account"
+                      ? { kind: "account", id: command.route.accountId }
+                      : {
+                          kind: "connect_session",
+                          id: command.route.sessionId,
+                        },
+                },
+                {
+                  ownerId: command.target.ownerId,
+                  fenceToken: command.target.fenceToken,
+                },
+              )
+            },
+            pool,
+            stateStore: new RedisCommandStateStore(redis),
+          }),
+          logger,
           ownerId,
-          ownsTarget: async (command: ZaloAccountCommandEnvelope) => {
-            if (command.kind === "start_qr" || !command.target) {
-              return true
-            }
-            return await leaseStore.isOwned(
-              {
-                workspaceId: command.route.workspaceId,
-                runtime:
-                  command.route.kind === "account"
-                    ? { kind: "account", id: command.route.accountId }
-                    : {
-                        kind: "connect_session",
-                        id: command.route.sessionId,
-                      },
-              },
-              {
-                ownerId: command.target.ownerId,
-                fenceToken: command.target.fenceToken,
-              },
-            )
-          },
-          pool,
-          stateStore: new RedisCommandStateStore(redis),
-        }),
-        logger,
-        ownerId,
-        redis,
+          redis,
+        })
+      : undefined
+  let consumer: ReturnType<typeof createConsumer>
+  let recoveryTimer: NodeJS.Timeout | undefined
+  let recoveryRun: Promise<void> | undefined
+  let afterId: string | undefined
+
+  const scheduleRecovery = (delay = 30_000) => {
+    if (shuttingDown || !env.enabled) {
+      return
+    }
+    if (recoveryRun) {
+      return
+    }
+    if (recoveryTimer) {
+      if (delay > 0) {
+        return
+      }
+      clearTimeout(recoveryTimer)
+    }
+    recoveryTimer = setTimeout(() => {
+      recoveryTimer = undefined
+      recoveryRun = recover().finally(() => {
+        recoveryRun = undefined
+        scheduleRecovery(30_000)
       })
-    : undefined
+    }, delay)
+    recoveryTimer.unref?.()
+  }
+  const startConsumer = () => {
+    if (consumerLoop || shuttingDown || redis.status !== "ready") {
+      return
+    }
+    consumer = createConsumer()
+    transportFailed = false
+    consumerLoop = consumer
+      ?.start()
+      .catch(() => {
+        transportFailed = true
+        logger.error(
+          { err: new Error("Zalo Account command consumer failed") },
+          "Zalo Account command consumer failed",
+        )
+      })
+      .finally(() => {
+        consumerLoop = undefined
+        scheduleRecovery()
+      })
+  }
+  const recover = async () => {
+    if (shuttingDown || redis.status !== "ready") {
+      return
+    }
+    startConsumer()
+    try {
+      const result = await reconcileActiveAccounts({
+        afterId,
+        deadlineAt: Date.now() + 30_000,
+        max: 50,
+        listPage: (input) =>
+          zaloAccountService.listActiveRuntimeAccounts(input),
+        reconnect: (command) => pool.reconnect(command),
+      })
+      afterId = result.complete ? undefined : result.afterId
+      logger.info(
+        {
+          scanned: result.scanned,
+          restored: result.restored,
+          failed: result.failed,
+        },
+        "Zalo Account runtimes reconciled",
+      )
+    } catch {
+      logger.warn("Zalo Account recovery deferred")
+    }
+  }
   const server = createGatewayServer({
     isReady: () =>
       env.enabled &&
@@ -109,18 +191,6 @@ export const main = async (): Promise<void> => {
       redis.status === "ready" &&
       consumer?.isReady() === true,
   })
-  if (env.enabled) {
-    await redis.connect()
-    const restored = await reconcileActiveAccounts({
-      listPage: (input) => zaloAccountService.listActiveRuntimeAccounts(input),
-      reconnect: (command) => pool.reconnect(command),
-    })
-    logger.info({ restored }, "Zalo Account active runtimes reconciled")
-    consumerLoop = consumer?.start().catch((error: unknown) => {
-      transportFailed = true
-      logger.error({ err: error }, "Zalo Account command consumer failed")
-    })
-  }
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => reject(error)
     server.once("error", onError)
@@ -130,11 +200,25 @@ export const main = async (): Promise<void> => {
     })
   })
 
+  if (env.enabled) {
+    redis.on("ready", () => {
+      startConsumer()
+      scheduleRecovery(0)
+    })
+    await redis.connect()
+    startConsumer()
+    scheduleRecovery(0)
+  }
+
   const shutdown = async (signal: NodeJS.Signals) => {
     if (shuttingDown) {
       return
     }
     shuttingDown = true
+    if (recoveryTimer) {
+      clearTimeout(recoveryTimer)
+    }
+    recoveryTimer = undefined
     logger.info({ signal }, "Zalo Account gateway shutting down")
     consumer?.stop()
     const shutdownWork = async () => {
@@ -153,6 +237,7 @@ export const main = async (): Promise<void> => {
       }
       try {
         await pool.shutdown()
+        await recoveryRun
       } catch (error) {
         firstError ??= error
       }

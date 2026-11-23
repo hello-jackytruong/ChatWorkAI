@@ -74,13 +74,88 @@ export const zaloAccountRuntimeRefSchema = z.discriminatedUnion("kind", [
 ])
 export type ZaloAccountRuntimeRef = z.infer<typeof zaloAccountRuntimeRefSchema>
 
+const runtimeObservationShape = {
+  socketAttempt: z.number().int().positive().optional(),
+  sequence: z.number().int().positive().optional(),
+}
+
+export const zaloAccountRuntimeDiagnosticsSchema = z
+  .object({
+    phase: z.enum([
+      "connecting",
+      "connected",
+      "backoff",
+      "held",
+      "stopped",
+      "reauth_required",
+    ]),
+    connectedAt: z.string().datetime().optional(),
+    disconnectedAt: z.string().datetime().optional(),
+    lastLifecycleAt: z.string().datetime().optional(),
+    reconnectCount: z.number().int().nonnegative().max(1_000_000),
+    nextAttemptAt: z.string().datetime().optional(),
+    closeCode: z.number().int().min(0).max(65_535).optional(),
+    errorCategory: z
+      .enum([
+        "network",
+        "timeout",
+        "unknown",
+        "duplicate_connection",
+        "kicked",
+        "authorization_rejected",
+        "identity_mismatch",
+        "qr_expired",
+        "qr_declined",
+        "lease_lost",
+      ])
+      .optional(),
+    requiresAction: z.boolean().optional(),
+  })
+  .strict()
+export type ZaloAccountRuntimeDiagnostics = z.infer<
+  typeof zaloAccountRuntimeDiagnosticsSchema
+>
+
+export const zaloAccountRuntimeSnapshotSchema = z
+  .object({
+    fenceToken: z.string().regex(/^\d+$/),
+    epoch: z.number().int().positive(),
+    socketAttempt: z.number().int().positive(),
+    sequence: z.number().int().positive(),
+    socketOpen: z.boolean(),
+    sampledAt: z.string().datetime(),
+    lastEventAt: z.string().datetime().nullable(),
+  })
+  .strict()
+export type ZaloAccountRuntimeSnapshot = z.infer<
+  typeof zaloAccountRuntimeSnapshotSchema
+>
+export const zaloAccountRuntimeStatusSchema =
+  zaloAccountRuntimeDiagnosticsSchema
+    .extend({
+      socketOpen: z.boolean().nullable(),
+      freshness: z.enum(["fresh", "stale", "unknown"]),
+      sampledAt: z.string().datetime().nullable(),
+      lastEventAt: z.string().datetime().nullable(),
+    })
+    .strict()
+
 const runtimeEventBaseSchema = z.object({
+  ...runtimeObservationShape,
+  occurredAt: z.string().datetime().optional(),
+  diagnostics: zaloAccountRuntimeDiagnosticsSchema.optional(),
   runtime: zaloAccountRuntimeRefSchema,
   epoch: z.number().int().positive(),
   fenceToken: z.string().regex(/^\d+$/),
 })
 
 export const zaloAccountLifecycleEventSchema = z.discriminatedUnion("type", [
+  runtimeEventBaseSchema
+    .extend({
+      type: z.literal("runtime_diagnostic"),
+      diagnostics: zaloAccountRuntimeDiagnosticsSchema,
+    })
+    .strict(),
   runtimeEventBaseSchema.extend({
     type: z.literal("qr_generated"),
     imageDataUrl: qrImageDataUrlSchema,
@@ -98,15 +173,18 @@ export const zaloAccountLifecycleEventSchema = z.discriminatedUnion("type", [
   runtimeEventBaseSchema.extend({
     type: z.literal("closed"),
     reason: z.enum(["manual", "passive", "lease_lost", "shutdown"]),
+    diagnostics: zaloAccountRuntimeDiagnosticsSchema.optional(),
   }),
   runtimeEventBaseSchema.extend({
     type: z.literal("reauthorization_required"),
     reason: z.enum([
       "qr_expired",
+      "qr_declined",
       "session_unstable",
       "identity_mismatch",
       "authorization_rejected",
     ]),
+    diagnostics: zaloAccountRuntimeDiagnosticsSchema.optional(),
   }),
 ])
 export type ZaloAccountLifecycleEvent = z.infer<
@@ -122,6 +200,11 @@ export const zaloAccountAuthorizationEventSchema = runtimeEventBaseSchema
   .extend({
     type: z.literal("authorization_obtained"),
     auth: zaloAccountAuthSchema,
+    purpose: z.literal("refresh").optional(),
+    expectedCiphertextFingerprint: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     displayName: z.string().min(1),
     avatarUrl: z.string().url().optional(),
   })
@@ -153,12 +236,57 @@ export type ZaloAccountTransportRoute = z.infer<
   typeof zaloAccountTransportRouteSchema
 >
 
+type ZaloAccountSecretScope = {
+  route: ZaloAccountTransportRoute
+  epoch: number
+  fenceToken: string
+  eventId: string
+  socketAttempt?: number
+  sequence?: number
+}
+const secretAadParts = (input: ZaloAccountSecretScope) => {
+  const subject =
+    input.route.kind === "account"
+      ? `${input.route.accountId}:${input.route.inboxId}`
+      : input.route.sessionId
+  const prefix = `zalo-account:${input.route.workspaceId}:${subject}:`
+  const order =
+    input.socketAttempt === undefined || input.sequence === undefined
+      ? ""
+      : `:attempt:${input.socketAttempt}:sequence:${input.sequence}`
+  return {
+    prefix,
+    suffix: `:${input.epoch}:${input.fenceToken}:${input.eventId}${order}`,
+  }
+}
+export const zaloAccountSecretEventAad = (
+  input: ZaloAccountSecretScope & { commandId: string },
+): string => {
+  const { prefix, suffix } = secretAadParts(input)
+  return `${prefix}${input.commandId}${suffix}`
+}
+export const isZaloAccountSecretEventAadValid = (
+  input: ZaloAccountSecretScope & { aad: string },
+): boolean => {
+  if ((input.socketAttempt === undefined) !== (input.sequence === undefined)) {
+    return false
+  }
+  const { prefix, suffix } = secretAadParts(input)
+  return (
+    input.aad.startsWith(prefix) &&
+    input.aad.endsWith(suffix) &&
+    input.aad.length > prefix.length + suffix.length
+  )
+}
+
 /** The provider has not been called; retry policy may distinguish this from an ambiguous write. */
 export class ZaloAccountPreDispatchError extends Error {
   override name = "ZaloAccountPreDispatchError"
 }
 
 export type ZaloAccountRuntimeOrder = {
+  socketAttempt?: number
+  sequence?: number
   fenceToken: string
   epoch: number
   occurredAt: string
@@ -178,6 +306,17 @@ export function isNewerZaloAccountRuntimeEvent(
   }
   if (next.epoch !== previous.epoch) {
     return next.epoch > previous.epoch
+  }
+  if (
+    next.socketAttempt !== undefined &&
+    previous.socketAttempt !== undefined &&
+    next.sequence !== undefined &&
+    previous.sequence !== undefined
+  ) {
+    if (next.socketAttempt !== previous.socketAttempt) {
+      return next.socketAttempt > previous.socketAttempt
+    }
+    return next.sequence > previous.sequence
   }
   const delta = Date.parse(next.occurredAt) - Date.parse(previous.occurredAt)
   if (delta !== 0) {
@@ -709,6 +848,7 @@ const encryptedTransportPayloadSchema = z
   .strict()
 
 const transportEventBaseShape = {
+  ...runtimeObservationShape,
   version: z.literal(1),
   eventId: z.string().min(1).max(200),
   route: zaloAccountTransportRouteSchema,
@@ -720,18 +860,29 @@ const transportEventBaseShape = {
 const lifecycleTransportPayloadSchema = z.discriminatedUnion("type", [
   z
     .object({
+      type: z.literal("runtime_diagnostic"),
+      diagnostics: zaloAccountRuntimeDiagnosticsSchema,
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("qr_scanned"),
       displayName: z.string().min(1),
       avatarUrl: z.string().url().optional(),
     })
     .strict(),
   z
-    .object({ type: z.literal("connected"), zaloUid: z.string().min(1) })
+    .object({
+      type: z.literal("connected"),
+      zaloUid: z.string().min(1),
+      diagnostics: zaloAccountRuntimeDiagnosticsSchema.optional(),
+    })
     .strict(),
   z
     .object({
       type: z.literal("closed"),
       reason: z.enum(["manual", "passive", "lease_lost", "shutdown"]),
+      diagnostics: zaloAccountRuntimeDiagnosticsSchema.optional(),
     })
     .strict(),
   z
@@ -739,10 +890,12 @@ const lifecycleTransportPayloadSchema = z.discriminatedUnion("type", [
       type: z.literal("reauthorization_required"),
       reason: z.enum([
         "qr_expired",
+        "qr_declined",
         "session_unstable",
         "identity_mismatch",
         "authorization_rejected",
       ]),
+      diagnostics: zaloAccountRuntimeDiagnosticsSchema.optional(),
     })
     .strict(),
 ])
@@ -892,6 +1045,13 @@ export const zaloAccountTransportKeys = {
   lease: (input: { workspaceId: string; runtime: ZaloAccountRuntimeRef }) => {
     const subject = `${encodeTransportKeyPart(input.workspaceId)}:${input.runtime.kind}:${encodeTransportKeyPart(input.runtime.id)}`
     return `zalo-account:{${subject}}:lease`
+  },
+  snapshot: (input: {
+    workspaceId: string
+    runtime: ZaloAccountRuntimeRef
+  }) => {
+    const subject = `${encodeTransportKeyPart(input.workspaceId)}:${input.runtime.kind}:${encodeTransportKeyPart(input.runtime.id)}`
+    return `zalo-account:{${subject}}:snapshot`
   },
   fence: (input: { workspaceId: string; runtime: ZaloAccountRuntimeRef }) => {
     const subject = `${encodeTransportKeyPart(input.workspaceId)}:${input.runtime.kind}:${encodeTransportKeyPart(input.runtime.id)}`

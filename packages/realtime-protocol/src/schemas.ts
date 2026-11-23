@@ -22,6 +22,7 @@ export const RealtimeEventType = {
   whatsappCallPermissionUpdated: "whatsappCallPermissionUpdated",
   contactInboxThreadControlUpdated: "contactInboxThreadControlUpdated",
   pipelineItemChanged: "pipelineItemChanged",
+  zaloAccountStatusChanged: "zaloAccountStatusChanged",
 } as const
 
 type RealtimeEventTypeValue =
@@ -51,6 +52,7 @@ export const EVENT_DELIVERY = {
   [RealtimeEventType.whatsappCallPermissionUpdated]: "conversation",
   [RealtimeEventType.contactInboxThreadControlUpdated]: "workspace",
   [RealtimeEventType.pipelineItemChanged]: "workspace",
+  [RealtimeEventType.zaloAccountStatusChanged]: "workspace",
 } as const satisfies Record<RealtimeEventTypeValue, RealtimeEventDelivery>
 
 const guestRealtimeEventTypes = new Set<RealtimeEventTypeValue>([
@@ -527,6 +529,14 @@ export type RealtimeEventContactInboxThreadControlUpdated = {
  * client refetches through its authorised read instead of trusting the event.
  * `itemId` is omitted for a bulk change that touched many items.
  */
+export const zaloAccountStatusChangedSchema = z
+  .object({ accountId: z.string().min(1) })
+  .strict()
+export type RealtimeEventZaloAccountStatusChanged = {
+  eventType: typeof RealtimeEventType.zaloAccountStatusChanged
+  data: z.infer<typeof zaloAccountStatusChangedSchema>
+}
+
 export const pipelineItemChangedSchema = z.object({
   pipelineId: z.string(),
   itemId: z.string().optional(),
@@ -596,6 +606,7 @@ type AllRealtimeEventData =
   | RealtimeEventWhatsappCallPermissionUpdated
   | RealtimeEventContactInboxThreadControlUpdated
   | RealtimeEventPipelineItemChanged
+  | RealtimeEventZaloAccountStatusChanged
 
 type RealtimeConversationScopedEventData = Extract<
   AllRealtimeEventData,

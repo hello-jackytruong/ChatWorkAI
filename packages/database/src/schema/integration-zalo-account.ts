@@ -1,5 +1,8 @@
 import type { EncryptedData } from "@chatbotx.io/encryption"
-import type { ZaloAccountRuntimeOrder } from "@chatbotx.io/sdk"
+import type {
+  ZaloAccountRuntimeDiagnostics,
+  ZaloAccountRuntimeOrder,
+} from "@chatbotx.io/sdk"
 import { sql } from "drizzle-orm"
 import {
   boolean,
@@ -39,6 +42,18 @@ export type ZaloAccountLabelState = {
   lastSyncedAt?: string
   reason?: string
   pendingHash?: string
+}
+
+export type ZaloAccountDiagnosticState = ZaloAccountRuntimeDiagnostics & {
+  fenceToken: string
+  epoch: number
+  socketAttempt: number
+  sequence: number
+  authorizationRefresh?: {
+    sourceFingerprint: string
+    currentFingerprint: string
+  }
+  hold?: { authFingerprint: string; category: string; heldAt: string }
 }
 
 /** Durable identity and encrypted device authorization for one personal Zalo account. */
@@ -84,6 +99,7 @@ export const integrationZaloAccountModel = pgTable(
         reason?: string
       }
       runtime?: ZaloAccountRuntimeOrder
+      diagnostics?: ZaloAccountDiagnosticState
     }>(),
   },
   (table) => [

@@ -7,6 +7,7 @@ import messages from "../messages/en.json"
 
 const mocks = vi.hoisted(() => ({
   operations: vi.fn(),
+  status: vi.fn(),
   disconnect: vi.fn(),
   refresh: vi.fn(),
   invalidateInboxes: vi.fn().mockResolvedValue(undefined),
@@ -21,6 +22,7 @@ vi.mock(
   "../src/features/zalo-accounts/actions/account-operations.action",
   () => ({
     getZaloAccountOperationsAction: mocks.operations,
+    getZaloAccountStatusAction: mocks.status,
   }),
 )
 vi.mock(
@@ -54,15 +56,29 @@ vi.mock("../src/lib/orpc/query", () => ({
   },
 }))
 
+vi.mock("../src/features/realtime/use-workspace-realtime-events", () => ({
+  useWorkspaceRealtimeEvents: vi.fn(),
+}))
+
 import { ZaloAccountManage } from "../src/features/zalo-accounts/components/zalo-account-manage"
 import { ZaloAccountStatus } from "../src/features/zalo-accounts/components/zalo-account-status"
 import { zaloAccountOperationsKey } from "../src/features/zalo-accounts/queries/use-account-operations"
+import { zaloAccountStatusKey } from "../src/features/zalo-accounts/queries/use-account-status"
 
 let host: HTMLDivElement
 let root: ReturnType<typeof createRoot>
 let client: QueryClient
 const data = {
-  status: { status: "connected", gatewayAvailable: true },
+  status: {
+    status: "connected",
+    gatewayAvailable: true,
+    runtime: {
+      phase: "connected",
+      socketOpen: true,
+      freshness: "fresh",
+      reconnectCount: 0,
+    },
+  },
   groups: [],
 }
 beforeEach(() => {
@@ -70,6 +86,7 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   mocks.operations.mockResolvedValue({ data })
+  mocks.status.mockResolvedValue({ data: data.status })
   host = document.createElement("div")
   document.body.append(host)
   root = createRoot(host)
@@ -100,8 +117,9 @@ async function click(text: string) {
     await new Promise((resolve) => setTimeout(resolve, 30))
   })
 }
-it("keeps account details inside configuration and immediately shows a successful disconnect while status refetch is pending", async () => {
+it("keeps details in configuration and discards an in-flight connected result after successful disconnect", async () => {
   client.setQueryData(zaloAccountOperationsKey("w", "a"), data)
+  client.setQueryData(zaloAccountStatusKey("w", "a"), data.status)
   render(
     <ZaloAccountManage
       accounts={[
@@ -123,7 +141,23 @@ it("keeps account details inside configuration and immediately shows a successfu
   await click(messages.zaloAccount.configure)
   expect(document.body.textContent).toContain("Account group configuration")
   expect(document.body.textContent).toContain("Read setting")
+  let resolveOldStatus:
+    | ((value: { data: typeof data.status }) => void)
+    | undefined
+  mocks.status.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveOldStatus = resolve
+      }),
+  )
+  act(() => {
+    client
+      .refetchQueries({ queryKey: zaloAccountStatusKey("w", "a") })
+      .catch(() => undefined)
+  })
+  expect(resolveOldStatus).toBeDefined()
   mocks.disconnect.mockImplementation(() => {
+    mocks.status.mockReturnValue(new Promise(() => undefined))
     mocks.operations.mockReturnValue(
       new Promise(() => {
         // Keep the refetch pending to verify the mutation updates cached status immediately.
@@ -146,6 +180,15 @@ it("keeps account details inside configuration and immediately shows a successfu
     { workspaceId: "w", id: "c" },
     expect.anything(),
   )
+  await act(async () => {
+    resolveOldStatus?.({ data: data.status })
+    await new Promise((resolve) => setTimeout(resolve, 1))
+  })
+  expect(client.getQueryData(zaloAccountStatusKey("w", "a"))).toMatchObject({
+    status: "disconnected",
+    gatewayAvailable: false,
+    runtime: { socketOpen: false },
+  })
   expect(host.textContent).toContain(messages.zaloAccount.disconnected)
   expect(host.textContent).not.toContain(messages.zaloAccount.active)
   expect(mocks.invalidateInboxes).toHaveBeenCalled()
@@ -162,9 +205,15 @@ it.each([
   render(
     <ZaloAccountStatus
       gatewayAvailable={gatewayAvailable}
+      socketOpen={true}
       status={status}
       unavailable={unavailable}
     />,
   )
   expect(host.textContent).toBe(label)
+})
+
+it("does not label a lease-only account active without verified socket state", () => {
+  render(<ZaloAccountStatus gatewayAvailable status="connected" />)
+  expect(host.textContent).not.toBe(messages.zaloAccount.active)
 })

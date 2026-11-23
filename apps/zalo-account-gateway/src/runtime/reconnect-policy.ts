@@ -18,7 +18,7 @@ export class ReconnectPolicy {
       this.closes.shift()
     }
     this.closes.push(this.now())
-    if (this.closes.length >= 5) {
+    if (this.closes.length >= 5 || this.attempts >= 4) {
       return { reauthorize: true, delayMs: 0 }
     }
     const base = [1000, 5000, 30_000, 120_000][Math.min(this.attempts, 3)]
@@ -28,7 +28,7 @@ export class ReconnectPolicy {
   }
 
   connected(): void {
-    this.attempts = 0
+    // A brief open does not replenish the retry budget.
   }
 
   resetManualQr(): void {

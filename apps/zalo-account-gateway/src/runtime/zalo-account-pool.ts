@@ -11,12 +11,14 @@ import type {
   RuntimeCommand,
   RuntimeCommandResult,
   RuntimeEventSink,
+  RuntimeOwnershipHooks,
   RuntimeSendResult,
   ZcaClientFactory,
 } from "./ports"
+import { LocalAuthCapacityError } from "./ports"
 import { ZaloAccountRuntime } from "./zalo-account-runtime"
 
-type PoolOptions = {
+type PoolOptions = RuntimeOwnershipHooks & {
   clientFactory: ZcaClientFactory
   eventSink: RuntimeEventSink
   lease: AccountLeasePort
@@ -60,6 +62,7 @@ export class ZaloAccountPool {
   private readonly options: PoolOptions
   private readonly runtimes = new Map<string, ZaloAccountRuntime>()
   private shuttingDown = false
+  private authStarts = 0
 
   constructor(options: PoolOptions) {
     this.options = options
@@ -76,6 +79,9 @@ export class ZaloAccountPool {
       const existing = this.runtimes.get(key)
       if (existing?.snapshot().active) {
         return { status: "coalesced" }
+      }
+      if (existing && !existing.snapshot().settled) {
+        throw new Error("Zalo Account cleanup is unconfirmed")
       }
       const runtime = this.createRuntime(command)
       this.runtimes.set(key, runtime)
@@ -102,17 +108,20 @@ export class ZaloAccountPool {
       if (existing?.snapshot().active) {
         return { status: "coalesced" }
       }
-
-      const secret = await this.options.secretPort.load({
-        workspaceId: command.workspaceId,
-        accountId: command.runtime.id,
-      })
-      if (this.wasCancelled(key, cancellationEpoch)) {
-        return { status: "stopped" }
+      if (existing && !existing.snapshot().settled) {
+        throw new Error("Zalo Account cleanup is unconfirmed")
       }
+
       const runtime = this.createRuntime(command)
       this.runtimes.set(key, runtime)
-      const result = await runtime.reconnect(secret.auth, secret.zaloUid)
+      const result = await runtime.reconnect((deadlineAt) =>
+        this.options.secretPort.load({
+          ...(deadlineAt === undefined ? {} : { deadlineAt }),
+          ...(command.inboxId ? { inboxId: command.inboxId } : {}),
+          workspaceId: command.workspaceId,
+          accountId: command.runtime.id,
+        }),
+      )
       if (result.status !== "started" && this.runtimes.get(key) === runtime) {
         this.runtimes.delete(key)
       }
@@ -127,10 +136,10 @@ export class ZaloAccountPool {
     if (!runtime) {
       return
     }
+    await runtime.stop("manual")
     if (this.runtimes.get(key) === runtime) {
       this.runtimes.delete(key)
     }
-    await runtime.stop("manual")
   }
 
   async sendDirect(
@@ -344,8 +353,22 @@ export class ZaloAccountPool {
       releaseCurrent?.()
       if (this.operations.get(key) === tail) {
         this.operations.delete(key)
+        this.prune(key)
       }
     }
+  }
+
+  private prune(key: string): void {
+    if (this.operations.has(key)) {
+      return
+    }
+    const runtime = this.runtimes.get(key)
+    if (runtime && !runtime.snapshot().settled) {
+      return
+    }
+    this.runtimes.delete(key)
+    this.epochs.delete(key)
+    this.cancellationEpochs.delete(key)
   }
 
   private async withAccountRuntime<T>(
@@ -373,7 +396,36 @@ export class ZaloAccountPool {
     const epoch = (this.epochs.get(key) ?? 0) + 1
     this.epochs.set(key, epoch)
     return new ZaloAccountRuntime({
-      clientFactory: this.options.clientFactory,
+      qrDeadlineAt: command.deadlineAt ?? Date.now() + 300_000,
+      initialDeadlineAt: command.deadlineAt,
+      loginTimeoutMs: 30_000,
+      onSettled: () => this.prune(key),
+      onLeaseLost: this.options.onLeaseLost,
+      claim: this.options.claim,
+      hold: this.options.hold,
+      clientFactory: {
+        create: () => {
+          const client = this.options.clientFactory.create()
+          const admit = async <T>(operation: () => Promise<T>): Promise<T> => {
+            if (this.authStarts >= 2) {
+              throw new LocalAuthCapacityError(
+                "Zalo Account auth capacity is busy",
+              )
+            }
+            this.authStarts += 1
+            try {
+              return await operation()
+            } finally {
+              this.authStarts -= 1
+            }
+          }
+          return {
+            login: (auth) => admit(() => client.login(auth)),
+            loginQr: (callback) => admit(() => client.loginQr(callback)),
+            cancel: () => client.cancel?.() ?? Promise.resolve(),
+          }
+        },
+      },
       epoch,
       eventSink: this.options.eventSink,
       lease: this.options.lease,

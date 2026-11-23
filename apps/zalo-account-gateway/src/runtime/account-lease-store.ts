@@ -19,6 +19,12 @@ type RedisScriptClient = {
   ) => Promise<unknown>
 }
 
+const SNAPSHOT_SCRIPT = `
+if redis.call("GET", KEYS[1]) ~= ARGV[1] then return 0 end
+redis.call("SET", KEYS[2], ARGV[2], "PX", ARGV[3])
+return 1
+`
+
 const ACQUIRE_SCRIPT = `
 local current = redis.call("GET", KEYS[1])
 if current then return nil end
@@ -66,6 +72,30 @@ export class RedisAccountLeaseStore implements AccountLeasePort {
 
   constructor(redis: RedisScriptClient) {
     this.redis = redis
+  }
+
+  async writeSnapshot(
+    scope: AccountRuntimeScope,
+    lease: AccountLease,
+    serialized: string,
+    ttlMs: number,
+  ): Promise<boolean> {
+    if (Buffer.byteLength(serialized) > 2048) {
+      throw new Error("Zalo Account snapshot exceeds limit")
+    }
+    return (
+      Number(
+        await this.redis.eval(
+          SNAPSHOT_SCRIPT,
+          2,
+          leaseKey(scope),
+          zaloAccountTransportKeys.snapshot(scope),
+          `${lease.ownerId}:${lease.fenceToken}`,
+          serialized,
+          Math.max(60_000, ttlMs),
+        ),
+      ) === 1
+    )
   }
 
   async acquire(
@@ -189,6 +219,13 @@ export class InMemoryLeaseScriptClient implements RedisScriptClient {
     }
     if (!live || live.value !== argv[0]) {
       return Promise.resolve(script === APPEND_IF_OWNED_SCRIPT ? null : 0)
+    }
+    if (script === SNAPSHOT_SCRIPT) {
+      this.values.set(keys[1], {
+        value: argv[1],
+        expiresAt: this.now + Number(argv[2]),
+      })
+      return Promise.resolve(1)
     }
     if (script === APPEND_IF_OWNED_SCRIPT) {
       const next = (this.streamCounters.get(keys[1]) ?? 0) + 1

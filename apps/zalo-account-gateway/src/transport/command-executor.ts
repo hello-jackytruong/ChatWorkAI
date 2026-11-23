@@ -204,6 +204,7 @@ export class ZaloAccountCommandExecutor {
   }> {
     if (command.kind === "start_qr") {
       return await this.options.pool.startQr({
+        deadlineAt: Date.parse(command.expiresAt),
         workspaceId: command.route.workspaceId,
         runtime: { kind: "connect_session", id: command.route.sessionId },
         commandId: command.commandId,

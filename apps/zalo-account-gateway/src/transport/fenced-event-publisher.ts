@@ -11,6 +11,7 @@ import {
   type ZaloAccountThreadEvent,
   type ZaloAccountTransportEvent,
   type ZaloAccountTransportRoute,
+  zaloAccountSecretEventAad,
   zaloAccountTransportEventSchema,
 } from "@chatbotx.io/sdk"
 import type {
@@ -70,28 +71,6 @@ const routeOf = (
   }
 }
 
-const aadOf = (input: {
-  route: ZaloAccountTransportRoute
-  commandId: string
-  epoch: number
-  fenceToken: string
-  eventId: string
-}) => {
-  const subject =
-    input.route.kind === "account"
-      ? `${input.route.accountId}:${input.route.inboxId}`
-      : input.route.sessionId
-  return [
-    "zalo-account",
-    input.route.workspaceId,
-    subject,
-    input.commandId,
-    input.epoch,
-    input.fenceToken,
-    input.eventId,
-  ].join(":")
-}
-
 export class FencedEventPublisher implements RuntimeEventSink {
   private readonly options: PublisherOptions
 
@@ -107,12 +86,14 @@ export class FencedEventPublisher implements RuntimeEventSink {
     const base = this.baseEnvelope(event, route)
     let envelope: ZaloAccountTransportEvent
     if (event.type === "qr_generated") {
-      const aad = aadOf({
+      const aad = zaloAccountSecretEventAad({
         route,
         commandId: context.commandId,
         epoch: event.epoch,
         fenceToken: event.fenceToken,
         eventId: base.eventId,
+        socketAttempt: event.socketAttempt,
+        sequence: event.sequence,
       })
       envelope = zaloAccountTransportEventSchema.parse({
         ...base,
@@ -132,6 +113,9 @@ export class FencedEventPublisher implements RuntimeEventSink {
         runtime: _runtime,
         epoch: _epoch,
         fenceToken: _fence,
+        socketAttempt: _attempt,
+        sequence: _sequence,
+        occurredAt: _occurredAt,
         ...payload
       } = event
       envelope = zaloAccountTransportEventSchema.parse({
@@ -149,12 +133,14 @@ export class FencedEventPublisher implements RuntimeEventSink {
   ): Promise<void> {
     const route = routeOf(event.runtime, context)
     const base = this.baseEnvelope(event, route)
-    const aad = aadOf({
+    const aad = zaloAccountSecretEventAad({
       route,
       commandId: context.commandId,
       epoch: event.epoch,
       fenceToken: event.fenceToken,
       eventId: base.eventId,
+      socketAttempt: event.socketAttempt,
+      sequence: event.sequence,
     })
     const envelope = zaloAccountTransportEventSchema.parse({
       ...base,
@@ -164,6 +150,13 @@ export class FencedEventPublisher implements RuntimeEventSink {
       ciphertext: await encryptUtils.encryptObject(
         {
           auth: event.auth,
+          ...(event.purpose
+            ? {
+                purpose: event.purpose,
+                expectedCiphertextFingerprint:
+                  event.expectedCiphertextFingerprint,
+              }
+            : {}),
           displayName: event.displayName,
           ...(event.avatarUrl ? { avatarUrl: event.avatarUrl } : {}),
         },
@@ -317,7 +310,11 @@ export class FencedEventPublisher implements RuntimeEventSink {
       route,
       epoch: event.epoch,
       fenceToken: event.fenceToken,
-      occurredAt: new Date().toISOString(),
+      occurredAt: event.occurredAt ?? new Date().toISOString(),
+      ...(event.socketAttempt === undefined
+        ? {}
+        : { socketAttempt: event.socketAttempt }),
+      ...(event.sequence === undefined ? {} : { sequence: event.sequence }),
     }
   }
 

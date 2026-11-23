@@ -1,3 +1,4 @@
+import { zaloAccountRuntimeStatusSchema } from "@chatbotx.io/sdk"
 import { zodBigintAsString } from "@chatbotx.io/utils"
 import { z } from "zod"
 
@@ -49,6 +50,7 @@ const syncStatus = z.object({
   completedAt: z.string().nullable(),
 })
 export const zaloAccountStatusResource = z.object({
+  runtime: zaloAccountRuntimeStatusSchema.nullable().optional(),
   accountId: z.string(),
   groupMessagingEnabled: z.boolean(),
   status: z.string(),

@@ -85,14 +85,29 @@ existing Inbox/account row and requires the same verified UID. Disconnect,
 workspace pause/delete, and purge must receive a confirmed fenced stop before
 they mutate or remove authorization data; a timeout fails closed.
 
+QR scan means waiting for phone confirmation; it is not a completed connection.
+Decline, expiry and cancellation are terminal, clear the QR image, and cannot be
+overwritten by a late login callback. Only a completed `ConnectSession` closes
+the dialog as successful. SDK request cancellation and physical socket close
+must settle before a replacement can attach: calling `listener.stop()` alone
+does not prove closure. A close timeout retains the local ownership tombstone
+and fails the operation rather than claiming a successful stop.
+
 The channel settings list shows each account's name and connection status.
 Open **Configure** for reconnect/disconnect, read-receipt settings, group policies,
-and sync details. Status refreshes every 30 seconds and distinguishes active
-(connection connected with a live gateway lease), interrupted, reconnect required,
-paused, and disconnected states. A failed status read is shown as unavailable.
+and sync details. Status distinguishes durable **Connection**, current gateway
+**lease**, and a **verified socket sample**. A connected Connection and a lease
+alone do not mean the Zalo socket is open. A failed status read is shown as
+unavailable.
 A confirmed disconnect updates the cached status immediately. Completing QR
 setup closes the QR dialog, shows a success notification, and refreshes account
 and Inbox data; failed or expired sessions offer a retry.
+
+Visible settings use status-only polling every 30 seconds; hidden tabs and
+unmounted settings pause it. Rows do not poll group lists. IDs-only workspace
+realtime hints coalesce over 250 ms using the existing workspace socket and
+invalidate status queries; they neither grant permission nor complete a QR
+session. See [status query owner](../apps/builder/src/features/zalo-accounts/queries/use-account-status.ts).
 
 Public lifecycle operations use the existing agent-first connection surfaces:
 `connections.create`, `connectSessions.get`, `connections.reconnect`, and
@@ -212,6 +227,35 @@ availability, capabilities and friend/group/label sync summaries. Availability
 means a current lease exists, not a provider health guarantee. It never returns
 authorization, operation tokens or gateway fencing identifiers.
 
+Optional `runtime` is null for old rows. `socketOpen=true` requires a matching
+lease and durable fence/epoch/attempt/sequence, with a sample no older than 60
+seconds. Missing, expired or mismatched samples return an unverified socket;
+Redis failure returns unavailable gateway/unknown freshness while preserving
+durable context. `lastLifecycleAt` describes state transitions; `lastEventAt`
+describes the latest SDK event and may be null. Silence does not prove a
+disconnect. See the [safe status projection](../packages/business/src/zalo-account/service.ts).
+
+Unexpected normal/network closes use finite backoff with jitter. Duplicate
+connection 3000 and kick 3003 require manual intervention through a durable hold;
+they do not by themselves prove revoked authorization. Transient/unknown login
+errors do not force QR reauthorization, and an isolated error after open does
+not start another socket. A new explicit QR authorization can recover a held
+account. See [runtime policy](../apps/zalo-account-gateway/src/runtime/zalo-account-runtime.ts).
+
+Cookie changes observed after a verified open use encrypted authorization
+refresh with ciphertext compare-and-swap. This prevents an old runtime refresh
+from replacing a newer same-UID QR authorization. Unchanged cookies cause no
+write; no `getContext` export or `keepAlive` polling is introduced. Recovery
+rechecks current ownership, Connection eligibility and holds before login.
+See [authorization persistence](../packages/business/src/zalo-account/runtime-state.service.ts).
+
+Recovery runs in bounded cursor passes (at most 50 accounts within a 30-second
+budget), continuing later instead of blocking readiness on all accounts. One
+coalesced recovery continuation owns restart work; login admission permits at
+most two simultaneous starts per gateway. Held accounts are skipped. These
+limits bound local work; they are not provider rate limits or a promise that
+all accounts recover within 30 seconds. See [gateway startup/recovery](../apps/zalo-account-gateway/src/main.ts).
+
 ## Native labels and ChatbotX tags
 
 Zalo labels are an account-wide versioned document. Sync maps provider label
@@ -252,9 +296,10 @@ workflow does not apply migrations:
 - `packages/database/drizzle/20261121024313_zalo-account-group-inbox/`
 - `packages/database/drizzle/20261121055141_zalo-account-message-operations/`
 
-Inspect and apply them in order only after explicit approval. Until then,
-database-backed Zalo integration tests and live channel operation remain a
-rollout gate; unit/contract/type checks do not replace this approval.
+Inspect and apply them in order only after explicit approval. Until the required
+schema exists in a target environment, its database-backed tests and live channel
+operation remain a rollout gate; unit/contract/type checks do not replace
+migration approval.
 
 The group Inbox migration adds the immutable person/group discriminator,
 anchor references, policy defaults/epochs, durable identity and kind-aware
@@ -264,8 +309,8 @@ identity tombstones/recovery index and the reserved-source constraint. FKs have
 leading indexes and purge drains the new children before account/workspace rows.
 
 Apply the additive migrations **before deploying this code**: normal Contact
-and account selects now read the new columns. Then deploy builder, workers and
-gateway together with group flags off. Enable only a bounded staging account
+and account selects now read the new columns. Keep group flags off during rollout.
+Enable only a bounded staging account
 after redacted live fixtures verify the pinned provider contract; static tests
 do not authorize production enablement.
 
@@ -282,3 +327,24 @@ receive/send/automation and drain in-flight group work. Preserve anchors,
 history and reconciliation records. A whole-channel rollback additionally stops
 accepting new work and drains/stops gateway runtimes; schema or secret deletion
 requires a separate retention decision.
+
+### Connection/socket readers and producers
+
+The connection/socket/session update uses existing operations JSON and Redis
+snapshots; it introduces no new table, column or migration. Deploy compatible
+readers first: SDK/worker event schemas and handlers, realtime schema/delivery,
+and status projection. Then enable gateway producers, followed by the UI.
+Strict old event readers can reject the new diagnostic variant and fields;
+producer-first rollout is unsupported.
+
+Rollback reverses this dependency: stop/drain new gateway producers and queued
+new-format events before downgrading SDK/worker/realtime readers. UI/status
+rollback can retain polling and tolerate absent runtime data. Preserve existing
+operations JSON, encrypted authorization and Connection state.
+
+Automated SDK/runtime, business/PostgreSQL and UI/contract evidence is recorded
+in the [implementation reports](../plans/261123-0459-zalo-account-connection-socket-session-tdd/reports/implementation.md)
+and [business proof](../plans/261123-0459-zalo-account-connection-socket-session-tdd/reports/business-implementation.md).
+These do not certify live Zalo QR/open/close/kick/cookie behavior or
+Redis/gateway/worker restart staging. Track that remaining end-to-end gate in
+the [Zalo Account checklist](./zalo-account-checklist.md).

@@ -13,6 +13,7 @@ import type {
   ZaloAccountLabelSnapshot,
   ZaloAccountLifecycleEvent,
   ZaloAccountOutboundMessage,
+  ZaloAccountRuntimeDiagnostics,
   ZaloAccountRuntimeRef,
   ZaloAccountThreadEvent,
 } from "@chatbotx.io/sdk"
@@ -25,6 +26,12 @@ export type AccountRuntimeScope = {
 }
 
 export type AccountLeasePort = {
+  writeSnapshot?: (
+    scope: AccountRuntimeScope,
+    lease: AccountLease,
+    serialized: string,
+    ttlMs: number,
+  ) => Promise<boolean>
   acquire: (
     scope: AccountRuntimeScope,
     ownerId: string,
@@ -88,13 +95,18 @@ export type ZcaQrEvent =
       avatarUrl?: string
     }
   | { type: "expired"; retry: () => unknown }
+  | { type: "declined" }
   | { type: "credentials"; auth: ZaloAccountAuth }
 
 export type ZcaListenerPort = { start: () => void; stop: () => void }
 
 export type ZcaListenerHandlers = {
+  onEvent?: () => void
   onThreadEvent?: (event: ZaloAccountThreadEvent) => void
-  onClosed: (reason: string) => void
+  onConnected?: () => void
+  onDisconnected?: (code: number, reason: string) => void
+  onError?: (category: "network" | "timeout" | "unknown") => void
+  onClosed: (reason: string, code?: number) => void
   onDirectMessage: (message: ZaloAccountDirectMessage) => void
   onDirectStatus: (status: ZaloAccountDirectStatus) => void
   onDirectUndo: (undo: ZaloAccountDirectUndo) => void
@@ -107,6 +119,9 @@ export type ZcaListenerHandlers = {
 }
 
 export type ZcaApiPort = {
+  closeConnection?: () => Promise<void>
+  getAuthorization?: (previous: ZaloAccountAuth) => ZaloAccountAuth
+
   listFriends?: (cursor: number) => Promise<ZaloAccountFriendSync>
   sendTyping?: (threadId: string, threadType: "user" | "group") => Promise<void>
   getOwnId: () => Promise<string>
@@ -128,20 +143,51 @@ export type ZcaApiPort = {
 }
 
 export type ZcaClientPort = {
+  cancel?: () => Promise<void>
   loginQr: (callback: (event: ZcaQrEvent) => void) => Promise<ZcaApiPort>
   login: (auth: ZaloAccountAuth) => Promise<ZcaApiPort>
 }
 
+export class LocalAuthCapacityError extends Error {}
+
 export type ZcaClientFactory = { create: () => ZcaClientPort }
 
 export type AccountSecretPort = {
-  load: (input: { workspaceId: string; accountId: string }) => Promise<{
+  load: (input: {
+    workspaceId: string
+    accountId: string
+    inboxId?: string
+    deadlineAt?: number
+  }) => Promise<{
     auth: ZaloAccountAuth
     zaloUid: string
+    authFingerprint?: string
   }>
 }
 
+export type RuntimeOwnership = {
+  deadlineAt?: number
+  workspaceId: string
+  accountId: string
+  inboxId: string
+  fenceToken: string
+  epoch: number
+}
+export type RuntimeOwnershipHooks = {
+  onLeaseLost?: () => void
+  claim?: (input: RuntimeOwnership) => Promise<boolean>
+  hold?: (
+    input: RuntimeOwnership & {
+      authFingerprint: string
+      socketAttempt: number
+      sequence: number
+      diagnostics: ZaloAccountRuntimeDiagnostics
+    },
+  ) => Promise<boolean>
+}
+
 export type RuntimeCommand = {
+  deadlineAt?: number
   workspaceId: string
   runtime: ZaloAccountRuntimeRef
   inboxId?: string

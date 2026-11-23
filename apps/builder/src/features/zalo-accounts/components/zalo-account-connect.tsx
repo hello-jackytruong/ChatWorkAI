@@ -178,6 +178,9 @@ export function ZaloAccountConnect({
     toast.success(t("zaloAccount.connectSuccess"))
     Promise.all([
       queryClient.invalidateQueries({
+        queryKey: ["zalo-account-status", resolvedWorkspaceId],
+      }),
+      queryClient.invalidateQueries({
         queryKey: ["zalo-account-operations", resolvedWorkspaceId],
       }),
       invalidateInboxes(),
@@ -213,12 +216,26 @@ export function ZaloAccountConnect({
     reconnectConnection.isPending ||
     connectTarget.isPending
   const qrAction =
-    currentSession?.nextAction?.type === "show_qr"
+    currentSession?.status === "pending" &&
+    currentSession.step !== "qr_scanned" &&
+    currentSession.nextAction?.type === "show_qr"
       ? currentSession.nextAction
       : null
   const failed =
     currentSession &&
     ["failed", "expired", "cancelled"].includes(currentSession.status)
+
+  let failureMessage = t("zaloAccount.connectFailed")
+  if (currentSession?.status === "cancelled") {
+    failureMessage = t("zaloAccount.qrCancelled")
+  } else if (
+    currentSession?.status === "expired" ||
+    currentSession?.errorCode === "expired"
+  ) {
+    failureMessage = t("zaloAccount.qrExpired")
+  } else if (currentSession?.errorCode === "provider_denied") {
+    failureMessage = t("zaloAccount.qrDeclined")
+  }
 
   return (
     <Dialog
@@ -260,7 +277,9 @@ export function ZaloAccountConnect({
           )}
           {(isStarting || (currentSession && !qrAction && !failed)) && (
             <p className="text-muted-foreground text-sm">
-              {t("actions.loading")}
+              {currentSession?.step === "qr_scanned"
+                ? t("zaloAccount.qrWaiting")
+                : t("actions.loading")}
             </p>
           )}
           {sessionQuery.isError && !failed && (
@@ -285,7 +304,7 @@ export function ZaloAccountConnect({
               {t("actions.retry")}
             </Button>
           )}
-          {failed && <p role="alert">{t("zaloAccount.connectFailed")}</p>}
+          {failed && <p role="alert">{failureMessage}</p>}
           {failed && (
             <Button onClick={start} type="button" variant="secondary">
               {t("actions.retry")}

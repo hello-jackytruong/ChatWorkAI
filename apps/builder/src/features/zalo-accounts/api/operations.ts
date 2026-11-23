@@ -155,7 +155,7 @@ export const zaloAccountOperations = {
       path: "/v1/zalo-accounts/{accountId}/status",
       summary: "Get safe personal Zalo connection and sync status",
       description:
-        "Returns safe connection state, group kill switch, capabilities and friend/group/label sync summaries. Session credentials, operation tokens and gateway ownership are omitted.",
+        "Returns safe connection state, optional verified runtime socket state and freshness, group kill switch, capabilities and friend/group/label sync summaries. Runtime may be absent or null during rollout; socketOpen is null when unverified. Session credentials, operation tokens and gateway ownership are omitted.",
       tags: ["Zalo Accounts"],
     })
     .input(scope)

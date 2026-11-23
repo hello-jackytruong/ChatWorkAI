@@ -8,6 +8,31 @@ const runtime = { kind: "account" as const, id: "account-1" }
 const scope = { workspaceId: "workspace-1", runtime }
 
 describe("RedisAccountLeaseStore", () => {
+  it("fences sampled diagnostics writes and bounds their payload size", async () => {
+    const redis = new InMemoryLeaseScriptClient()
+    const store = new RedisAccountLeaseStore(redis)
+    const first = await store.acquire(scope, "owner-a", 30_000)
+    if (!first) {
+      throw new Error("missing first owner")
+    }
+    await expect(store.writeSnapshot(scope, first, "{}", 60_000)).resolves.toBe(
+      true,
+    )
+    redis.advanceBy(30_001)
+    const second = await store.acquire(scope, "owner-b", 30_000)
+    if (!second) {
+      throw new Error("missing second owner")
+    }
+    await expect(
+      store.writeSnapshot(scope, second, "{}", 60_000),
+    ).resolves.toBe(true)
+    await expect(store.writeSnapshot(scope, first, "{}", 60_000)).resolves.toBe(
+      false,
+    )
+    await expect(
+      store.writeSnapshot(scope, second, "x".repeat(2049), 60_000),
+    ).rejects.toThrow()
+  })
   it("allows one owner and fences stale renew/release after takeover", async () => {
     const redis = new InMemoryLeaseScriptClient()
     const first = new RedisAccountLeaseStore(redis)
