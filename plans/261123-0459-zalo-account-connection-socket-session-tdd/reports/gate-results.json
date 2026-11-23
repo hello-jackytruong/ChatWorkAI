@@ -1,0 +1,150 @@
+[
+  {
+    "name": "lint",
+    "command": "pnpm lint",
+    "exit": 0,
+    "seconds": 9.2,
+    "summary": [],
+    "log": "/tmp/zalo-p0-lint.log"
+  },
+  {
+    "name": "types-zalo-account-gateway",
+    "command": "pnpm --filter zalo-account-gateway check-types",
+    "exit": 0,
+    "seconds": 17.7,
+    "summary": [],
+    "log": "/tmp/zalo-p0-types-zalo-account-gateway.log"
+  },
+  {
+    "name": "coverage-zalo-account-gateway",
+    "command": "pnpm --filter zalo-account-gateway exec vitest run --coverage",
+    "exit": 1,
+    "seconds": 11.4,
+    "summary": [
+      " Test Files  18 passed (18)",
+      "      Tests  93 passed (93)",
+      "   Duration  10.51s (import 65%, tests 17%, transform 16%, worker 2%)",
+      "All files          |   71.14 |    64.89 |   63.27 |   71.17 |                   ",
+      "ERROR: Coverage for lines (71.17%) does not meet global threshold (80%)",
+      "ERROR: Coverage for functions (63.27%) does not meet global threshold (80%)",
+      "ERROR: Coverage for statements (71.14%) does not meet global threshold (80%)",
+      "ERROR: Coverage for branches (64.89%) does not meet global threshold (80%)"
+    ],
+    "log": "/tmp/zalo-p0-coverage-zalo-account-gateway.log"
+  },
+  {
+    "name": "coverage-sdk",
+    "command": "pnpm --filter @chatbotx.io/sdk exec vitest run --coverage",
+    "exit": 1,
+    "seconds": 2.8,
+    "summary": [
+      " Test Files  19 passed (19)",
+      "      Tests  272 passed (272)",
+      "   Duration  2.06s (import 58%, worker 16%, tests 12%, transform 10%, setup 4%)",
+      "All files          |   77.44 |    63.77 |   63.97 |   77.57 |                   ",
+      "ERROR: Coverage for lines (77.57%) does not meet global threshold (80%)",
+      "ERROR: Coverage for functions (63.97%) does not meet global threshold (80%)",
+      "ERROR: Coverage for statements (77.44%) does not meet global threshold (80%)",
+      "ERROR: Coverage for branches (63.77%) does not meet global threshold (80%)"
+    ],
+    "log": "/tmp/zalo-p0-coverage-sdk.log"
+  },
+  {
+    "name": "coverage-database",
+    "command": "pnpm --filter @chatbotx.io/database exec vitest run --coverage",
+    "exit": 1,
+    "seconds": 73.2,
+    "summary": [
+      " Test Files  142 passed | 61 skipped (203)",
+      "      Tests  1952 passed | 627 skipped (2579)",
+      "   Duration  71.70s (import 67%, typecheck 15%, tests 8%, transform 6%, worker 3%, setup 1%)",
+      "All files          |   54.16 |    39.76 |   39.36 |    53.9 |                   ",
+      "ERROR: Coverage for lines (53.9%) does not meet global threshold (80%)",
+      "ERROR: Coverage for functions (39.36%) does not meet global threshold (80%)",
+      "ERROR: Coverage for statements (54.16%) does not meet global threshold (80%)",
+      "ERROR: Coverage for branches (39.76%) does not meet global threshold (80%)"
+    ],
+    "log": "/tmp/zalo-p0-coverage-database.log"
+  },
+  {
+    "name": "coverage-business",
+    "command": "pnpm --filter @chatbotx.io/business exec vitest run --coverage",
+    "exit": 1,
+    "seconds": 286.8,
+    "summary": [
+      "\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af",
+      " FAIL  __tests__/zalo-account.service.test.ts > Zalo Account authorization > returns public metadata without ciphertext or raw credentials",
+      "AssertionError: expected { id: 'account-1', \u2026(11) } to deeply equal { id: 'account-1', \u2026(8) }",
+      " Test Files  1 failed | 674 passed | 52 skipped (727)",
+      "      Tests  1 failed | 10819 passed | 552 skipped (11372)",
+      "   Duration  285.79s (import 83%, tests 9%, transform 5%, worker 3%, setup 1%)"
+    ],
+    "log": "/tmp/zalo-p0-coverage-business.log"
+  },
+  {
+    "name": "coverage-connections",
+    "command": "pnpm --filter @chatbotx.io/connections exec vitest run --coverage",
+    "exit": 1,
+    "seconds": 24.7,
+    "summary": [
+      " Test Files  12 passed | 2 skipped (14)",
+      "      Tests  172 passed | 27 skipped (199)",
+      "   Duration  23.58s (import 69%, transform 30%, worker 1%)",
+      "All files          |   86.25 |    77.39 |    87.5 |   86.19 |                   ",
+      "ERROR: Coverage for branches (77.39%) does not meet global threshold (80%)"
+    ],
+    "log": "/tmp/zalo-p0-coverage-connections.log"
+  },
+  {
+    "name": "coverage-worker",
+    "command": "pnpm --filter worker exec vitest run --coverage",
+    "exit": 1,
+    "seconds": 301.3,
+    "summary": [
+      " Test Files  408 passed (408)",
+      "      Tests  5522 passed (5522)",
+      "   Duration  299.90s (import 78%, tests 16%, transform 4%, worker 1%)",
+      "All files          |   82.89 |    76.21 |   84.22 |   82.94 |                   ",
+      "ERROR: Coverage for branches (76.21%) does not meet global threshold (80%)"
+    ],
+    "log": "/tmp/zalo-p0-coverage-worker.log"
+  },
+  {
+    "name": "coverage-realtime-protocol",
+    "command": "pnpm --filter @chatbotx.io/realtime-protocol exec vitest run --coverage",
+    "exit": 0,
+    "seconds": 1.5,
+    "summary": [
+      " Test Files  6 passed (6)",
+      "      Tests  107 passed (107)",
+      "   Duration  613ms (import 34%, transform 25%, worker 20%, tests 16%, setup 5%)",
+      "All files          |   95.05 |    84.82 |   94.82 |   95.03 |                   "
+    ],
+    "log": "/tmp/zalo-p0-coverage-realtime-protocol.log"
+  },
+  {
+    "name": "coverage-builder",
+    "command": "pnpm --filter builder exec vitest run --coverage",
+    "exit": 1,
+    "seconds": 779.8,
+    "summary": [
+      "Error: Not implemented: HTMLMediaElement.prototype.pause",
+      "Error: Not implemented: HTMLMediaElement.prototype.play",
+      "Error: Not implemented: HTMLMediaElement.prototype.pause",
+      "Error: Not implemented: HTMLMediaElement.prototype.play",
+      "Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)",
+      "Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)",
+      "Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)",
+      "Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)",
+      "Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)",
+      "Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)",
+      "\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af",
+      " FAIL  __tests__/api-parity-manifest.test.ts > api parity manifest > every UI action is classified",
+      "AssertionError: expected [ Array(1) ] to deeply equal []",
+      " Test Files  1 failed | 1250 passed (1251)",
+      "      Tests  1 failed | 11482 passed | 2 skipped (11485)",
+      "   Duration  778.79s (import 66%, tests 15%, environment 14%, worker 2%, transform 2%, setup 1%)"
+    ],
+    "log": "/tmp/zalo-p0-coverage-builder.log"
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "command": "VITEST_MAX_WORKERS=1 pnpm --filter @chatbotx.io/business exec vitest run",
+  "exit": 0,
+  "filesPassed": 675,
+  "filesSkipped": 52,
+  "testsPassed": 10820,
+  "testsSkipped": 552,
+  "durationSeconds": 210.21,
+  "reason": "Full behavior suite rerun after nullable metadata fixture/expected-output correction; coverage remains unverified for that corrected run."
+}
