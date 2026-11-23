@@ -10,6 +10,7 @@ type RouteConfig = {
 
 type CapturedProcedure = {
   route: RouteConfig
+  input?: { parse: (value: unknown) => unknown }
   handler?: (...args: any[]) => any
 }
 
@@ -21,7 +22,10 @@ const { workspaceTokenAuthAPIForScope, capturedProcedures } = vi.hoisted(() => {
     capturedProcedures.push(record)
 
     const chain = {
-      input: vi.fn(() => chain),
+      input: vi.fn((schema: CapturedProcedure["input"]) => {
+        record.input = schema
+        return chain
+      }),
       output: vi.fn(() => chain),
       errors: vi.fn(() => chain),
       handler: vi.fn((fn: (...args: any[]) => any) => {
@@ -109,6 +113,37 @@ beforeEach(() => {
 
 test("registers the conversations public router under the inbox scope", () => {
   expect(scopeArgAtImport).toBe("inbox")
+})
+
+describe("GET /v1/conversations inbox filtering", () => {
+  const procedure = findProcedure("GET", "/v1/conversations")
+
+  test("decodes selected inbox ids from a JSON query parameter", () => {
+    expect(procedure.input?.parse({ inboxIds: '["11","12"]' })).toEqual(
+      expect.objectContaining({ inboxIds: ["11", "12"] }),
+    )
+  })
+
+  test("delegates inbox and contact tag filters to the shared query", async () => {
+    const contactFilter = {
+      operator: "and",
+      conditions: [{ field: "tags", operator: "in", value: ["21"] }],
+    }
+    listConversations.mockResolvedValueOnce({ data: [], nextCursor: null })
+    await procedure.handler?.({
+      context,
+      input: { inboxIds: ["11"], channel: "messenger", contactFilter },
+    })
+    expect(listConversations).toHaveBeenCalledWith(
+      {
+        workspaceId: "ws-1",
+        inboxIds: ["11"],
+        channel: "messenger",
+        contactFilter,
+      },
+      expect.objectContaining({ includeEmailAndPhone: true }),
+    )
+  })
 })
 
 describe("GET /v1/conversations/{id}", () => {

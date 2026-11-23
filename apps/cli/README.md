@@ -299,9 +299,10 @@ chatbotx contacts coupons list <identifier>          # List coupons issued to co
 ### `conversations`
 
 ```bash
-chatbotx conversations list                          # [--botCategory --assignedId --channel --status --keyword
+chatbotx conversations list                          # [--botCategory --assignedId --channel --inboxIds --status --keyword
                                                      #  --botEnabled --tags --contactFilter --cursor --perPage --sort --view]
                                                      # Array/object filters are JSON strings: --status '["open"]'
+                                                     # --inboxIds '["11","12"]' selects linked inboxes; ids come from inboxes list
                                                      # --view compact drops ad attribution and thread-control metadata from contactInboxes (default full)
 chatbotx conversations get <id>
 chatbotx conversations assign add <id> --assignedId <assignedId>  # null clears the assignee

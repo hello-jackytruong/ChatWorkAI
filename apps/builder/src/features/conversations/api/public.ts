@@ -12,6 +12,7 @@ import {
   conversationBotCategories,
   conversationStatuses,
 } from "@chatbotx.io/database/partials"
+import { zodBigintAsString } from "@chatbotx.io/utils"
 import z from "zod"
 import { successResponse } from "@/features/common/schema"
 import { contactFilterCriteriaSchema } from "@/features/contact-filter"
@@ -83,6 +84,14 @@ const listConversationsQueryRequest = z.object({
   channel: channelTypes
     .optional()
     .describe("Restrict to conversations on this channel."),
+  inboxIds: jsonQueryParam(
+    z
+      .array(zodBigintAsString())
+      .optional()
+      .describe(
+        "Restrict to conversations whose contact has an inbox in this list, combined with channel on the same inbox. Get ids from `inboxes.list`. An empty array means all inboxes. Sent as a JSON-encoded array.",
+      ),
+  ),
   status: jsonQueryParam(
     z
       .array(conversationStatuses)
@@ -139,7 +148,7 @@ export const conversationsPublicRouter = {
       path: "/v1/conversations",
       summary: "List conversations",
       description:
-        'Use this to find conversations by status, channel, assignee, tags, or contact filter before inspecting one with `conversations.get`. Returns cursor-paginated workspace conversations. The array and object filters (`status`, `tags`, `contactFilter`) are query parameters whose value is a JSON-encoded string, for example `status=["open"]`; `contactFilter` is the JSON of the criteria object from `contacts.listFilterFields`; bracket (deepObject) notation such as `status[0]=open` is not understood and the filter is ignored.',
+        'Use this to find conversations by status, channel, specific inboxes, assignee, system statuses, or contact filter before inspecting one with `conversations.get`. Returns cursor-paginated workspace conversations. The array and object filters (`status`, `tags`, `inboxIds`, `contactFilter`) are query parameters whose value is a JSON-encoded string, for example `status=["open"]`; `contactFilter` is the JSON of the criteria object from `contacts.listFilterFields`; bracket (deepObject) notation such as `status[0]=open` is not understood and the filter is ignored.',
       tags: ["Conversations"],
       spec: mcpSpec({ visibility: "default" }),
     })

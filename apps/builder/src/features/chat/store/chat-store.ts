@@ -146,6 +146,7 @@ export type ConversationFilters = {
   botCategory?: ConversationBotCategory
   assignedId?: string
   channel?: ChannelType
+  inboxIds?: string[]
   status?: ConversationStatus[]
   keyword?: string
   tags?: ConversationStatus[]
