@@ -5,7 +5,7 @@ umask 077
 ROOT="${CHATWORK_DEPLOY_ROOT:-/opt/chatworkai}"
 RELEASE_PATTERN="^[0-9a-f]{40}(-[0-9]+-[0-9]+)?$"
 STATE="$ROOT/state"
-APPS=(javascript-executor builder realtime mcp zalo-account-gateway worker)
+APPS=(javascript-executor builder realtime mcp worker zalo-account-gateway)
 fail() { echo "ERROR: $*" >&2; exit 1; }
 [[ "$ROOT" =~ ^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)+$ ]] || fail 'Use an absolute deployment path without spaces or quotes'
 mkdir -p "$STATE" "$ROOT/backups" "$ROOT/logs"
@@ -73,9 +73,31 @@ backup() {
 
 activate() {
   local service
+  gateway_activation_attempted=false
   for service in "${APPS[@]}"; do
+    [[ "$service" != zalo-account-gateway ]] || gateway_activation_attempted=true
     "${COMPOSE[@]}" up -d --no-build --no-deps --pull never --wait --wait-timeout 300 "$service" || return 1
   done
+}
+
+stop_zalo_producer_and_drain() {
+  local backlog remaining probe_timeout deadline
+  # Compose stop waits for shutdown. Keep compatible readers running until all
+  # queued and pending events have been acknowledged and deleted by the SDK.
+  "${COMPOSE[@]}" stop zalo-account-gateway >/dev/null 2>&1 || return 1
+  deadline=$((SECONDS + 30))
+  while (( SECONDS < deadline )); do
+    remaining=$((deadline - SECONDS))
+    (( remaining > 0 )) || break
+    probe_timeout=5
+    (( remaining >= probe_timeout )) || probe_timeout="$remaining"
+    backlog="$(timeout "${probe_timeout}s" "${COMPOSE[@]}" exec -T redis redis-cli --raw XLEN zalo-account:events 2>/dev/null)" || return 1
+    [[ "$backlog" =~ ^[0-9]+$ ]] || return 1
+    [[ "$backlog" != 0 ]] || return 0
+    (( SECONDS < deadline )) || break
+    sleep 1
+  done
+  return 1
 }
 
 restore_apps() {
@@ -139,6 +161,10 @@ case "$command" in
     if ! activate; then
       echo 'Activation failed; attempting previous application images (database is not reversed)' >&2
       if [[ "$previous" =~ $RELEASE_PATTERN ]]; then
+        ( use_release "$previous"; validate ) || fail 'Previous application release failed validation; rollback not started'
+        if [[ "$gateway_activation_attempted" == true ]]; then
+          stop_zalo_producer_and_drain || fail 'Application rollback stopped before restoring older applications: gateway shutdown or event drain failed; inspect restricted host logs'
+        fi
         use_release "$previous"
         restore_apps || fail 'Application rollback also failed; inspect restricted host logs'
       else
@@ -154,6 +180,8 @@ case "$command" in
     ;;
   rollback)
     previous="$(basename "$(readlink -f "$ROOT/previous")")"
+    ( use_release "$previous"; validate ) || fail 'Previous application release failed validation; rollback not started'
+    stop_zalo_producer_and_drain || fail 'Application rollback stopped before restoring older applications: gateway shutdown or event drain failed; inspect restricted host logs'
     use_release "$previous"
     validate
     restore_apps || fail 'Rollback readiness checks failed'

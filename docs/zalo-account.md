@@ -57,7 +57,9 @@ pnpm --filter zalo-account-gateway start
 ```
 
 Use `GET /healthz` for process liveness and `GET /readyz` for traffic
-readiness. Shutdown first rejects readiness, stops command consumption, stops
+readiness. Readiness requires the dedicated blocking Redis connection to be
+ready; the command consumer explicitly connects it before reading the stream,
+including when offline queuing is disabled. Shutdown first rejects readiness, stops command consumption, stops
 and releases runtimes, drains Redis, and has a 30-second hard deadline.
 
 Channel visibility remains controlled by the tenant channel policy. Hiding the
