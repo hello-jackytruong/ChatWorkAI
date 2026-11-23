@@ -472,10 +472,13 @@ export const zaloAccountOutboundMessageSchema = z
   .refine((message) => Boolean(message.text || message.attachments.length), {
     message: "Zalo Account outbound message has no content",
   })
-  .refine((message) => !(message.text && message.attachments.length), {
-    message:
-      "Zalo Account outbound messages must contain text or one attachment, not both",
-  })
+  .refine(
+    (message) =>
+      !(
+        message.text && message.attachments.some(({ kind }) => kind !== "image")
+      ),
+    { message: "Zalo Account text can only accompany an image attachment" },
+  )
 export type ZaloAccountOutboundMessage = z.infer<
   typeof zaloAccountOutboundMessageSchema
 >

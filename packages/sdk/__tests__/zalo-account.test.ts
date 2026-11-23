@@ -2,6 +2,7 @@ import {
   zaloAccountAuthorizationEventSchema,
   zaloAccountAuthSchema,
   zaloAccountLifecycleEventSchema,
+  zaloAccountOutboundMessageSchema,
   zaloAccountRuntimeRefSchema,
 } from "@chatbotx.io/sdk"
 import { describe, expect, it } from "vitest"
@@ -16,6 +17,42 @@ const auth = {
   userAgent: "Mozilla/5.0",
   zaloUid: "zalo-user-1",
 }
+
+describe("Zalo Account outbound content", () => {
+  const image = { kind: "image", url: "https://example.com/photo.jpg" }
+
+  it.each([
+    { text: "hello" },
+    { attachments: [image] },
+    { text: "Photo caption", attachments: [image] },
+    {
+      attachments: [{ kind: "file", url: "https://example.com/document.pdf" }],
+    },
+  ])("accepts supported outgoing content %#", (content) => {
+    const message = { recipientId: "peer-1", ...content }
+    expect(zaloAccountOutboundMessageSchema.parse(message)).toEqual({
+      attachments: [],
+      ...message,
+    })
+  })
+
+  it.each([
+    {},
+    { text: "   " },
+    { text: "caption", attachments: [image, image] },
+    {
+      text: "caption",
+      attachments: [{ kind: "file", url: "https://example.com/document.pdf" }],
+    },
+  ])("rejects unsupported or empty outgoing content %#", (content) => {
+    expect(
+      zaloAccountOutboundMessageSchema.safeParse({
+        recipientId: "peer-1",
+        ...content,
+      }).success,
+    ).toBe(false)
+  })
+})
 
 describe("zaloAccountAuthSchema", () => {
   it("accepts the validated personal-account session returned after QR login", () => {

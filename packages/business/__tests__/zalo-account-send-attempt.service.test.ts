@@ -39,6 +39,35 @@ beforeEach(() => {
   }))
   mocks.find.mockResolvedValue(undefined)
 })
+it.each([
+  "user",
+  "group",
+] as const)("dispatches an image with its text for a %s thread", async (threadType) => {
+  const send = vi.fn(async () => ({ messageIds: ["image-1"], sentCount: 1 }))
+  await expect(
+    zaloAccountSendAttemptService.send(
+      {
+        ...input,
+        threadType,
+        message: {
+          recipientId: "pg1",
+          text: "Photo caption",
+          attachments: [
+            { kind: "image", url: "https://example.com/photo.jpg" },
+          ],
+        },
+      },
+      send,
+    ),
+  ).resolves.toEqual({ messageIds: ["image-1"], sentCount: 1 })
+  expect(send).toHaveBeenCalledOnce()
+  expect(mocks.settle).toHaveBeenCalledWith(
+    expect.objectContaining({
+      status: "applied",
+      providerMessageIds: ["image-1"],
+    }),
+  )
+})
 it("persists an attempt before provider dispatch and scopes the command by account and thread", async () => {
   const send = vi.fn(async () => ({ messageIds: ["m1"], sentCount: 1 }))
   await zaloAccountSendAttemptService.send(input, send)

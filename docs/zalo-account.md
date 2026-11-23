@@ -103,6 +103,12 @@ Supported 1:1 inbound/outbound content is deliberately small:
 - image;
 - file.
 
+Inbox sends support text together with one image; both are passed to the
+provider in the same send command. The provider can send the text separately
+when quote metadata is present. Text with a file and multiple attachments per
+command remain unsupported. The dedicated direct/group send API endpoints
+continue to accept either text or one attachment.
+
 Inbound messages, own echoes, delivery/read status, and undo events enter the
 existing integration worker and canonical Inbox persistence/realtime pipeline.
 Provider/account/thread/message identity is included in dedupe IDs so a retry
