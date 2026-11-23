@@ -1,3 +1,6 @@
+const PRIVATE_RUNTIME_FIELDS_PATTERN =
+  /private-|fenceToken|socketAttempt|sequence|epoch/
+const FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/
 const PRIVATE_STATUS_FIELDS_PATTERN =
   /internal-token|fenceToken|encryptedAuth|cookie|imei|userAgent/
 
@@ -14,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   updateAuthorizationAndProfile: vi.fn(),
   connection: vi.fn(),
   lease: vi.fn(),
+  mget: vi.fn(),
 }))
 
 vi.mock("@chatbotx.io/encryption", async (importOriginal) => ({
@@ -36,7 +40,9 @@ vi.mock("@chatbotx.io/database/repositories", () => ({
   },
 }))
 vi.mock("@chatbotx.io/redis", () => ({
-  cacheConnections: { useExisting: async () => ({ get: mocks.lease }) },
+  cacheConnections: {
+    useExisting: async () => ({ get: mocks.lease, mget: mocks.mget }),
+  },
 }))
 
 const { decryptZaloAccountAuth, encryptZaloAccountAuth } = await import(
@@ -64,6 +70,9 @@ const row = {
   zaloUid: "uid-1",
   name: "Personal Zalo",
   avatarUrl: null,
+  groupMessagingEnabled: false,
+  groupPolicyEpoch: 0,
+  operations: null,
   sessionVerifiedAt: new Date("2026-11-19T09:00:00.000Z"),
   createdAt: new Date("2026-11-19T08:00:00.000Z"),
   updatedAt: new Date("2026-11-19T09:00:00.000Z"),
@@ -87,6 +96,12 @@ describe("Zalo Account authorization", () => {
       },
     ])
     mocks.updateAuthorizationAndProfile.mockResolvedValue(row)
+    mocks.mget.mockResolvedValue([null, null])
+    mocks.connection.mockResolvedValue({
+      workspaceId: "workspace-1",
+      provider: "zaloAccount",
+      status: "connected",
+    })
   })
   it("reports missing gateway ownership without leaking credentials or operation tokens", async () => {
     mocks.findByIdForWorkspace.mockResolvedValue({
@@ -110,6 +125,267 @@ describe("Zalo Account authorization", () => {
     })
     expect(result.gatewayAvailable).toBe(false)
     expect(JSON.stringify(result)).not.toMatch(PRIVATE_STATUS_FIELDS_PATTERN)
+  })
+
+  it("requires matching lease and durable lifecycle order before reporting an open socket", async () => {
+    const now = new Date().toISOString()
+    const diagnostics = {
+      phase: "connected",
+      reconnectCount: 1,
+      connectedAt: now,
+      lastLifecycleAt: now,
+      fenceToken: "9",
+      epoch: 2,
+      socketAttempt: 3,
+      sequence: 4,
+      hold: {
+        authFingerprint: "private-fingerprint",
+        category: "unknown",
+        heldAt: now,
+      },
+    }
+    mocks.findByIdForWorkspace.mockResolvedValue({
+      ...row,
+      operations: { diagnostics },
+    })
+    mocks.mget.mockResolvedValue([
+      "private-owner:9",
+      JSON.stringify({
+        fenceToken: "9",
+        epoch: 2,
+        socketAttempt: 3,
+        sequence: 4,
+        socketOpen: true,
+        sampledAt: now,
+        lastEventAt: null,
+      }),
+    ])
+    const result = await zaloAccountService.status({
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+    })
+    expect(result.runtime).toMatchObject({
+      socketOpen: true,
+      freshness: "fresh",
+      connectedAt: now,
+    })
+    expect(JSON.stringify(result)).not.toMatch(PRIVATE_RUNTIME_FIELDS_PATTERN)
+    mocks.mget.mockResolvedValue([
+      "private-owner:10",
+      JSON.stringify({
+        fenceToken: "9",
+        epoch: 2,
+        socketAttempt: 3,
+        sequence: 4,
+        socketOpen: true,
+        sampledAt: now,
+        lastEventAt: null,
+      }),
+    ])
+    expect(
+      (
+        await zaloAccountService.status({
+          workspaceId: "workspace-1",
+          accountId: "account-1",
+        })
+      ).runtime,
+    ).toMatchObject({ socketOpen: null, freshness: "unknown" })
+  })
+
+  it("removes private diagnostics from account list and get projections", async () => {
+    const privateRow = {
+      ...row,
+      privateFutureField: "private-future-secret",
+      operations: {
+        diagnostics: {
+          phase: "held",
+          hold: { authFingerprint: "private-fingerprint" },
+        },
+        labels: { version: 2 },
+      },
+    }
+    mocks.listByWorkspace.mockResolvedValue([privateRow])
+    mocks.findByIdForWorkspace.mockResolvedValue(privateRow)
+    const result = [
+      await zaloAccountService.listByWorkspace({ workspaceId: "workspace-1" }),
+      await zaloAccountService.findById({
+        workspaceId: "workspace-1",
+        id: "account-1",
+      }),
+    ]
+    expect(JSON.stringify(result)).not.toContain("private-fingerprint")
+    expect(JSON.stringify(result)).not.toContain("diagnostics")
+    expect(JSON.stringify(result)).not.toContain("private-future-secret")
+  })
+
+  it("keeps old rows compatible without inventing runtime data", async () => {
+    const result = await zaloAccountService.status({
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+    })
+    expect(result).toMatchObject({ status: "connected", runtime: null })
+  })
+
+  it.each([
+    "fenceToken",
+    "epoch",
+    "socketAttempt",
+    "sequence",
+  ])("does not verify a sample with mismatched %s", async (field) => {
+    const now = new Date().toISOString()
+    const order = { fenceToken: "9", epoch: 2, socketAttempt: 3, sequence: 4 }
+    mocks.findByIdForWorkspace.mockResolvedValue({
+      ...row,
+      operations: {
+        diagnostics: { ...order, phase: "connected", reconnectCount: 0 },
+      },
+    })
+    mocks.mget.mockResolvedValue([
+      "private-owner:9",
+      JSON.stringify({
+        ...order,
+        [field]: field === "fenceToken" ? "10" : 10,
+        socketOpen: true,
+        sampledAt: now,
+        lastEventAt: null,
+      }),
+    ])
+    const result = await zaloAccountService.status({
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+    })
+    expect(result.runtime).toMatchObject({
+      socketOpen: null,
+      freshness: "unknown",
+      sampledAt: null,
+    })
+  })
+
+  it("keeps a silent socket open when its sample is fresh and bounds status reads", async () => {
+    const now = new Date().toISOString()
+    const lastEventAt = "2020-01-01T00:00:00.000Z"
+    const order = { fenceToken: "9", epoch: 2, socketAttempt: 3, sequence: 4 }
+    mocks.findByIdForWorkspace.mockResolvedValue({
+      ...row,
+      operations: {
+        diagnostics: { ...order, phase: "connected", reconnectCount: 0 },
+      },
+    })
+    mocks.mget.mockResolvedValue([
+      "private-owner:9",
+      JSON.stringify({
+        ...order,
+        socketOpen: true,
+        sampledAt: now,
+        lastEventAt,
+      }),
+    ])
+    const result = await zaloAccountService.status({
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+    })
+    expect(result.runtime).toMatchObject({
+      socketOpen: true,
+      freshness: "fresh",
+      lastEventAt,
+    })
+    expect(mocks.findByIdForWorkspace).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: "workspace-1",
+      id: "account-1",
+    })
+    expect(mocks.connection).toHaveBeenCalledExactlyOnceWith({
+      inboxId: "inbox-1",
+    })
+    expect(mocks.mget).toHaveBeenCalledTimes(1)
+    expect(mocks.mget.mock.calls[0]).toHaveLength(2)
+    expect(mocks.lease).not.toHaveBeenCalled()
+    expect(mocks.listByWorkspace).not.toHaveBeenCalled()
+    expect(mocks.decryptObject).not.toHaveBeenCalled()
+  })
+
+  it("retains durable diagnostics when Redis is unavailable", async () => {
+    mocks.findByIdForWorkspace.mockResolvedValue({
+      ...row,
+      operations: {
+        diagnostics: {
+          fenceToken: "9",
+          epoch: 2,
+          socketAttempt: 3,
+          sequence: 4,
+          phase: "backoff",
+          reconnectCount: 2,
+        },
+      },
+    })
+    mocks.mget.mockRejectedValueOnce(new Error("private-redis-error"))
+    const result = await zaloAccountService.status({
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+    })
+    expect(result).toMatchObject({
+      gatewayAvailable: false,
+      status: "connected",
+      runtime: {
+        phase: "backoff",
+        reconnectCount: 2,
+        socketOpen: null,
+        freshness: "unknown",
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain("private-redis-error")
+  })
+
+  it.each([
+    "expired",
+    "malformed",
+    "missing",
+  ])("does not verify an open socket from a %s sample", async (kind) => {
+    const order = { fenceToken: "9", epoch: 2, socketAttempt: 3, sequence: 4 }
+    mocks.findByIdForWorkspace.mockResolvedValue({
+      ...row,
+      operations: {
+        diagnostics: { ...order, phase: "connected", reconnectCount: 0 },
+      },
+    })
+    let sample: string | null = null
+    if (kind === "malformed") {
+      sample = "{"
+    } else if (kind === "expired") {
+      sample = JSON.stringify({
+        ...order,
+        socketOpen: true,
+        sampledAt: new Date(Date.now() - 61_000).toISOString(),
+        lastEventAt: null,
+      })
+    }
+    mocks.mget.mockResolvedValue(["private-owner:9", sample])
+    const result = await zaloAccountService.status({
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+    })
+    expect(result.runtime).toMatchObject({
+      socketOpen: null,
+      freshness: kind === "expired" ? "stale" : "unknown",
+    })
+    expect(result.status).toBe("connected")
+  })
+
+  it.each([
+    "workspace",
+    "provider",
+  ])("rejects a mismatched connection %s before Redis access", async (field) => {
+    mocks.connection.mockResolvedValue({
+      workspaceId: field === "workspace" ? "other" : "workspace-1",
+      provider: field === "provider" ? "messenger" : "zaloAccount",
+      status: "connected",
+    })
+    await expect(
+      zaloAccountService.status({
+        workspaceId: "workspace-1",
+        accountId: "account-1",
+      }),
+    ).rejects.toThrow()
+    expect(mocks.mget).not.toHaveBeenCalled()
   })
 
   it("binds ciphertext to provider, workspace, and inbox", async () => {
@@ -158,6 +434,9 @@ describe("Zalo Account authorization", () => {
       zaloUid: "uid-1",
       name: "Personal Zalo",
       avatarUrl: null,
+      groupMessagingEnabled: false,
+      groupPolicyEpoch: 0,
+      operations: null,
       sessionVerifiedAt: row.sessionVerifiedAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -209,11 +488,34 @@ describe("Zalo Account authorization", () => {
         workspaceId: "workspace-1",
         accountId: "account-1",
       }),
-    ).resolves.toEqual({ auth, zaloUid: "uid-1" })
+    ).resolves.toMatchObject({
+      auth,
+      zaloUid: "uid-1",
+      authFingerprint: expect.stringMatching(FINGERPRINT_PATTERN),
+    })
     expect(mocks.findByIdForWorkspace).toHaveBeenCalledWith({
       workspaceId: "workspace-1",
       id: "account-1",
     })
+  })
+
+  it.each([
+    "paused",
+    "disconnected",
+    "needs_reauth",
+  ])("refuses automatic login of a %s account", async (status) => {
+    mocks.connection.mockResolvedValue({
+      workspaceId: "workspace-1",
+      provider: "zaloAccount",
+      status,
+    })
+    await expect(
+      zaloAccountService.loadRuntimeAccount({
+        workspaceId: "workspace-1",
+        accountId: "account-1",
+      }),
+    ).rejects.toThrow()
+    expect(mocks.decryptObject).not.toHaveBeenCalled()
   })
 
   it("lists only bounded active account routes for gateway reconciliation", async () => {

@@ -14,6 +14,15 @@ import {
   zaloAccountStatusResource,
 } from "../schema/resource"
 
+export const getZaloAccountStatusAction = workspaceActionClient
+  .bindArgsSchemas(workspaceIdAndIdRequestParams)
+  .action(async ({ bindArgsParsedInputs: [workspaceId, accountId] }) => {
+    await requireWorkspacePermission(workspaceId, "superAdmin")
+    return zaloAccountStatusResource.parse(
+      await zaloAccountService.status({ workspaceId, accountId }),
+    )
+  })
+
 export const getZaloAccountOperationsAction = workspaceActionClient
   .bindArgsSchemas(workspaceIdAndIdRequestParams)
   .action(async ({ bindArgsParsedInputs: [workspaceId, accountId] }) => {

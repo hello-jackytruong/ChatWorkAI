@@ -35,6 +35,30 @@ const payloadOfLastAppend = () => {
 }
 
 describe("FencedEventPublisher", () => {
+  it("preserves observation order outside the strict lifecycle payload", async () => {
+    await publisher().publishLifecycle(
+      {
+        type: "runtime_diagnostic",
+        runtime: { kind: "account", id: "account-1" },
+        epoch: 1,
+        fenceToken: "2",
+        socketAttempt: 3,
+        sequence: 7,
+        occurredAt: "2026-11-23T00:00:00.000Z",
+        diagnostics: { phase: "connecting", reconnectCount: 0 },
+      },
+      { ...context, inboxId: "inbox-1" },
+    )
+    expect(JSON.parse(payloadOfLastAppend())).toMatchObject({
+      socketAttempt: 3,
+      sequence: 7,
+      occurredAt: "2026-11-23T00:00:00.000Z",
+      payload: {
+        type: "runtime_diagnostic",
+        diagnostics: { phase: "connecting" },
+      },
+    })
+  })
   it("publishes group message content only with a current receive policy", async () => {
     appendIfOwned.mockClear()
     const resolveGroupReceivePolicy = vi

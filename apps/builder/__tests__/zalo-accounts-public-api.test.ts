@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 type Captured = {
   method: string
   path: string
+  description?: string
+  output?: { parse: (value: unknown) => unknown }
   handler?: (arg: never) => unknown
 }
 const captured: Captured[] = []
@@ -16,7 +18,10 @@ vi.mock("@/orpc", () => ({
       captured.push(record)
       const chain = {
         input: () => chain,
-        output: () => chain,
+        output: (schema: Captured["output"]) => {
+          record.output = schema
+          return chain
+        },
         errors: () => chain,
         handler: (handler: Captured["handler"]) => {
           record.handler = handler
@@ -30,7 +35,7 @@ vi.mock("@/orpc", () => ({
 
 const mocks = vi.hoisted(() => ({
   canonicalSend: vi.fn(),
-  account: { findById: vi.fn(), listByWorkspace: vi.fn() },
+  account: { findById: vi.fn(), listByWorkspace: vi.fn(), status: vi.fn() },
   group: {
     get: vi.fn(),
     list: vi.fn(),
@@ -202,4 +207,94 @@ describe("Zalo Account public API", () => {
       commandId: "labels-1",
     })
   })
+})
+
+it("documents optional verified runtime state on the existing status route", () => {
+  const route = captured.find(
+    ({ path }) => path === "/v1/zalo-accounts/{accountId}/status",
+  )
+  expect(route?.description).toContain("optional verified runtime")
+})
+
+it("returns scoped safe status with additive runtime output and rejects private diagnostics", async () => {
+  const safe = {
+    accountId: "account-1",
+    status: "connected",
+    reason: null,
+    groupMessagingEnabled: false,
+    gatewayAvailable: true,
+    capabilities: {
+      text: true,
+      image: true,
+      file: true,
+      typing: true,
+      reactions: true,
+      revoke: true,
+      delete: true,
+    },
+    groups: { complete: false, count: 0, completedAt: null, reason: null },
+    friends: {
+      complete: false,
+      count: 0,
+      completedAt: null,
+      reason: null,
+      nextCursor: null,
+    },
+    labels: {
+      complete: false,
+      version: 0,
+      paused: false,
+      completedAt: null,
+      reason: null,
+    },
+    runtime: {
+      phase: "connected",
+      socketOpen: true,
+      freshness: "fresh",
+      sampledAt: "2026-11-23T00:00:00.000Z",
+      lastEventAt: null,
+      reconnectCount: 0,
+    },
+  }
+  mocks.account.status.mockResolvedValue(safe)
+  const result = await procedure(
+    "GET",
+    "/v1/zalo-accounts/{accountId}/status",
+  )({
+    context: { workspace: { id: "workspace-1" } },
+    input: { accountId: "account-1" },
+  } as never)
+  expect(mocks.account.status).toHaveBeenCalledWith({
+    workspaceId: "workspace-1",
+    accountId: "account-1",
+  })
+  const output = captured.find(
+    ({ path }) => path === "/v1/zalo-accounts/{accountId}/status",
+  )?.output
+  expect(output?.parse(result)).toEqual(safe)
+  expect(output?.parse({ ...safe, runtime: null })).toEqual({
+    ...safe,
+    runtime: null,
+  })
+  const { runtime: _runtime, ...legacy } = safe
+  expect(output?.parse(legacy)).toEqual(legacy)
+  expect(mocks.group.list).not.toHaveBeenCalled()
+  for (const key of [
+    "fenceToken",
+    "epoch",
+    "socketAttempt",
+    "sequence",
+    "owner",
+    "cookie",
+    "qr",
+    "error",
+    "reason",
+  ]) {
+    expect(() =>
+      output?.parse({
+        ...safe,
+        runtime: { ...safe.runtime, [key]: "private" },
+      }),
+    ).toThrow()
+  }
 })

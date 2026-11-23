@@ -217,7 +217,10 @@ export function ZaloAccountGroups({
   }
   const enabled = status?.groupMessagingEnabled ?? groupMessagingEnabled
   const sendReady =
-    enabled && status?.status === "connected" && status.gatewayAvailable
+    enabled &&
+    status?.status === "connected" &&
+    status.gatewayAvailable &&
+    status.runtime?.socketOpen === true
   const setMessaging = useAction(
     setZaloAccountGroupMessagingAction.bind(null, workspaceId, accountId),
     { onSuccess: invalidate, onError: ({ error }) => showActionError(error) },

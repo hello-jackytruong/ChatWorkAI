@@ -14,7 +14,10 @@ import {
   sql,
 } from "../../client"
 import { connectionModel, integrationZaloAccountModel } from "../../schema"
-import type { ZaloAccountLabelState } from "../../schema/integration-zalo-account"
+import type {
+  ZaloAccountDiagnosticState,
+  ZaloAccountLabelState,
+} from "../../schema/integration-zalo-account"
 import { workspaceRepository } from "../workspace"
 
 type IntegrationZaloAccountRow = typeof integrationZaloAccountModel.$inferSelect
@@ -28,47 +31,212 @@ const byInbox = (input: WorkspaceInboxRef) =>
     eq(integrationZaloAccountModel.inboxId, input.inboxId),
   )
 
+// Reconnect writes the satellite before Connection; keep that row order here.
+const withRuntimeAccount = async <T>(
+  input: {
+    workspaceId: string
+    id: string
+    inboxId: string
+    deadlineAt?: number
+  },
+  fn: (tx: DatabaseClient, account: IntegrationZaloAccountRow) => Promise<T>,
+): Promise<T | false> =>
+  db.transaction(async (tx) => {
+    const boundQuery = async () => {
+      const remaining =
+        input.deadlineAt === undefined
+          ? 15_000
+          : Math.min(15_000, input.deadlineAt - Date.now())
+      if (remaining <= 0) {
+        throw new Error("Zalo Account start deadline elapsed")
+      }
+      await tx.execute(
+        sql`select set_config('statement_timeout', ${`${Math.max(1, remaining)}ms`}, true), set_config('lock_timeout', ${`${Math.max(1, Math.min(2000, remaining))}ms`}, true)`,
+      )
+    }
+    await boundQuery()
+    if (!(await workspaceRepository.lockWorkspaceForChildWrite(input, tx))) {
+      return false
+    }
+    await boundQuery()
+    const [account] = await tx
+      .select()
+      .from(integrationZaloAccountModel)
+      .where(
+        and(
+          eq(integrationZaloAccountModel.workspaceId, input.workspaceId),
+          eq(integrationZaloAccountModel.id, input.id),
+          eq(integrationZaloAccountModel.inboxId, input.inboxId),
+        ),
+      )
+      .limit(1)
+      .for("update")
+    if (!account) {
+      return false
+    }
+    await boundQuery()
+    const [connection] = await tx
+      .select()
+      .from(connectionModel)
+      .where(
+        and(
+          eq(connectionModel.workspaceId, input.workspaceId),
+          eq(connectionModel.inboxId, input.inboxId),
+          eq(connectionModel.provider, "zaloAccount"),
+          inArray(connectionModel.status, ["connected", "degraded"]),
+        ),
+      )
+      .limit(1)
+      .for("update")
+    if (!connection) {
+      return false
+    }
+    await boundQuery()
+    return fn(tx, account)
+  })
+
+const newerDiagnostics = (
+  next: ZaloAccountDiagnosticState,
+  previous?: ZaloAccountDiagnosticState,
+) =>
+  !previous ||
+  isNewerZaloAccountRuntimeEvent(
+    { ...next, occurredAt: next.lastLifecycleAt ?? "", state: "closed" },
+    {
+      ...previous,
+      occurredAt: previous.lastLifecycleAt ?? "",
+      state: "closed",
+    },
+  )
+
 export const integrationZaloAccountRepository = {
+  async withRuntimeAccount<T>(
+    input: {
+      workspaceId: string
+      id: string
+      inboxId: string
+      deadlineAt?: number
+    },
+    fn: (tx: DatabaseClient, account: IntegrationZaloAccountRow) => Promise<T>,
+  ) {
+    return await withRuntimeAccount(input, fn)
+  },
+  async writeDiagnostics(
+    id: string,
+    diagnostics: ZaloAccountDiagnosticState,
+    tx: DatabaseClient,
+  ) {
+    await tx
+      .update(integrationZaloAccountModel)
+      .set({
+        operations: sql`jsonb_set(coalesce(${integrationZaloAccountModel.operations}, '{}'::jsonb), '{diagnostics}', ${JSON.stringify(diagnostics)}::jsonb)`,
+      })
+      .where(eq(integrationZaloAccountModel.id, id))
+  },
+  async replaceRuntimeAuthorization(
+    id: string,
+    encryptedAuth: EncryptedData,
+    tx: DatabaseClient,
+  ) {
+    await tx
+      .update(integrationZaloAccountModel)
+      .set({ encryptedAuth })
+      .where(eq(integrationZaloAccountModel.id, id))
+  },
+  async withDiagnosticFence(input: {
+    workspaceId: string
+    id: string
+    inboxId: string
+    diagnostics: ZaloAccountDiagnosticState
+  }): Promise<boolean> {
+    return await withRuntimeAccount(input, async (tx, account) => {
+      if (
+        !newerDiagnostics(input.diagnostics, account.operations?.diagnostics)
+      ) {
+        return false
+      }
+      const diagnostics = {
+        ...input.diagnostics,
+        ...(account.operations?.diagnostics?.authorizationRefresh
+          ? {
+              authorizationRefresh:
+                account.operations.diagnostics.authorizationRefresh,
+            }
+          : {}),
+        ...(account.operations?.diagnostics?.hold
+          ? { hold: account.operations.diagnostics.hold }
+          : {}),
+      }
+      await integrationZaloAccountRepository.writeDiagnostics(
+        account.id,
+        diagnostics,
+        tx,
+      )
+      return true
+    })
+  },
   async withRuntimeFence(
     input: {
       workspaceId: string
       id: string
       inboxId: string
       order: ZaloAccountRuntimeOrder
+      diagnostics?: ZaloAccountDiagnosticState
     },
-    fn: (tx: DatabaseClient) => Promise<void>,
+    fn: (tx: DatabaseClient) => Promise<undefined | boolean>,
   ): Promise<boolean> {
-    return await db.transaction(async (tx) => {
-      const [account] = await tx
-        .select()
-        .from(integrationZaloAccountModel)
-        .where(
-          and(
-            eq(integrationZaloAccountModel.workspaceId, input.workspaceId),
-            eq(integrationZaloAccountModel.id, input.id),
-            eq(integrationZaloAccountModel.inboxId, input.inboxId),
-          ),
-        )
-        .limit(1)
-        .for("update")
+    return await withRuntimeAccount(input, async (tx, account) => {
       if (
-        !(
-          account &&
-          isNewerZaloAccountRuntimeEvent(
-            input.order,
-            account.operations?.runtime,
-          )
+        !isNewerZaloAccountRuntimeEvent(
+          input.order,
+          account.operations?.runtime,
         )
       ) {
         return false
       }
-      await fn(tx)
+      const durable = account.operations?.diagnostics
+      if (
+        durable &&
+        (BigInt(input.order.fenceToken) < BigInt(durable.fenceToken) ||
+          (input.order.fenceToken === durable.fenceToken &&
+            input.order.epoch < durable.epoch))
+      ) {
+        return false
+      }
+      if (
+        durable &&
+        input.order.fenceToken === durable.fenceToken &&
+        input.order.epoch === durable.epoch &&
+        input.order.socketAttempt !== undefined &&
+        (input.order.socketAttempt < durable.socketAttempt ||
+          (input.order.socketAttempt === durable.socketAttempt &&
+            input.order.sequence !== undefined &&
+            input.order.sequence < durable.sequence))
+      ) {
+        return false
+      }
+      if ((await fn(tx)) === false) {
+        return false
+      }
       await tx
         .update(integrationZaloAccountModel)
         .set({
           operations: sql`jsonb_set(coalesce(${integrationZaloAccountModel.operations}, '{}'::jsonb), '{runtime}', ${JSON.stringify(input.order)}::jsonb)`,
         })
         .where(eq(integrationZaloAccountModel.id, account.id))
+      if (input.diagnostics && newerDiagnostics(input.diagnostics, durable)) {
+        await integrationZaloAccountRepository.writeDiagnostics(
+          account.id,
+          {
+            ...input.diagnostics,
+            ...(durable?.authorizationRefresh
+              ? { authorizationRefresh: durable.authorizationRefresh }
+              : {}),
+            ...(durable?.hold ? { hold: durable.hold } : {}),
+          },
+          tx,
+        )
+      }
       return true
     })
   },
@@ -248,12 +416,22 @@ export const integrationZaloAccountRepository = {
   async listActiveRuntimeAccounts(
     input: { afterId?: string; limit: number },
     tx: DatabaseClient = db,
-  ): Promise<Array<{ id: string; workspaceId: string; inboxId: string }>> {
+  ): Promise<
+    Array<{
+      id: string
+      workspaceId: string
+      inboxId: string
+      encryptedAuth: EncryptedData
+      diagnostics: ZaloAccountDiagnosticState | null
+    }>
+  > {
     return await tx
       .select({
         id: integrationZaloAccountModel.id,
         workspaceId: integrationZaloAccountModel.workspaceId,
         inboxId: integrationZaloAccountModel.inboxId,
+        encryptedAuth: integrationZaloAccountModel.encryptedAuth,
+        diagnostics: sql<ZaloAccountDiagnosticState | null>`${integrationZaloAccountModel.operations}->'diagnostics'`,
       })
       .from(integrationZaloAccountModel)
       .innerJoin(

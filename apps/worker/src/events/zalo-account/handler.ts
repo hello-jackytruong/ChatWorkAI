@@ -1,8 +1,13 @@
-import { withBlockedOwnerGuard } from "@chatbotx.io/business"
+import {
+  queueWorkspaceRealtimeEvent,
+  withBlockedOwnerGuard,
+} from "@chatbotx.io/business"
+import { connectSessionService } from "@chatbotx.io/business/connect-session"
 import { zaloAccountRuntimeStateService } from "@chatbotx.io/business/zalo-account/runtime-state"
 import { connectionService } from "@chatbotx.io/connections"
 import { encryptUtils } from "@chatbotx.io/encryption"
 import {
+  isZaloAccountSecretEventAadValid,
   type ZaloAccountTransportEvent,
   zaloAccountAuthSchema,
 } from "@chatbotx.io/sdk"
@@ -28,12 +33,35 @@ const authorizationSecretSchema = z
   })
   .strict()
 
+const FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/
+const authorizationRefreshSecretSchema = authorizationSecretSchema
+  .extend({
+    purpose: z.literal("refresh"),
+    expectedCiphertextFingerprint: z.string().regex(FINGERPRINT_PATTERN),
+  })
+  .strict()
+const qrFailureCode = (reason: string) => {
+  if (reason === "qr_declined") {
+    return "provider_denied"
+  }
+  if (reason === "qr_expired") {
+    return "expired"
+  }
+  return "provider_error"
+}
+
 const scopedDirectMessageId = (input: {
   accountId: string
   threadId: string
   providerMessageId: string
 }) =>
   `za:${encodeURIComponent(input.accountId)}:user:${encodeURIComponent(input.threadId)}:${encodeURIComponent(input.providerMessageId)}`
+
+const notifyStatusChanged = (workspaceId: string, accountId: string) =>
+  queueWorkspaceRealtimeEvent(workspaceId, {
+    eventType: "zaloAccountStatusChanged",
+    data: { accountId },
+  }).catch(() => undefined)
 
 const handleConnectSessionEvent = async (
   event: ZaloAccountTransportEvent & {
@@ -52,6 +80,19 @@ const handleConnectSessionEvent = async (
   if (event.kind === "lifecycle") {
     if (event.payload.type === "qr_scanned") {
       await connectionService.markDeviceQrScanned(session)
+    } else if (event.payload.type === "reauthorization_required") {
+      const current = await connectSessionService.findByIdForWorkspace({
+        id: session.sessionId,
+        workspaceId: session.workspaceId,
+      })
+      if (current?.provider === "zaloAccount" && current.status === "pending") {
+        await connectSessionService.fail({
+          id: session.sessionId,
+          workspaceId: session.workspaceId,
+          errorCode: qrFailureCode(event.payload.reason),
+          statuses: ["pending"],
+        })
+      }
     }
     return
   }
@@ -86,6 +127,62 @@ export const handleZaloAccountEvents = async (
 ): Promise<void> => {
   for (const event of events) {
     await withBlockedOwnerGuard(event.route.workspaceId, async () => {
+      if (event.kind === "secret" && !isZaloAccountSecretEventAadValid(event)) {
+        throw new Error("Zalo Account encrypted event scope mismatch")
+      }
+      if (
+        event.kind === "lifecycle" &&
+        event.route.kind === "account" &&
+        event.payload.type === "runtime_diagnostic"
+      ) {
+        const accepted = await zaloAccountRuntimeStateService.applyDiagnostics({
+          workspaceId: event.route.workspaceId,
+          accountId: event.route.accountId,
+          inboxId: event.route.inboxId,
+          order: {
+            fenceToken: event.fenceToken,
+            epoch: event.epoch,
+            socketAttempt: event.socketAttempt,
+            sequence: event.sequence,
+            occurredAt: event.occurredAt,
+            state: "closed",
+          },
+          diagnostics: event.payload.diagnostics,
+        })
+        if (accepted) {
+          await notifyStatusChanged(
+            event.route.workspaceId,
+            event.route.accountId,
+          )
+        }
+        return
+      }
+      if (
+        event.kind === "secret" &&
+        event.route.kind === "account" &&
+        event.secretKind === "authorization_obtained"
+      ) {
+        const refreshed = await encryptUtils.decryptObject(
+          event.ciphertext,
+          authorizationRefreshSecretSchema,
+          event.aad,
+        )
+        if (event.socketAttempt && event.sequence) {
+          await zaloAccountRuntimeStateService.refreshAuthorization({
+            workspaceId: event.route.workspaceId,
+            accountId: event.route.accountId,
+            inboxId: event.route.inboxId,
+            fenceToken: event.fenceToken,
+            epoch: event.epoch,
+            socketAttempt: event.socketAttempt,
+            sequence: event.sequence,
+            auth: refreshed.auth,
+            expectedCiphertextFingerprint:
+              refreshed.expectedCiphertextFingerprint,
+          })
+        }
+        return
+      }
       if (
         event.kind === "lifecycle" &&
         event.route.kind === "account" &&
@@ -93,17 +190,32 @@ export const handleZaloAccountEvents = async (
           event.payload.type === "closed" ||
           event.payload.type === "reauthorization_required")
       ) {
-        await zaloAccountRuntimeStateService.apply({
+        const accepted = await zaloAccountRuntimeStateService.apply({
           workspaceId: event.route.workspaceId,
           accountId: event.route.accountId,
           inboxId: event.route.inboxId,
+          ...(event.payload.diagnostics
+            ? { diagnostics: event.payload.diagnostics }
+            : {}),
           order: {
             fenceToken: event.fenceToken,
             epoch: event.epoch,
             occurredAt: event.occurredAt,
+            ...(event.socketAttempt === undefined
+              ? {}
+              : { socketAttempt: event.socketAttempt }),
+            ...(event.sequence === undefined
+              ? {}
+              : { sequence: event.sequence }),
             state: event.payload.type,
           },
         })
+        if (accepted) {
+          await notifyStatusChanged(
+            event.route.workspaceId,
+            event.route.accountId,
+          )
+        }
         return
       }
       if (event.kind === "thread_event") {

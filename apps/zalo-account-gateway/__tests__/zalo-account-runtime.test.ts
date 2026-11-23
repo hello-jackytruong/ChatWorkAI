@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type {
   AccountLeasePort,
   RuntimeEventSink,
+  RuntimeOwnershipHooks,
   ZcaApiPort,
   ZcaClientPort,
 } from "../src/runtime/ports"
@@ -19,7 +20,13 @@ const auth: ZaloAccountAuth = {
 
 class FakeApi implements ZcaApiPort {
   readonly stop = vi.fn()
-  readonly start = vi.fn()
+  autoOpen = true
+  handlers?: Parameters<ZcaApiPort["listen"]>[0]
+  readonly start = vi.fn(() => {
+    if (this.autoOpen) {
+      this.handlers?.onConnected?.()
+    }
+  })
   private readonly ownId: string
   private onClosed?: (reason: string) => void
 
@@ -36,6 +43,7 @@ class FakeApi implements ZcaApiPort {
   listGroups = vi.fn(async () => [])
 
   listen(handlers: Parameters<ZcaApiPort["listen"]>[0]) {
+    this.handlers = handlers
     this.onClosed = handlers.onClosed
     return { start: this.start, stop: this.stop }
   }
@@ -61,10 +69,17 @@ class FakeClient implements ZcaClientPort {
   readonly qrApi = new FakeApi("uid-1")
   readonly reconnectApis: FakeApi[] = []
   private resolveQr?: (api: ZcaApiPort) => void
+  private rejectQr?: (error: Error) => void
+  cancel = vi.fn(() => {
+    this.rejectQr?.(new Error("cancelled"))
+    this.rejectQr = undefined
+    return Promise.resolve()
+  })
 
   loginQr(callback: Parameters<ZcaClientPort["loginQr"]>[0]) {
     this.qrCallback = callback
-    return new Promise<ZcaApiPort>((resolve) => {
+    return new Promise<ZcaApiPort>((resolve, reject) => {
+      this.rejectQr = reject
       this.resolveQr = resolve
     })
   }
@@ -81,7 +96,14 @@ class FakeClient implements ZcaClientPort {
 }
 
 const makeHarness = (
-  options: { renewError?: Error; renewResult?: boolean } = {},
+  options: {
+    renewError?: Error
+    renewResult?: boolean
+    account?: boolean
+    initialDeadlineAt?: number
+    leaseTtlMs?: number
+    hold?: RuntimeOwnershipHooks["hold"]
+  } = {},
 ) => {
   const events: unknown[] = []
   const lease: AccountLeasePort = {
@@ -122,13 +144,18 @@ const makeHarness = (
   const client = new FakeClient()
   const runtime = new ZaloAccountRuntime({
     clientFactory: { create: () => client },
+    hold: options.hold,
+    initialDeadlineAt: options.initialDeadlineAt,
     epoch: 3,
     eventSink: sink,
     lease,
     leaseRenewMs: 1000,
-    leaseTtlMs: 3000,
+    leaseTtlMs: options.leaseTtlMs ?? 3000,
     ownerId: "owner-1",
-    runtime: { kind: "connect_session", id: "session-1" },
+    runtime: options.account
+      ? { kind: "account", id: "account-1" }
+      : { kind: "connect_session", id: "session-1" },
+    ...(options.account ? { inboxId: "inbox-1" } : {}),
     workspaceId: "workspace-1",
   })
   return { client, events, lease, runtime, sink }
@@ -137,6 +164,330 @@ const makeHarness = (
 describe("ZaloAccountRuntime", () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
+
+  it.each([
+    "append",
+    "snapshot",
+  ] as const)("retries after a one-off %s rejection while publishing automatic connecting diagnostics", async (boundary) => {
+    const { client, runtime, lease, sink } = makeHarness()
+    const writeSnapshot = vi.fn<NonNullable<AccountLeasePort["writeSnapshot"]>>(
+      () => Promise.resolve(true),
+    )
+    lease.writeSnapshot = writeSnapshot
+    await runtime.reconnect(auth, auth.zaloUid)
+    client.reconnectApis[0].close()
+    await vi.waitFor(() => expect(runtime.snapshot().state).toBe("backoff"))
+    if (boundary === "append") {
+      vi.mocked(sink.publishLifecycle).mockRejectedValueOnce(
+        new Error("stream unavailable"),
+      )
+    } else {
+      writeSnapshot.mockRejectedValueOnce(new Error("snapshot unavailable"))
+    }
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(runtime.snapshot()).toMatchObject({ active: true, state: "backoff" })
+    expect(client.reconnectApis).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(client.reconnectApis).toHaveLength(2)
+    expect(runtime.snapshot().state).toBe("connected")
+    await runtime.stop()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it.each([
+    true,
+    false,
+  ])("fences an unconfirmed passive close and persists a hold when storage succeeds=%s", async (stored) => {
+    const hold = vi.fn(async () => stored)
+    const { client, runtime, lease, events } = makeHarness({
+      account: true,
+      hold,
+    })
+    await runtime.reconnect(async () => ({
+      auth,
+      zaloUid: auth.zaloUid,
+      authFingerprint: "a".repeat(64),
+    }))
+    const api = client.reconnectApis[0]
+    const closeConnection = vi.fn<() => Promise<void>>(() =>
+      Promise.reject(new Error("physical close unconfirmed")),
+    )
+    Object.assign(api, { closeConnection })
+    api.handlers?.onDisconnected?.(1006, "network")
+    await vi.waitFor(() =>
+      expect(runtime.snapshot()).toMatchObject({
+        active: false,
+        settled: false,
+        state: "stopped",
+      }),
+    )
+    expect(hold).toHaveBeenCalledWith(
+      expect.objectContaining({
+        diagnostics: expect.objectContaining({
+          phase: "held",
+          requiresAction: true,
+          errorCategory: "unknown",
+        }),
+      }),
+    )
+    if (stored) {
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "closed",
+          diagnostics: expect.objectContaining({
+            phase: "held",
+            requiresAction: true,
+          }),
+        }),
+      )
+    }
+    expect(lease.release).not.toHaveBeenCalled()
+    await expect(runtime.reconnect(auth, auth.zaloUid)).rejects.toThrow(
+      "cleanup is unconfirmed",
+    )
+    await expect(runtime.stop()).rejects.toThrow("physical close unconfirmed")
+    await vi.advanceTimersByTimeAsync(600_000)
+    expect(client.reconnectApis).toHaveLength(1)
+    expect(vi.getTimerCount()).toBe(0)
+    closeConnection.mockResolvedValue(undefined)
+    await runtime.stop()
+    expect(lease.release).toHaveBeenCalledOnce()
+  })
+
+  it("does not stack stalled lease renewals and stops at the ownership deadline", async () => {
+    const { lease, runtime } = makeHarness()
+    vi.mocked(lease.renew).mockImplementation(
+      () => new Promise(() => undefined),
+    )
+    await runtime.startQr()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(lease.renew).toHaveBeenCalledOnce()
+    expect(runtime.snapshot()).toMatchObject({
+      active: false,
+      state: "stopped",
+    })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("subtracts secret loading time from the initial login deadline", async () => {
+    const deadlineAt = Date.now() + 30_000
+    const { client, runtime } = makeHarness({
+      account: true,
+      initialDeadlineAt: deadlineAt,
+      leaseTtlMs: 60_000,
+    })
+    let rejectLogin: ((error: Error) => void) | undefined
+    vi.spyOn(client, "login").mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectLogin = reject
+        }),
+    )
+    client.cancel.mockImplementation(() => {
+      rejectLogin?.(new Error("aborted"))
+      return Promise.resolve()
+    })
+    const connecting = runtime.reconnect(() => {
+      vi.setSystemTime(Date.now() + 20_000)
+      return Promise.resolve({ auth, zaloUid: auth.zaloUid })
+    })
+    await vi.waitFor(() => expect(client.login).toHaveBeenCalledOnce())
+    await vi.advanceTimersByTimeAsync(deadlineAt - Date.now())
+    expect(client.cancel).toHaveBeenCalledOnce()
+    await connecting
+    await runtime.stop()
+  })
+
+  it("preserves timestamps and retry diagnostics on an isolated error", async () => {
+    const { client, runtime, events } = makeHarness()
+    await runtime.reconnect(auth, auth.zaloUid)
+    const connected = events.find(
+      (event) => (event as { type: string }).type === "connected",
+    ) as { diagnostics: { connectedAt: string } }
+    client.reconnectApis[0].handlers?.onError?.("network")
+    await vi.waitFor(() =>
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "runtime_diagnostic",
+          diagnostics: expect.objectContaining({
+            connectedAt: connected.diagnostics.connectedAt,
+            errorCategory: "network",
+          }),
+        }),
+      ),
+    )
+    await runtime.stop()
+  })
+
+  it("reloads ciphertext identity and persists changed cookies again after reconnect", async () => {
+    const { client, runtime, sink } = makeHarness({ account: true })
+    const apis: FakeApi[] = []
+    vi.spyOn(client, "login").mockImplementation(() => {
+      const value = `rotated-${apis.length + 1}`
+      const api = Object.assign(new FakeApi(auth.zaloUid), {
+        getAuthorization: () => ({
+          ...auth,
+          cookie: [{ key: "zpw_sek", value }],
+        }),
+      })
+      apis.push(api)
+      return Promise.resolve(api)
+    })
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce({
+        auth,
+        zaloUid: auth.zaloUid,
+        authFingerprint: "a".repeat(64),
+      })
+      .mockResolvedValue({
+        auth: { ...auth, cookie: [{ key: "zpw_sek", value: "rotated-1" }] },
+        zaloUid: auth.zaloUid,
+        authFingerprint: "b".repeat(64),
+      })
+    await runtime.reconnect(load)
+    expect(sink.publishAuthorization).toHaveBeenCalledOnce()
+    apis[0].close()
+    await vi.waitFor(() => expect(runtime.snapshot().state).toBe("backoff"))
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(load).toHaveBeenCalledTimes(2)
+    expect(sink.publishAuthorization).toHaveBeenCalledTimes(2)
+    expect(sink.publishAuthorization).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        expectedCiphertextFingerprint: "b".repeat(64),
+      }),
+      expect.anything(),
+    )
+    await runtime.stop()
+  })
+
+  it.each([
+    3000, 3003,
+  ])("holds close code %s without revoking authorization or retrying", async (code) => {
+    const { client, events, runtime } = makeHarness({ account: true })
+    await runtime.reconnect(auth, auth.zaloUid)
+    client.reconnectApis[0].handlers?.onDisconnected?.(
+      code,
+      "provider-private-reason",
+    )
+    client.reconnectApis[0].handlers?.onClosed("provider-private-reason", code)
+    await vi.waitFor(() =>
+      expect(runtime.snapshot()).toMatchObject({
+        active: false,
+        settled: true,
+      }),
+    )
+    await vi.advanceTimersByTimeAsync(600_000)
+    expect(client.reconnectApis).toHaveLength(1)
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "closed",
+        diagnostics: expect.objectContaining({
+          phase: "held",
+          closeCode: code,
+          requiresAction: true,
+        }),
+      }),
+    )
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "reauthorization_required" }),
+    )
+    expect(JSON.stringify(events)).not.toContain("provider-private-reason")
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("keeps an open socket after an isolated SDK error", async () => {
+    const { client, runtime } = makeHarness()
+    await runtime.reconnect(auth, auth.zaloUid)
+    client.reconnectApis[0].handlers?.onError?.("network")
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(runtime.snapshot().state).toBe("connected")
+    expect(client.reconnectApis).toHaveLength(1)
+    await runtime.stop()
+  })
+
+  it("publishes changed SDK cookies only after verified socket open with the source ciphertext fingerprint", async () => {
+    const { client, runtime, sink } = makeHarness({ account: true })
+    const api = Object.assign(new FakeApi(auth.zaloUid), {
+      getAuthorization: () => ({
+        ...auth,
+        cookie: [{ key: "zpw_sek", value: "rotated" }],
+      }),
+    })
+    api.autoOpen = false
+    vi.spyOn(client, "login").mockResolvedValue(api)
+    await runtime.reconnect(async () => ({
+      auth,
+      zaloUid: auth.zaloUid,
+      authFingerprint: "a".repeat(64),
+    }))
+    expect(sink.publishAuthorization).not.toHaveBeenCalled()
+    api.handlers?.onConnected?.()
+    await vi.waitFor(() =>
+      expect(sink.publishAuthorization).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: "refresh",
+          expectedCiphertextFingerprint: "a".repeat(64),
+          socketAttempt: 1,
+          sequence: expect.any(Number),
+        }),
+        expect.anything(),
+      ),
+    )
+    await runtime.stop()
+  })
+
+  it("does not admit sends or publish connected until the current socket opens", async () => {
+    const { client, events, runtime } = makeHarness()
+    const api = new FakeApi(auth.zaloUid)
+    api.autoOpen = false
+    vi.spyOn(client, "login").mockResolvedValue(api)
+    await runtime.reconnect(auth, auth.zaloUid)
+    expect(runtime.snapshot().state).toBe("reconnecting")
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "connected" }),
+    )
+    await expect(
+      runtime.sendDirect({
+        recipientId: "user",
+        text: "hello",
+        attachments: [],
+      }),
+    ).rejects.toThrow()
+    api.handlers?.onConnected?.()
+    await vi.waitFor(() => expect(runtime.snapshot().state).toBe("connected"))
+    expect(
+      events.filter(
+        (event) => (event as { type: string }).type === "connected",
+      ),
+    ).toHaveLength(1)
+    await runtime.stop()
+  })
+
+  it("deduplicates disconnected/closed and ignores late open and data from that socket", async () => {
+    const { client, events, runtime } = makeHarness()
+    await runtime.reconnect(auth, auth.zaloUid)
+    const api = client.reconnectApis[0]
+    api.handlers?.onDisconnected?.(1006, "network")
+    api.handlers?.onClosed("network", 1006)
+    await vi.waitFor(() => expect(runtime.snapshot().state).toBe("backoff"))
+    const before = events.length
+    api.handlers?.onConnected?.()
+    api.handlers?.onDirectStatus({
+      providerMessageId: "late",
+      threadId: "user",
+      status: "read",
+      timestampMs: 1,
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(events).toHaveLength(before)
+    expect(
+      events.filter((event) => (event as { type: string }).type === "closed"),
+    ).toHaveLength(1)
+    await runtime.stop()
+  })
 
   it("emits QR/scanned/auth then releases the temporary session socket", async () => {
     const { client, events, lease, runtime } = makeHarness()
@@ -150,7 +501,7 @@ describe("ZaloAccountRuntime", () => {
     qrCallback({
       type: "generated",
       imageDataUrl: "data:image/png;base64,QUJD",
-      expiresAt: "2026-11-19T17:00:00.000Z",
+      expiresAt: new Date(Date.now() + 100_000).toISOString(),
     })
     qrCallback({ type: "scanned", displayName: "Jacky" })
     qrCallback({ type: "credentials", auth })
@@ -286,17 +637,19 @@ describe("ZaloAccountRuntime", () => {
       throw new Error("Expected QR callback to be registered")
     }
     const retry = vi.fn()
-
     qrCallback({ type: "expired", retry })
-    qrCallback({ type: "expired", retry })
-    qrCallback({ type: "expired", retry })
+    await vi.waitFor(() => expect(client.qrCallback).not.toBe(qrCallback))
+    const secondCallback = client.qrCallback
+    secondCallback?.({ type: "expired", retry })
+    await vi.waitFor(() => expect(client.qrCallback).not.toBe(secondCallback))
+    client.qrCallback?.({ type: "expired", retry })
     await vi.waitFor(() =>
       expect(events).toContainEqual(
         expect.objectContaining({ type: "reauthorization_required" }),
       ),
     )
-
-    expect(retry).toHaveBeenCalledTimes(2)
+    expect(retry).not.toHaveBeenCalled()
+    expect(client.cancel).toHaveBeenCalledTimes(3)
     expect(runtime.snapshot().state).toBe("reauth_required")
   })
 

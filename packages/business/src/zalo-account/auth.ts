@@ -6,6 +6,20 @@ import {
   zaloAccountAuthSchema,
 } from "@chatbotx.io/sdk"
 
+import { sha256Hex } from "@chatbotx.io/utils/crypto"
+
+export const zaloAuthorizationFingerprint = (stored: EncryptedData) =>
+  sha256Hex(
+    JSON.stringify([
+      stored.v,
+      stored.kid,
+      stored.iv,
+      stored.text,
+      stored.tag,
+      stored.aad,
+    ]),
+  )
+
 const authAad = (workspaceId: string, inboxId: string) =>
   `zalo-account:${workspaceId}:${inboxId}:authorization`
 

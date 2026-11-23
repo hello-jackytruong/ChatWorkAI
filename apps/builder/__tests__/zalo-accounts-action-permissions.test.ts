@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   policy: vi.fn(),
   labels: vi.fn(),
   send: vi.fn(),
+  status: vi.fn(),
+  groups: vi.fn(),
 }))
 vi.mock("@/lib/auth/require-workspace-permission", () => ({
   requireWorkspacePermission: mocks.permission,
@@ -27,8 +29,11 @@ vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountGroupService: {
     sync: mocks.sync,
     updateInboxPolicy: mocks.policy,
+    list: mocks.groups,
   },
   zaloAccountLabelService: { sync: mocks.labels },
+  zaloAccountService: { status: mocks.status },
+  zaloAccountFriendSyncService: { sync: vi.fn() },
 }))
 vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
   zaloAccountCanonicalSendService: { send: mocks.send },
@@ -42,6 +47,10 @@ const { syncZaloAccountLabelsAction } = await import(
 const { updateZaloAccountGroupPolicyAction } = await import(
   "../src/features/zalo-accounts/actions/update-group-policy.action"
 )
+const { getZaloAccountStatusAction, getZaloAccountOperationsAction } =
+  await import(
+    "../src/features/zalo-accounts/actions/account-operations.action"
+  )
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.permission.mockRejectedValue(new Error("forbidden"))
@@ -64,4 +73,75 @@ it("independently rejects settings actions before any provider or policy write",
   expect(mocks.sync).not.toHaveBeenCalled()
   expect(mocks.policy).not.toHaveBeenCalled()
   expect(mocks.labels).not.toHaveBeenCalled()
+})
+
+it("denies status to a member without superAdmin even with a workspace account ID", async () => {
+  await expect(
+    (
+      getZaloAccountStatusAction as unknown as (
+        input: unknown,
+      ) => Promise<unknown>
+    )({ bindArgsParsedInputs: ["workspace", "account"] }),
+  ).rejects.toThrow("forbidden")
+  expect(mocks.status).not.toHaveBeenCalled()
+  expect(mocks.groups).not.toHaveBeenCalled()
+})
+
+const safeStatus = {
+  accountId: "account",
+  status: "connected",
+  reason: null,
+  groupMessagingEnabled: false,
+  gatewayAvailable: true,
+  capabilities: {
+    text: true,
+    image: true,
+    file: true,
+    typing: true,
+    reactions: true,
+    revoke: true,
+    delete: true,
+  },
+  groups: { complete: false, count: 0, completedAt: null, reason: null },
+  friends: {
+    complete: false,
+    count: 0,
+    completedAt: null,
+    reason: null,
+    nextCursor: null,
+  },
+  labels: {
+    complete: false,
+    version: 0,
+    paused: false,
+    completedAt: null,
+    reason: null,
+  },
+  runtime: null,
+}
+it("loads status without listing groups and preserves full operations for group consumers", async () => {
+  mocks.permission.mockResolvedValue(undefined)
+  mocks.status.mockResolvedValue(safeStatus)
+  mocks.groups.mockResolvedValue([])
+  const args = { bindArgsParsedInputs: ["workspace", "account"] }
+  const status = await (
+    getZaloAccountStatusAction as unknown as (arg: unknown) => Promise<unknown>
+  )(args)
+  expect(status).toEqual(safeStatus)
+  expect(mocks.status).toHaveBeenCalledWith({
+    workspaceId: "workspace",
+    accountId: "account",
+  })
+  expect(mocks.groups).not.toHaveBeenCalled()
+  const full = await (
+    getZaloAccountOperationsAction as unknown as (
+      arg: unknown,
+    ) => Promise<unknown>
+  )(args)
+  expect(full).toEqual({ status: safeStatus, groups: [] })
+  expect(mocks.groups).toHaveBeenCalledWith({
+    workspaceId: "workspace",
+    accountId: "account",
+  })
+  expect(mocks.permission).toHaveBeenCalledTimes(2)
 })

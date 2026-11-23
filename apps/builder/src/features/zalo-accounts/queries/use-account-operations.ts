@@ -8,6 +8,9 @@ export const zaloAccountOperationsKey = (
   accountId: string,
 ) => ["zalo-account-operations", workspaceId, accountId] as const
 
+export const zaloAccountStatusKey = (workspaceId: string, accountId: string) =>
+  ["zalo-account-status", workspaceId, accountId] as const
+
 export function useZaloAccountOperations(
   workspaceId: string,
   accountId: string,
@@ -25,6 +28,8 @@ export function useZaloAccountOperations(
       return result.data
     },
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    retry: 2,
   })
 }
 
@@ -34,6 +39,9 @@ export function useInvalidateZaloAccountOperations(
 ) {
   const client = useQueryClient()
   return async () => {
+    await client.invalidateQueries({
+      queryKey: zaloAccountStatusKey(workspaceId, accountId),
+    })
     await client.invalidateQueries({
       queryKey: zaloAccountOperationsKey(workspaceId, accountId),
     })

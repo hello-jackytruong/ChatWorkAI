@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   decryptObject: vi.fn(),
   enqueueIntegrationJob: vi.fn(),
   applyRuntime: vi.fn(),
+  applyDiagnostics: vi.fn(),
+  findSession: vi.fn(),
+  failSession: vi.fn(),
+  realtime: vi.fn(),
   markScanned: vi.fn(),
   publishQr: vi.fn(),
   withBlockedOwnerGuard: vi.fn(
@@ -16,11 +20,21 @@ const mocks = vi.hoisted(() => ({
   ),
 }))
 vi.mock("@chatbotx.io/business/zalo-account/runtime-state", () => ({
-  zaloAccountRuntimeStateService: { apply: mocks.applyRuntime },
+  zaloAccountRuntimeStateService: {
+    apply: mocks.applyRuntime,
+    applyDiagnostics: mocks.applyDiagnostics,
+  },
+}))
+vi.mock("@chatbotx.io/business/connect-session", () => ({
+  connectSessionService: {
+    findByIdForWorkspace: mocks.findSession,
+    fail: mocks.failSession,
+  },
 }))
 
 vi.mock("@chatbotx.io/business", () => ({
   withBlockedOwnerGuard: mocks.withBlockedOwnerGuard,
+  queueWorkspaceRealtimeEvent: mocks.realtime,
 }))
 vi.mock("@chatbotx.io/connections", () => ({
   connectionService: {
@@ -66,18 +80,120 @@ const secretBase = {
   fenceToken: "2",
   occurredAt: "2026-11-20T02:00:00.000Z",
   kind: "secret" as const,
-  aad: "aad-1",
+  aad: "zalo-account:workspace-1:session-1:command-1:1:2:event-1",
   ciphertext: {
     v: 1 as const,
     kid: "active",
     iv: "000000000000000000000000",
     text: "aa",
     tag: "00000000000000000000000000000000",
-    aad: "aad-1",
+    aad: "zalo-account:workspace-1:session-1:command-1:1:2:event-1",
   },
 }
 
 describe("handleZaloAccountEvents", () => {
+  it("keeps diagnostics separate from Connection transitions and publishes an accepted ID hint", async () => {
+    mocks.applyDiagnostics.mockResolvedValueOnce(true)
+    await handleZaloAccountEvents([
+      {
+        version: 1,
+        eventId: "diagnostic",
+        route: {
+          kind: "account",
+          workspaceId: "w",
+          accountId: "a",
+          inboxId: "i",
+        },
+        kind: "lifecycle",
+        fenceToken: "4",
+        epoch: 2,
+        socketAttempt: 3,
+        sequence: 5,
+        occurredAt: new Date().toISOString(),
+        payload: {
+          type: "runtime_diagnostic",
+          diagnostics: { phase: "backoff", reconnectCount: 1 },
+        },
+      },
+    ])
+    expect(mocks.applyDiagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: expect.objectContaining({ socketAttempt: 3, sequence: 5 }),
+      }),
+    )
+    expect(mocks.applyRuntime).not.toHaveBeenCalled()
+    expect(mocks.realtime).toHaveBeenCalledWith("w", {
+      eventType: "zaloAccountStatusChanged",
+      data: { accountId: "a" },
+    })
+  })
+  it("publishes only an account ID after an accepted durable state change", async () => {
+    const event = {
+      version: 1 as const,
+      eventId: "changed",
+      kind: "lifecycle" as const,
+      route: {
+        kind: "account" as const,
+        workspaceId: "w",
+        accountId: "a",
+        inboxId: "i",
+      },
+      fenceToken: "2",
+      epoch: 1,
+      socketAttempt: 1,
+      sequence: 3,
+      occurredAt: new Date().toISOString(),
+      payload: { type: "connected" as const, zaloUid: "private-uid" },
+    }
+    mocks.applyRuntime.mockResolvedValueOnce(true)
+    await handleZaloAccountEvents([event])
+    expect(mocks.realtime).toHaveBeenCalledWith("w", {
+      eventType: "zaloAccountStatusChanged",
+      data: { accountId: "a" },
+    })
+    expect(mocks.applyRuntime).toHaveBeenCalledBefore(mocks.realtime)
+    mocks.realtime.mockClear()
+    mocks.applyRuntime.mockResolvedValueOnce(false)
+    await handleZaloAccountEvents([event])
+    expect(mocks.realtime).not.toHaveBeenCalled()
+  })
+  it.each([
+    ["qr_declined", "provider_denied"],
+    ["qr_expired", "expired"],
+  ] as const)("terminalizes %s only for the scoped pending Zalo session", async (reason, errorCode) => {
+    mocks.findSession.mockResolvedValue({
+      id: "session-1",
+      provider: "zaloAccount",
+      status: "pending",
+    })
+    await handleZaloAccountEvents([
+      {
+        ...secretBase,
+        kind: "lifecycle",
+        payload: { type: "reauthorization_required", reason },
+      },
+    ])
+    expect(mocks.failSession).toHaveBeenCalledWith({
+      id: "session-1",
+      workspaceId: "workspace-1",
+      errorCode,
+      statuses: ["pending"],
+    })
+    mocks.failSession.mockClear()
+    mocks.findSession.mockResolvedValue({
+      id: "session-1",
+      provider: "zaloAccount",
+      status: "completed",
+    })
+    await handleZaloAccountEvents([
+      {
+        ...secretBase,
+        kind: "lifecycle",
+        payload: { type: "reauthorization_required", reason },
+      },
+    ])
+    expect(mocks.failSession).not.toHaveBeenCalled()
+  })
   it("maps account lifecycle through the fenced durable connection service", async () => {
     await handleZaloAccountEvents([
       {
@@ -157,7 +273,10 @@ describe("handleZaloAccountEvents", () => {
       }),
     )
   })
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.realtime.mockResolvedValue(undefined)
+  })
   it("routes group messages to a dedicated job with immutable policy epochs", async () => {
     await handleZaloAccountEvents([
       {
@@ -205,6 +324,24 @@ describe("handleZaloAccountEvents", () => {
     )
   })
 
+  it.each([
+    { route: { ...secretBase.route, workspaceId: "other-workspace" } },
+    { route: { ...secretBase.route, sessionId: "other-session" } },
+    { epoch: 2 },
+    { fenceToken: "3" },
+    { eventId: "other-event" },
+    { socketAttempt: 1, sequence: 1 },
+  ])("rejects altered secret envelope before decrypting: %j", async (change) => {
+    await expect(
+      handleZaloAccountEvents([
+        { ...secretBase, secretKind: "qr_generated", ...change },
+      ]),
+    ).rejects.toThrow("encrypted event scope mismatch")
+    expect(mocks.decryptObject).not.toHaveBeenCalled()
+    expect(mocks.publishQr).not.toHaveBeenCalled()
+    expect(mocks.completeTrusted).not.toHaveBeenCalled()
+  })
+
   it("decrypts QR only inside the worker and publishes the session action", async () => {
     mocks.decryptObject.mockResolvedValueOnce({
       imageDataUrl: "data:image/png;base64,QUJD",
@@ -218,7 +355,7 @@ describe("handleZaloAccountEvents", () => {
     expect(mocks.decryptObject).toHaveBeenCalledWith(
       secretBase.ciphertext,
       expect.anything(),
-      "aad-1",
+      secretBase.aad,
     )
     expect(mocks.publishQr).toHaveBeenCalledWith({
       sessionId: "session-1",
@@ -246,6 +383,11 @@ describe("handleZaloAccountEvents", () => {
       {
         ...secretBase,
         eventId: "event-2",
+        aad: "zalo-account:workspace-1:session-1:command-1:1:2:event-2",
+        ciphertext: {
+          ...secretBase.ciphertext,
+          aad: "zalo-account:workspace-1:session-1:command-1:1:2:event-2",
+        },
         secretKind: "authorization_obtained",
       },
     ])

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   executions: [] as ReturnType<typeof vi.fn>[],
   enabled: false,
   gatewayAvailable: true,
+  socketOpen: true,
 }))
 vi.mock("../src/features/zalo-accounts/queries/use-account-operations", () => ({
   useZaloAccountOperations: () => ({
@@ -21,6 +22,7 @@ vi.mock("../src/features/zalo-accounts/queries/use-account-operations", () => ({
         groupMessagingEnabled: mocks.enabled,
         status: "connected",
         gatewayAvailable: mocks.gatewayAvailable,
+        runtime: { socketOpen: mocks.socketOpen },
         friends: { count: 0, complete: false },
         groups: { count: 1, complete: true },
         labels: {
@@ -81,6 +83,7 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   vi.clearAllMocks()
   vi.stubGlobal("PointerEvent", MouseEvent)
+  mocks.socketOpen = true
   mocks.options = []
   mocks.executions = []
   mocks.enabled = false

@@ -236,13 +236,47 @@ it("reconnects an existing account and lets an expired QR session start again", 
   renderConnect({ workspaceId: "w", connectionId: "c" })
   await clickButton(messages.channels.tokenRefreshErrorDialog.cta)
   await waitUntil(() =>
-    expect(document.body.textContent).toContain(
-      messages.zaloAccount.connectFailed,
-    ),
+    expect(document.body.textContent).toContain(messages.zaloAccount.qrExpired),
   )
   await clickButton(messages.actions.retry)
   await waitUntil(() => expect(mocks.reconnect).toHaveBeenCalledTimes(2))
   expect(mocks.create).not.toHaveBeenCalled()
+})
+
+it("clears an old QR image while waiting for phone confirmation", async () => {
+  mocks.getSession.mockResolvedValue({
+    id: "s",
+    status: "pending",
+    step: "qr_scanned",
+    nextAction: { type: "show_qr", imageDataUrl: "data:image/png;base64,QUJD" },
+    targets: [],
+  })
+  renderConnect()
+  await clickButton(messages.actions.connect)
+  await waitUntil(() =>
+    expect(document.body.textContent).toContain(messages.zaloAccount.qrWaiting),
+  )
+  expect(document.querySelector('img[src^="data:image"]')).toBeNull()
+  expect(mocks.success).not.toHaveBeenCalled()
+})
+
+it("shows declined QR sessions distinctly and removes any remaining QR action", async () => {
+  mocks.getSession.mockResolvedValue({
+    id: "s",
+    status: "failed",
+    errorCode: "provider_denied",
+    nextAction: { type: "show_qr", imageDataUrl: "data:image/png;base64,QUJD" },
+    targets: [],
+  })
+  renderConnect()
+  await clickButton(messages.actions.connect)
+  await waitUntil(() =>
+    expect(document.body.textContent).toContain(
+      messages.zaloAccount.qrDeclined,
+    ),
+  )
+  expect(document.querySelector('img[src^="data:image"]')).toBeNull()
+  expect(mocks.success).not.toHaveBeenCalled()
 })
 it.each([
   false,

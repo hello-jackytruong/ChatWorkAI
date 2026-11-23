@@ -9,6 +9,7 @@ import {
   realtimeCallTransportOutboundStatusVoipSchema,
   whatsappCallClaimedElsewhereSchema,
   whatsappCallPermissionUpdatedSchema,
+  zaloAccountStatusChangedSchema,
 } from "@chatbotx.io/realtime-protocol"
 import type { z } from "zod"
 import type { RealtimeEvent, RealtimeEventName } from "./types"
@@ -38,6 +39,7 @@ export const REALTIME_EVENT_SCHEMAS: {
   [RealtimeEventType.contactInboxThreadControlUpdated]:
     contactInboxThreadControlUpdatedSchema,
   [RealtimeEventType.pipelineItemChanged]: pipelineItemChangedSchema,
+  [RealtimeEventType.zaloAccountStatusChanged]: zaloAccountStatusChangedSchema,
   [RealtimeEventType.messageTranslationUpdated]:
     messageTranslationUpdatedSchema,
 }

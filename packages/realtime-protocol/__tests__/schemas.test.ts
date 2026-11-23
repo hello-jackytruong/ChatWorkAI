@@ -24,6 +24,20 @@ const CONVERSATION_SCOPED_ROUTE_ERROR_REGEX =
 const TARGETED_ONLY_EVENT_ERROR_REGEX =
   /targeted-only and cannot be workspace-broadcast/
 
+test("accepts Zalo account ID invalidation for members and excludes guests", () => {
+  const frame = {
+    seq: "1-0",
+    batch: [
+      {
+        eventType: "zaloAccountStatusChanged",
+        data: { accountId: "account-1" },
+      },
+    ],
+  }
+  expect(realtimeMemberBatchEnvelopeSchema.safeParse(frame).success).toBe(true)
+  expect(realtimeGuestBatchEnvelopeSchema.safeParse(frame).success).toBe(false)
+})
+
 describe("realtime batch envelopes", () => {
   const route = { assignedTeamIds: [], assignedUserIds: ["user-1"] }
 
