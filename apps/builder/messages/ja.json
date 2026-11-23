@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "設定",
+    "connectionStatus": "接続状態",
+    "active": "稼働中",
+    "disconnected": "切断済み",
+    "paused": "一時停止中",
+    "connectSuccess": "Zaloアカウントの接続が完了しました。",
+    "connectFailed": "接続に失敗したか、有効期限が切れました。もう一度お試しください。",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",
@@ -4793,7 +4800,11 @@
   "coexist": {
     "title": "既存の連絡先とチャット履歴を同期しますか？",
     "descriptionWhatsapp": "有効にすると、このWhatsApp番号から連絡先と最大6か月分のチャット履歴がインポートされます。",
-    "descriptionMessenger": "有効にすると、このページから既存のMessenger連絡先と最大3か月分の会話履歴がインポートされます。",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "有効にすると、このページから既存のMessenger連絡先と最大365日分の会話履歴がインポートされます。",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "同期を有効化",
     "decline": "同期しない",

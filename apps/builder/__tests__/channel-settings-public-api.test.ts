@@ -142,7 +142,7 @@ describe.each([
     "messenger-channels",
     findIntegrationMessenger,
     updateMessenger,
-    { personas: [] },
+    { personas: [], coexistSkipNamelessContacts: true },
   ],
   ["instagram-channels", findIntegrationInstagram, updateInstagram, {}],
 ] as const)("/v1/%s/{id}/settings", (resource, find, update, extra) => {
@@ -173,6 +173,47 @@ describe.each([
     expect(update).toHaveBeenCalledWith(
       { workspaceId: "workspace-1", id: "ch-1" },
       { ...settings, ...extra },
+    )
+  })
+})
+
+describe("Messenger unnamed-contact history preference", () => {
+  test.each([
+    true,
+    false,
+  ])("GET returns the saved preference (%s) without leaking authorization", async (coexistSkipNamelessContacts) => {
+    findIntegrationMessenger.mockResolvedValueOnce({
+      ...settings,
+      personas: [],
+      coexistSkipNamelessContacts,
+      auth: { secret: "test-only" },
+    })
+    const result = await findProcedure(
+      "GET",
+      "/v1/messenger-channels/{id}/settings",
+    ).handler?.({ context, input: { id: "ch-1" } })
+    expect(result).toEqual({
+      ...settings,
+      personas: [],
+      coexistSkipNamelessContacts,
+    })
+    expect(findIntegrationMessenger).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      id: "ch-1",
+    })
+  })
+
+  test("PATCH forwards an explicit false preference to the shared writer", async () => {
+    await findProcedure(
+      "PATCH",
+      "/v1/messenger-channels/{id}/settings",
+    ).handler?.({
+      context,
+      input: { id: "ch-1", coexistSkipNamelessContacts: false },
+    })
+    expect(patchMessengerSettings).toHaveBeenCalledWith(
+      { workspaceId: "workspace-1", id: "ch-1" },
+      expect.objectContaining({ coexistSkipNamelessContacts: false }),
     )
   })
 })

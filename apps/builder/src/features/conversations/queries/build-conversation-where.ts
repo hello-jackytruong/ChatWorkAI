@@ -193,8 +193,15 @@ export function buildConversationWhere(
   // ── channel (via contactInboxes relation) ────────────────────────────────
   // "omnichannel" is a UI-only sentinel meaning "no channel restriction" —
   // it is never a real value stored on contactInboxes.channel.
+  const inboxWhere: QueryWhere = {}
   if (input.channel && input.channel !== channelTypes.enum.omnichannel) {
-    where.contactInboxes = { channel: input.channel }
+    inboxWhere.channel = input.channel
+  }
+  if (input.inboxIds?.length) {
+    inboxWhere.inboxId = { in: input.inboxIds }
+  }
+  if (hasWhereParts(inboxWhere)) {
+    where.contactInboxes = inboxWhere
   }
 
   // ── keyword (smart contact search, including sourceId) ───────────────────

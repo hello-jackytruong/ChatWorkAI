@@ -18,14 +18,22 @@ export const integrationMessengerCoexistAPIs = {
     .output(setCoexistResponseSchema)
     .use(workspaceAuthorizedMidddleware, (input) => input.workspaceId)
     .handler(async ({ input }) => {
-      const { workspaceId, integrationId, enabled, aiReadsSyncedHistory } =
-        input
+      const {
+        workspaceId,
+        integrationId,
+        enabled,
+        aiReadsSyncedHistory,
+        skipNamelessContacts,
+        resyncHistory,
+      } = input
       return await (enabled
         ? coexistService.enable({
             workspaceId,
             integrationId,
             channel: "messenger",
             aiReadsSyncedHistory,
+            skipNamelessContacts,
+            resyncHistory,
           })
         : coexistService.disable({
             workspaceId,

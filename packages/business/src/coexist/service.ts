@@ -32,6 +32,10 @@ export type CoexistEnableInput = {
    *  the AI reads the synced history. Written only on enable — `disable`
    *  never touches the column. */
   aiReadsSyncedHistory?: boolean
+  /** Messenger only; undefined preserves the saved Page preference. */
+  skipNamelessContacts?: boolean
+  /** Messenger only; revisit the full storage window when opening a new run. */
+  resyncHistory?: boolean
 }
 
 export type CoexistEnableResult =
@@ -142,7 +146,10 @@ class CoexistService extends BaseService {
       workspaceId: input.workspaceId,
       integrationId: input.integrationId,
       channel: input.channel,
-      triggerSource: input.triggerSource ?? "popup-enable",
+      triggerSource:
+        input.channel === "messenger" && input.resyncHistory
+          ? "manual-full-history"
+          : (input.triggerSource ?? "popup-enable"),
       tx,
     })
     return { success: true, runId: run.id }

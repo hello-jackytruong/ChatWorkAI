@@ -38,6 +38,7 @@ export type CoexistTriggerSource =
   | "buffer-chain"
   | "sweep-cron"
   | "manual"
+  | "manual-full-history"
   // Created by `scanCoexistRuns` for a coexist-enabled WhatsApp integration
   // that has unprocessed staging rows but no live run left to drain them.
   // `triggerSource` is a plain text column — no migration needed for this.
@@ -799,6 +800,7 @@ export class CoexistSyncRunRepository {
     integrationId: string
     enabled: boolean
     aiReadsSyncedHistory?: boolean
+    skipNamelessContacts?: boolean
     tx?: DatabaseClient
   }): Promise<CoexistIntegrationRow | null> {
     const { tx = db } = input
@@ -809,6 +811,7 @@ export class CoexistSyncRunRepository {
       integrationId: input.integrationId,
       enabled: input.enabled,
       aiReadsSyncedHistory: input.aiReadsSyncedHistory,
+      skipNamelessContacts: input.skipNamelessContacts,
     })
   }
 
@@ -927,7 +930,7 @@ export class CoexistSyncRunRepository {
     tx?: DatabaseClient
   }): Promise<Pick<
     CoexistSyncRunModel,
-    "attempts" | "currentError" | "messengerSyncPhase"
+    "attempts" | "currentError" | "messengerSyncPhase" | "triggerSource"
   > | null> {
     const { tx = db } = input
     return (
@@ -937,6 +940,7 @@ export class CoexistSyncRunRepository {
           attempts: true,
           currentError: true,
           messengerSyncPhase: true,
+          triggerSource: true,
         },
       })) ?? null
     )

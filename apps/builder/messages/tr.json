@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Yapılandır",
+    "connectionStatus": "Bağlantı durumu",
+    "active": "Etkin",
+    "disconnected": "Bağlantı kesildi",
+    "paused": "Duraklatıldı",
+    "connectSuccess": "Zalo hesabı başarıyla bağlandı.",
+    "connectFailed": "Bağlantı başarısız oldu veya süresi doldu. Lütfen tekrar deneyin.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",
@@ -4816,7 +4823,11 @@
   "coexist": {
     "title": "Mevcut kişiler ve sohbet geçmişi senkronize edilsin mi?",
     "descriptionWhatsapp": "Etkinleştirildiğinde, bu WhatsApp numarasından kişiler ve en fazla 6 aylık sohbet geçmişi içe aktarılacaktır.",
-    "descriptionMessenger": "Etkinleştirildiğinde, mevcut Messenger kişileri ve bu Sayfadan en fazla 3 aylık konuşma geçmişi içe aktarılacaktır.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "Etkinleştirildiğinde, mevcut Messenger kişileri ve bu Sayfadan en fazla 365 günlük konuşma geçmişi içe aktarılacaktır.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Senkronizasyonu etkinleştir",
     "decline": "Senkronize etme",

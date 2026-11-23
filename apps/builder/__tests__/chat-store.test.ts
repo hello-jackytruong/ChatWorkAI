@@ -590,7 +590,7 @@ describe("chat store conversation updates", () => {
     )
     store.setState({
       conversations: [existing] as never,
-      filters: { channel: "whatsapp" },
+      filters: { channel: "whatsapp", inboxIds: ["11"] },
     })
     mockConversationPage([fetched, duplicate])
 
@@ -609,6 +609,7 @@ describe("chat store conversation updates", () => {
         perPage: 20,
         cursor: "",
         channel: "whatsapp",
+        inboxIds: ["11"],
       }),
       expect.any(Object),
     )

@@ -85,6 +85,15 @@ existing Inbox/account row and requires the same verified UID. Disconnect,
 workspace pause/delete, and purge must receive a confirmed fenced stop before
 they mutate or remove authorization data; a timeout fails closed.
 
+The channel settings list shows each account's name and connection status.
+Open **Configure** for reconnect/disconnect, read-receipt settings, group policies,
+and sync details. Status refreshes every 30 seconds and distinguishes active
+(connection connected with a live gateway lease), interrupted, reconnect required,
+paused, and disconnected states. A failed status read is shown as unavailable.
+A confirmed disconnect updates the cached status immediately. Completing QR
+setup closes the QR dialog, shows a success notification, and refreshes account
+and Inbox data; failed or expired sessions offer a retry.
+
 Public lifecycle operations use the existing agent-first connection surfaces:
 `connections.create`, `connectSessions.get`, `connections.reconnect`, and
 `connections.disconnect`. Safe Zalo account metadata is available at:
@@ -102,6 +111,12 @@ Supported 1:1 inbound/outbound content is deliberately small:
 - reply/quote metadata;
 - image;
 - file.
+
+Inbox sends support text together with one image; both are passed to the
+provider in the same send command. The provider can send the text separately
+when quote metadata is present. Text with a file and multiple attachments per
+command remain unsupported. The dedicated direct/group send API endpoints
+continue to accept either text or one attachment.
 
 Inbound messages, own echoes, delivery/read status, and undo events enter the
 existing integration worker and canonical Inbox persistence/realtime pipeline.

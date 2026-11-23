@@ -113,6 +113,43 @@ describe("coexistService", () => {
     })
   })
 
+  test("full Messenger resync persists the skip preference and bypass marker atomically", async () => {
+    await coexistService.enable({
+      workspaceId: "workspace-1",
+      integrationId: "integration-1",
+      channel: "messenger",
+      skipNamelessContacts: false,
+      resyncHistory: true,
+    })
+    expect(mocks.setIntegrationCoexistEnabled).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skipNamelessContacts: false,
+        enabled: true,
+        tx,
+      }),
+    )
+    expect(mocks.createRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        triggerSource: "manual-full-history",
+        channel: "messenger",
+        tx,
+      }),
+    )
+  })
+
+  test("full resync reuses an active Messenger run without resetting progress", async () => {
+    mocks.findLiveRun.mockResolvedValue({ id: "active-run" })
+    await expect(
+      coexistService.enable({
+        workspaceId: "workspace-1",
+        integrationId: "integration-1",
+        channel: "messenger",
+        resyncHistory: true,
+      }),
+    ).resolves.toEqual({ success: true, runId: "active-run" })
+    expect(mocks.createRun).not.toHaveBeenCalled()
+  })
+
   test("enable locks the integration row before it looks at anything else", async () => {
     await coexistService.enable({
       workspaceId: "workspace-1",

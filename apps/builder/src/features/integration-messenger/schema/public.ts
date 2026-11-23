@@ -52,6 +52,11 @@ export type MessengerPersonaPublicInput = z.infer<
 >
 
 const settingsShape = {
+  coexistSkipNamelessContacts: z
+    .boolean()
+    .describe(
+      "Skip Facebook participants without a non-blank name during history sync. Default true. Does not delete existing contacts.",
+    ),
   welcomeFlowId: updateMessengerRequest.shape.welcomeFlowId.describe(
     "Flow sent when someone taps Get Started, or null for none. Get flow ids from `flows.list`.",
   ),
@@ -93,6 +98,8 @@ export const updateMessengerSettingsPublicRequest = z.object({
   id: messengerChannelIdSchema,
   ...settingsShape,
   personas: personasInput,
+  coexistSkipNamelessContacts:
+    settingsShape.coexistSkipNamelessContacts.optional(),
   markReadOnOutbound,
 })
 
@@ -103,5 +110,7 @@ export const patchMessengerSettingsPublicRequest = z.object({
   persistentMenus: settingsShape.persistentMenus.optional(),
   personas: personasInput.optional(),
   conversationStarters: settingsShape.conversationStarters.optional(),
+  coexistSkipNamelessContacts:
+    settingsShape.coexistSkipNamelessContacts.optional(),
   markReadOnOutbound,
 })

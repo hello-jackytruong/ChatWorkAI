@@ -223,6 +223,7 @@ See **`.agents/rules/git.md`** for the full canonical rules (commit format, bran
 - WhatsApp Business-app echoes (`smb_message_echoes`: messages, edits and revokes the business makes in the Business app reach the inbox live, echo types, identity rules, deploy order): `docs/whatsapp-business-app-echoes.md`
 - Inbound Webhooks (external systems POST JSON to a tokenised URL → find/create a contact on a chosen inbox, map payload values, run trigger actions; outbox/claim/lease processing, per-channel inbox identifiers, request log, public API): `docs/inbound-webhooks.md`
 - Working Hours (agent schedules, waiting-window state machine, response time and first response time within working hours, `agent:replied` analytics pipeline, public API): `docs/working-hours.md`
+- Messenger history sync (365-day window, skipping unnamed participants, Page settings and explicit full resync): `docs/messenger-history-sync.md`
 - Messenger welcome message flows (publish/rename/delete sync of a flow's starting step to Meta Click-to-Messenger welcome flows, ad-locked behavior, table/jobs/lock): `docs/messenger-welcome-message-flows.md`
 - Contact activity store (channel-agnostic activity tables, eleven activity-backed contact filters, since-tracking semantics, bounded counts, kill switches, ops runbook): `docs/contact-activity.md`
 - Templates (creating, sharing, what an install copies, folders and list order, warning audiences, View Analytics, updates, uninstall, public API, deploy notes): `docs/templates.md`

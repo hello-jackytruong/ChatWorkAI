@@ -36,6 +36,7 @@ import {
   useZaloAccountOperations,
 } from "../queries/use-account-operations"
 import type { ZaloAccountGroupResource } from "../schema/resource"
+import { ZaloAccountStatus } from "./zalo-account-status"
 
 const showActionError = (error: { serverError?: string }) => {
   if (error.serverError) {
@@ -203,12 +204,6 @@ export function ZaloAccountGroups({
   const query = useZaloAccountOperations(workspaceId, accountId)
   const invalidate = useInvalidateZaloAccountOperations(workspaceId, accountId)
   const status = query.data?.status
-  let connectionLabel = t("zaloAccount.degraded")
-  if (status?.status === "needs_reauth") {
-    connectionLabel = t("zaloAccount.reconnectRequired")
-  } else if (status?.status === "connected" && status.gatewayAvailable) {
-    connectionLabel = t("zaloAccount.connected")
-  }
   let labelStatus = status?.labels.complete
     ? t("zaloAccount.complete")
     : t("zaloAccount.partial")
@@ -248,9 +243,9 @@ export function ZaloAccountGroups({
 
   return (
     <section className="flex flex-col gap-2 rounded-md border p-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-medium">{accountName}</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             disabled={syncFriends.isPending}
             onClick={() =>
@@ -309,7 +304,11 @@ export function ZaloAccountGroups({
         {query.isError && <span>{t("zaloAccount.statusUnavailable")}</span>}
         {status && (
           <>
-            <span>{connectionLabel}</span>
+            <ZaloAccountStatus
+              gatewayAvailable={status.gatewayAvailable}
+              status={status.status}
+              unavailable={query.isError}
+            />
             <span>
               {t("zaloAccount.friends")}: {status.friends.count} ·{" "}
               {status.friends.complete

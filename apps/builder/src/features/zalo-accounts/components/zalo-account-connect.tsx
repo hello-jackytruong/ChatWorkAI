@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@chatbotx.io/ui/components/ui/dialog"
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Loader2Icon } from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -24,7 +24,11 @@ import { orpc } from "@/lib/orpc/query"
 import { startFirstZaloAccountConnectAction } from "../actions/start-first-connect.action"
 
 const POLL_INTERVAL_MS = 1500
-const POLLING_STATUSES = new Set(["pending", "authorized"])
+const POLLING_STATUSES = new Set([
+  "pending",
+  "authorized",
+  "awaiting_selection",
+])
 
 type ZaloAccountConnectProps = {
   autoOpen?: boolean
@@ -41,6 +45,7 @@ export function ZaloAccountConnect({
 }: ZaloAccountConnectProps) {
   const t = useTranslations()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const invalidateInboxes = useInvalidateInboxes()
   const [open, setOpen] = useState(autoOpen)
   const [resolvedWorkspaceId, setResolvedWorkspaceId] = useState(
@@ -49,6 +54,16 @@ export function ZaloAccountConnect({
   const [session, setSession] = useState<ConnectSessionResource | null>(null)
   const selectingSession = useRef<string | null>(null)
   const cancellingSession = useRef<string | null>(null)
+  const completedSession = useRef<string | null>(null)
+
+  const updateSession = async (nextSession: ConnectSessionResource) => {
+    const options = orpc.connectSessionsAPI.getConnectSessionAPI.queryOptions({
+      input: { workspaceId: resolvedWorkspaceId ?? "", id: nextSession.id },
+    })
+    await queryClient.cancelQueries({ queryKey: options.queryKey })
+    queryClient.setQueryData(options.queryKey, nextSession)
+    setSession(nextSession)
+  }
 
   const onError = (error?: string) => {
     if (error) {
@@ -70,7 +85,7 @@ export function ZaloAccountConnect({
   const connectTarget = useMutation(
     orpc.connectSessionsAPI.connectSessionTargetsAPI.mutationOptions({
       onSuccess: async (result) => {
-        setSession(result.session)
+        await updateSession(result.session)
         await invalidateInboxes()
       },
       onError: (error) => onError(error.message),
@@ -78,7 +93,7 @@ export function ZaloAccountConnect({
   )
   const cancelSession = useMutation(
     orpc.connectSessionsAPI.cancelConnectSessionAPI.mutationOptions({
-      onSuccess: (result) => setSession(result),
+      onSuccess: updateSession,
       onError: (error) => onError(error.message),
     }),
   )
@@ -102,9 +117,9 @@ export function ZaloAccountConnect({
         workspaceId: resolvedWorkspaceId ?? "",
         id: session?.id ?? "",
       },
-      enabled: Boolean(resolvedWorkspaceId && session?.id),
+      enabled: Boolean(open && resolvedWorkspaceId && session?.id),
       refetchInterval: (query) =>
-        POLLING_STATUSES.has(query.state.data?.status ?? "")
+        POLLING_STATUSES.has(query.state.data?.status ?? session?.status ?? "")
           ? POLL_INTERVAL_MS
           : false,
     }),
@@ -131,6 +146,7 @@ export function ZaloAccountConnect({
   useEffect(() => {
     if (
       !(
+        open &&
         resolvedWorkspaceId &&
         currentSession?.status === "awaiting_selection" &&
         selectingSession.current !== currentSession.id
@@ -148,17 +164,35 @@ export function ZaloAccountConnect({
       id: currentSession.id,
       targetIds: [target.id],
     })
-  }, [connectTarget, currentSession, resolvedWorkspaceId])
+  }, [connectTarget, currentSession, open, resolvedWorkspaceId])
 
   useEffect(() => {
-    if (!(resolvedWorkspaceId && currentSession?.status === "completed")) {
+    if (
+      !(resolvedWorkspaceId && currentSession?.status === "completed") ||
+      completedSession.current === currentSession.id
+    ) {
       return
     }
-    invalidateInboxes().then(() => {
+    completedSession.current = currentSession.id
+    setOpen(false)
+    toast.success(t("zaloAccount.connectSuccess"))
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["zalo-account-operations", resolvedWorkspaceId],
+      }),
+      invalidateInboxes(),
+    ]).then(() => {
       router.push(`/space/${resolvedWorkspaceId}/settings/channels/zaloAccount`)
       router.refresh()
     })
-  }, [currentSession?.status, invalidateInboxes, resolvedWorkspaceId, router])
+  }, [
+    currentSession,
+    invalidateInboxes,
+    queryClient,
+    resolvedWorkspaceId,
+    router,
+    t,
+  ])
 
   const start = () => {
     selectingSession.current = null
@@ -187,7 +221,17 @@ export function ZaloAccountConnect({
     ["failed", "expired", "cancelled"].includes(currentSession.status)
 
   return (
-    <Dialog onOpenChange={setOpen} open={open}>
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          setSession(null)
+          selectingSession.current = null
+          cancellingSession.current = null
+        }
+        setOpen(nextOpen)
+      }}
+      open={open}
+    >
       <DialogTrigger render={children} />
       <DialogContent>
         <DialogHeader>
@@ -219,6 +263,29 @@ export function ZaloAccountConnect({
               {t("actions.loading")}
             </p>
           )}
+          {sessionQuery.isError && !failed && (
+            <div className="flex flex-col items-center gap-2" role="alert">
+              <p>{t("zaloAccount.statusUnavailable")}</p>
+              <Button
+                onClick={() => sessionQuery.refetch()}
+                variant="secondary"
+              >
+                {t("actions.retry")}
+              </Button>
+            </div>
+          )}
+          {connectTarget.isError && !failed && (
+            <Button
+              onClick={() => {
+                selectingSession.current = null
+                connectTarget.reset()
+              }}
+              variant="secondary"
+            >
+              {t("actions.retry")}
+            </Button>
+          )}
+          {failed && <p role="alert">{t("zaloAccount.connectFailed")}</p>}
           {failed && (
             <Button onClick={start} type="button" variant="secondary">
               {t("actions.retry")}

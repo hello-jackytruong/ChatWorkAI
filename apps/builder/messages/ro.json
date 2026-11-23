@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Configurează",
+    "connectionStatus": "Starea conexiunii",
+    "active": "Activ",
+    "disconnected": "Deconectat",
+    "paused": "În pauză",
+    "connectSuccess": "Contul Zalo a fost conectat cu succes.",
+    "connectFailed": "Conexiunea a eșuat sau a expirat. Încearcă din nou.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",
@@ -4816,7 +4823,11 @@
   "coexist": {
     "title": "Sincronizezi contactele existente și istoricul conversațiilor?",
     "descriptionWhatsapp": "Când este activată, contactele și până la 6 luni din istoricul conversațiilor vor fi importate din acest număr WhatsApp.",
-    "descriptionMessenger": "Când este activată, contactele Messenger existente și până la 3 luni din istoricul conversațiilor vor fi importate din această pagină.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "Când este activată, contactele Messenger existente și până la 365 de zile din istoricul conversațiilor vor fi importate din această pagină.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Activează sincronizarea",
     "decline": "Nu sincroniza",

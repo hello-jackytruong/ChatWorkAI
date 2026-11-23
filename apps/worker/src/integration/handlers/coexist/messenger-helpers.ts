@@ -156,12 +156,12 @@ export const MAX_INLINE_RETRIES = 4
 /**
  * Only store messages whose `created_time` is within this window. Older
  * messages are still scanned for phone/email discovery but not persisted.
- * 90 days ≈ 3 months — matches the product spec.
+ * 365 days ≈ 1 year — matches the product spec.
  */
-export const STORE_WINDOW_MS = 90 * 24 * 60 * 60 * 1000
+export const STORE_WINDOW_MS = 365 * 24 * 60 * 60 * 1000
 
 /**
- * Maximum number of message pages to scan beyond the 3-month storage window
+ * Maximum number of message pages to scan beyond the 365-day storage window
  * purely for phone/email discovery. Prevents unbounded Graph API calls when
  * a conversation never contains extractable contact info.
  */
@@ -242,7 +242,7 @@ export type OnMessagePageFn = (
  *    were imported by a previous successful run; skipped from both storage
  *    and discovery. Setting `hitOlderBoundary=true` enables the discovery
  *    pagination budget.
- *  - `cutoff` (per-conv 3-month boundary): messages older than cutoff are
+ *  - `cutoff` (per-conv 365-day boundary): messages older than cutoff are
  *    skipped from storage but still scanned for phone/email discovery
  *    until `MAX_DISCOVERY_PAGES` is hit or both fields are found.
  *  - `totalMsg <= 100`: keep at least the 100 most recent regardless of

@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Cấu hình",
+    "connectionStatus": "Trạng thái kết nối",
+    "active": "Đang hoạt động",
+    "disconnected": "Đã ngắt kết nối",
+    "paused": "Tạm dừng",
+    "connectSuccess": "Kết nối tài khoản Zalo thành công.",
+    "connectFailed": "Kết nối thất bại hoặc đã hết hạn. Vui lòng thử lại.",
     "receive": "Nhận tin",
     "send": "Gửi tin",
     "automation": "Tự động hóa",
@@ -4858,7 +4865,11 @@
   "coexist": {
     "title": "Đồng bộ liên hệ và lịch sử chat hiện có?",
     "descriptionWhatsapp": "Khi bật, hệ thống sẽ nhập liên hệ và tối đa 6 tháng lịch sử chat từ số WhatsApp này.",
-    "descriptionMessenger": "Khi bật, hệ thống sẽ nhập liên hệ Messenger hiện có và tối đa 3 tháng lịch sử hội thoại từ Page này.",
+    "skipNamelessContactsLabel": "Bỏ qua tài khoản không có tên",
+    "skipNamelessContactsHelper": "Bỏ qua tài khoản Facebook thiếu tên hoặc tên chỉ có khoảng trắng khi đồng bộ lịch sử. Giữ nguyên liên hệ đã có. Lưu cài đặt hoặc bắt đầu đồng bộ để áp dụng.",
+    "resyncHistoryLabel": "Đồng bộ lại lịch sử",
+    "resyncHistoryHelper": "Quét lại toàn bộ khoảng 365 ngày để nhập thêm tin nhắn cũ. Không lưu trùng tin nhắn đã có. Nếu đang đồng bộ, lượt hiện tại sẽ tiếp tục mà không bắt đầu lại.",
+    "descriptionMessenger": "Khi bật, hệ thống sẽ nhập liên hệ Messenger hiện có và tối đa 365 ngày lịch sử hội thoại từ Page này.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Bật đồng bộ",
     "decline": "Không đồng bộ",

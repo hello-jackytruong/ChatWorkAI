@@ -436,7 +436,15 @@ an endpoint's scope.
   and — enterprise only — teams, so an integration can build a full helpdesk
   client without a human session. Conversation and message mutations take a
   single resource id (`/v1/conversations/{id}/...`), not the private API's
-  bulk-by-ids shape — and every one omits an actor (`assignedBy`/`userId`):
+  bulk-by-ids shape. `conversations.list` accepts `inboxIds` as a JSON array
+  of ids from `inboxes.list` (empty or omitted means all inboxes). With `channel`,
+  both restrictions match the same contact inbox. Inbox filtering uses the
+  contact's linked inboxes because conversations are shared per contact.
+  The Inbox filter panel also exposes the same AND/OR contact conditions as
+  Contacts, including assigned contact tags, custom fields, and dates. Its
+  Status selector contains system statuses (unread, followed, archived, etc.);
+  assigned contact tags use the `tags` condition in `contactFilter`.
+  Every mutation omits an actor (`assignedBy`/`userId`):
   a workspace token authenticates the workspace, not a user, and the
   underlying service methods already treat that field as optional. Also on
   this scope: `POST /v1/contacts/{identifier}/messages`, `GET .../messages`,

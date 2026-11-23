@@ -117,6 +117,35 @@ describe("buildConversationWhere channel filter", () => {
     expect(where.contactInboxes).toEqual({ channel: "messenger" })
   })
 
+  test("restricts to selected inboxes without changing workspace scope", () => {
+    const where = buildConversationWhere(
+      "1",
+      { ...baseInput, inboxIds: ["11", "12"] },
+      null,
+    )
+    expect(where.workspaceId).toBe("1")
+    expect(where.contactInboxes).toEqual({ inboxId: { in: ["11", "12"] } })
+  })
+
+  test("requires channel and inbox to match the same contact inbox", () => {
+    const where = buildConversationWhere(
+      "1",
+      { ...baseInput, channel: "messenger", inboxIds: ["11"] },
+      null,
+    )
+    expect(where.contactInboxes).toEqual({
+      channel: "messenger",
+      inboxId: { in: ["11"] },
+    })
+  })
+
+  test("an empty inbox selection leaves all inboxes available", () => {
+    expect(
+      buildConversationWhere("1", { ...baseInput, inboxIds: [] }, null)
+        .contactInboxes,
+    ).toBeUndefined()
+  })
+
   test("composes keyword and contact filter OR branches without overwriting either", () => {
     vi.mocked(applyContactFilter).mockReturnValueOnce({
       OR: [{ email: { ilike: "%ada%" } }],

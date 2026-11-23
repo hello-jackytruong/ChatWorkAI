@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Määritä",
+    "connectionStatus": "Yhteyden tila",
+    "active": "Aktiivinen",
+    "disconnected": "Yhteys katkaistu",
+    "paused": "Keskeytetty",
+    "connectSuccess": "Zalo-tili yhdistetty onnistuneesti.",
+    "connectFailed": "Yhteys epäonnistui tai vanheni. Yritä uudelleen.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",
@@ -4816,7 +4823,11 @@
   "coexist": {
     "title": "Synkronoidaanko nykyiset yhteystiedot ja keskusteluhistoria?",
     "descriptionWhatsapp": "Kun toiminto on käytössä, yhteystiedot ja enintään kuuden kuukauden keskusteluhistoria tuodaan tästä WhatsApp-numerosta.",
-    "descriptionMessenger": "Kun toiminto on käytössä, nykyiset Messenger-yhteystiedot ja enintään kolmen kuukauden keskusteluhistoria tuodaan tältä sivulta.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "Kun toiminto on käytössä, nykyiset Messenger-yhteystiedot ja enintään 365 päivän keskusteluhistoria tuodaan tältä sivulta.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Ota synkronointi käyttöön",
     "decline": "Älä synkronoi",

@@ -1,0 +1,1 @@
+ALTER TABLE "IntegrationMessenger" ADD COLUMN "coexistSkipNamelessContacts" boolean DEFAULT true NOT NULL;

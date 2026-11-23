@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Configurer",
+    "connectionStatus": "État de la connexion",
+    "active": "Actif",
+    "disconnected": "Déconnecté",
+    "paused": "En pause",
+    "connectSuccess": "Compte Zalo connecté avec succès.",
+    "connectFailed": "La connexion a échoué ou a expiré. Veuillez réessayer.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",
@@ -4816,7 +4823,11 @@
   "coexist": {
     "title": "Synchroniser les contacts existants et l’historique des discussions ?",
     "descriptionWhatsapp": "Si cette option est activée, les contacts et jusqu’à 6 mois d’historique seront importés depuis ce numéro WhatsApp.",
-    "descriptionMessenger": "Si cette option est activée, les contacts Messenger existants et jusqu’à 3 mois d’historique seront importés depuis cette Page.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "Si cette option est activée, les contacts Messenger existants et jusqu’à 365 jours d’historique seront importés depuis cette Page.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Activer la synchronisation",
     "decline": "Ne pas synchroniser",
