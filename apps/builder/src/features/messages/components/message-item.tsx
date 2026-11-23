@@ -103,11 +103,9 @@ import {
   canResendZaloMessage,
   getZaloMessageEvidence,
   ZaloMessageEvidence,
-  type ZaloMessageInspect,
 } from "./zalo-message-evidence"
 
 type MessageItemProps = {
-  zaloInspect?: ZaloMessageInspect
   zaloGroup?: boolean
   zaloState?: ZaloGroupMessageState
   message: MessageResourceWithRelations
@@ -412,7 +410,6 @@ export const MessageItem = (props: MessageItemProps) => {
         {!isDeleted && zaloEvidence && (
           <ZaloMessageEvidence
             attributes={message.contentAttributes}
-            inspect={guestDisplay ? undefined : props.zaloInspect}
             message={
               guestDisplay || message.messageType !== "outgoing"
                 ? undefined
@@ -612,15 +609,57 @@ const CommentText = (props: {
   return text
 }
 
+const ZALO_IMAGE_FILE_NAME = /\.(?:jpe?g|png|gif|webp|avif|bmp)$/i
+
 const RenderAttachments = (props: {
   message: MessageResourceWithRelations
 }) => {
   const { message } = props
   const attachments = message.attachments ?? []
+  const attributes = message.contentAttributes
+  const zalo = (
+    attributes && typeof attributes === "object" && !Array.isArray(attributes)
+      ? attributes.zaloAccount
+      : undefined
+  ) as
+    | {
+        mediaResources?: Array<{
+          attachmentId?: string
+          role?: string
+          state?: string
+        }>
+      }
+    | undefined
+  const isZalo = Boolean(
+    zalo && typeof zalo === "object" && !Array.isArray(zalo),
+  )
+  const previewUrl = (attachment: AttachmentResource) => {
+    if (
+      !(
+        Array.isArray(zalo?.mediaResources) &&
+        zalo.mediaResources.some(
+          (resource) =>
+            resource.attachmentId === attachment.id &&
+            ["thumbnail", "poster"].includes(resource.role ?? "") &&
+            resource.state === "stored",
+        )
+      )
+    ) {
+      return
+    }
+    try {
+      const url = new URL(attachment.thumbnailPath ?? "")
+      return url.protocol === "https:" && !url.username && !url.password
+        ? url.href
+        : undefined
+    } catch {
+      return
+    }
+  }
   // Multiple images in one message render as a grid (album-style, matching
   // how channels like Messenger/Instagram/Telegram deliver them); a single
-  // image keeps its own aspect-ratio-preserving layout. Non-image attachments
-  // (video/audio/file) are unaffected and keep stacking below.
+  // image keeps its own aspect-ratio-preserving layout. The remaining
+  // attachments keep stacking below.
   const imageAttachments = attachments.filter(
     (attachment) => attachment.fileType === "image",
   )
@@ -641,26 +680,51 @@ const RenderAttachments = (props: {
           data-slot="attachment-image-grid"
         >
           {imageAttachments.map((attachment) => (
-            <RenderImageGridItem attachment={attachment} key={attachment.id} />
+            <RenderImageGridItem
+              attachment={attachment}
+              isZalo={isZalo}
+              key={attachment.id}
+              previewUrl={previewUrl(attachment)}
+            />
           ))}
         </div>
       ) : (
         imageAttachments.map((attachment) => (
-          <RenderAttachmentItem attachment={attachment} key={attachment.id} />
+          <RenderAttachmentItem
+            attachment={attachment}
+            isZalo={isZalo}
+            key={attachment.id}
+            previewUrl={previewUrl(attachment)}
+          />
         ))
       )}
       {otherAttachments.map((attachment) => (
-        <RenderAttachmentItem attachment={attachment} key={attachment.id} />
+        <RenderAttachmentItem
+          attachment={attachment}
+          isZalo={isZalo}
+          key={attachment.id}
+          previewUrl={previewUrl(attachment)}
+        />
       ))}
     </div>
   )
 }
 
-const RenderImageGridItem = (props: { attachment: AttachmentResource }) => {
-  const { attachment } = props
-  const { url: attachmentUrl, onError } = useAttachmentSource(attachment)
+const RenderImageGridItem = (props: {
+  attachment: AttachmentResource
+  isZalo?: boolean
+  previewUrl?: string
+}) => {
+  const { attachment, isZalo, previewUrl } = props
+  const t = useTranslations("messages")
+  const imageLabel = useTranslations("fields.image")
+  const { url, onError } = useAttachmentSource(attachment)
+  const [failedPreview, setFailedPreview] = useState<string>()
+  const attachmentUrl =
+    url ?? (previewUrl === failedPreview ? undefined : previewUrl)
   const attachmentLabel =
-    attachment.name || attachment.originPath || "Attachment"
+    attachment.name ||
+    (isZalo ? imageLabel("label") : attachment.originPath || "Attachment")
 
   if (!attachmentUrl) {
     // A chat bubble sizes to its own content, so with nothing else to size
@@ -668,7 +732,14 @@ const RenderImageGridItem = (props: { attachment: AttachmentResource }) => {
     // alone has no width to derive a height from here and collapses to 0×0.
     return (
       <div className="flex size-24 items-center justify-center overflow-hidden rounded-lg bg-secondary">
-        <PaperclipIcon className="size-5 text-muted-foreground" />
+        {isZalo ? (
+          <>
+            <ImageIcon className="size-5 text-muted-foreground" />
+            <span className="sr-only">{t("failedToPreviewImage")}</span>
+          </>
+        ) : (
+          <PaperclipIcon className="size-5 text-muted-foreground" />
+        )}
       </div>
     )
   }
@@ -680,7 +751,13 @@ const RenderImageGridItem = (props: { attachment: AttachmentResource }) => {
           alt={attachmentLabel}
           className="h-full w-full object-cover"
           height={120}
-          onError={onError}
+          onError={() => {
+            if (url) {
+              onError()
+            } else {
+              setFailedPreview(previewUrl)
+            }
+          }}
           src={attachmentUrl}
           unoptimized
           width={120}
@@ -736,9 +813,15 @@ const RenderImageAttachment = (props: {
   )
 }
 
-const RenderAttachmentItem = (props: { attachment: AttachmentResource }) => {
-  const { attachment } = props
+const RenderAttachmentItem = (props: {
+  attachment: AttachmentResource
+  isZalo?: boolean
+  previewUrl?: string
+}) => {
+  const { attachment, isZalo, previewUrl } = props
+  const [failedPreview, setFailedPreview] = useState<string>()
   const t = useTranslations("messages")
+  const imageLabel = useTranslations("fields.image")
   const {
     url: attachmentUrl,
     onError,
@@ -748,6 +831,57 @@ const RenderAttachmentItem = (props: { attachment: AttachmentResource }) => {
   } = useAttachmentSource(attachment)
   const attachmentLabel =
     attachment.name || attachment.originPath || "Attachment"
+  const mime = attachment.mimeType?.split(";", 1)[0]?.trim().toLowerCase() ?? ""
+  const imageFile =
+    isZalo &&
+    attachment.fileType === "file" &&
+    (mime.startsWith("image/") ||
+      (Boolean(attachment.url) &&
+        (!mime || mime === "application/octet-stream") &&
+        !!attachment.name &&
+        attachment.name.length <= 255 &&
+        ZALO_IMAGE_FILE_NAME.test(attachment.name)))
+  const imageUrl = attachmentUrl ?? previewUrl
+  const showImage = imageUrl && imageUrl !== failedPreview
+  const imageError = () => {
+    setFailedPreview(imageUrl)
+    if (attachmentUrl) {
+      onError()
+    }
+  }
+
+  if (isZalo && (attachment.fileType === "image" || imageFile)) {
+    if (showImage) {
+      return (
+        <div className="flex flex-col gap-1">
+          <RenderImageAttachment
+            attachment={attachment}
+            attachmentLabel={attachment.name || imageLabel("label")}
+            attachmentUrl={imageUrl}
+            onError={imageError}
+          />
+          {imageFile && attachmentUrl ? (
+            <Link
+              className="truncate text-sm underline"
+              href={attachmentUrl}
+              prefetch={false}
+              target="_blank"
+            >
+              {attachment.name || imageLabel("label")}
+            </Link>
+          ) : null}
+        </div>
+      )
+    }
+    if (!attachmentUrl || attachment.fileType === "image") {
+      return (
+        <div className="flex items-center gap-2 rounded-xl bg-secondary p-3 text-muted-foreground text-sm">
+          <ImageIcon className="size-5 flex-none" />
+          <span>{t("failedToPreviewImage")}</span>
+        </div>
+      )
+    }
+  }
 
   if (!attachmentUrl) {
     return (

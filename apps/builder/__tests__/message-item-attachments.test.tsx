@@ -707,3 +707,154 @@ test("retained quote shows a safe recall marker without hiding the reply body", 
 vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
   inspectZaloAccountMessageAction: vi.fn(),
 }))
+
+describe("Zalo image attachment presentation", () => {
+  const zalo = (attachment: AttachmentResource) =>
+    makeMessage({
+      contentAttributes: { zaloAccount: { accountId: "a" } },
+      attachments: [attachment],
+    })
+
+  test("previews image MIME files inline while retaining the download link", () => {
+    const attachment = {
+      ...makeFileAttachment("photo"),
+      mimeType: "image/jpeg",
+    }
+    const el = renderComponent(<MessageItem message={zalo(attachment)} />)
+    expect(el.querySelector("img")?.getAttribute("src")).toBe(attachment.url)
+    expect(el.querySelector(`a[href="${attachment.url}"]`)).not.toBeNull()
+  })
+
+  test("updates a pending Zalo file to its image preview when media metadata arrives without remounting", () => {
+    const pending = {
+      ...makeFileAttachment("live-photo"),
+      name: null,
+      mimeType: "application/octet-stream",
+      url: null,
+    } as AttachmentResource
+    const el = renderComponent(<MessageItem message={zalo(pending)} />)
+    expect(el.querySelector("img")).toBeNull()
+    const ready = {
+      ...pending,
+      mimeType: "image/jpeg",
+      url: "https://signed.test/live-photo.jpg",
+    }
+    act(() =>
+      root?.render(
+        <TenantProvider settings={tenantSettings}>
+          <MessageItem message={zalo(ready)} />
+        </TenantProvider>,
+      ),
+    )
+    expect(el.querySelector("img")?.getAttribute("src")).toBe(ready.url)
+  })
+
+  test("keeps image MIME files with terminal null URLs private and image-specific", () => {
+    const attachment = {
+      ...makeFileAttachment("private-photo"),
+      mimeType: "image/jpeg",
+      url: null,
+      originPath: "https://provider.test/private.jpg",
+    } as AttachmentResource
+    const el = renderComponent(<MessageItem message={zalo(attachment)} />)
+    expect(el.querySelector("img, a")).toBeNull()
+    expect(el.textContent).toContain("failedToPreviewImage")
+    expect(el.textContent).not.toContain("Attachment")
+  })
+
+  test("keeps ordinary files and non-Zalo image files as file cards", () => {
+    const file = {
+      ...makeFileAttachment("document"),
+      mimeType: "application/pdf",
+    }
+    const el = renderComponent(<MessageItem message={zalo(file)} />)
+    expect(el.querySelector("img")).toBeNull()
+    act(() =>
+      root?.render(
+        <TenantProvider settings={tenantSettings}>
+          <MessageItem
+            message={makeMessage({
+              attachments: [{ ...file, mimeType: "image/jpeg" }],
+            })}
+          />
+        </TenantProvider>,
+      ),
+    )
+    expect(el.querySelector("img")).toBeNull()
+  })
+
+  test("falls back to the file link when a generic MIME filename preview fails", () => {
+    const attachment = {
+      ...makeFileAttachment("hint"),
+      name: "photo.JPG",
+      mimeType: "application/octet-stream",
+    }
+    const el = renderComponent(<MessageItem message={zalo(attachment)} />)
+    const image = el.querySelector("img")
+    expect(image).not.toBeNull()
+    act(() => image?.dispatchEvent(new Event("error")))
+    expect(el.querySelector("img")).toBeNull()
+    expect(el.querySelector(`a[href="${attachment.url}"]`)).not.toBeNull()
+  })
+
+  test("shows an honest unavailable image without reconstructing a private origin", () => {
+    const attachment = {
+      ...makeImageAttachment("private"),
+      url: null,
+      originPath: "workspace/private/secret.jpg",
+      name: null,
+    } as unknown as AttachmentResource
+    const el = renderComponent(<MessageItem message={zalo(attachment)} />)
+    expect(el.textContent).toContain("failedToPreviewImage")
+    expect(el.textContent).not.toContain("Attachment")
+    expect(el.querySelector("img, a")).toBeNull()
+  })
+
+  test("previews only a server HTTPS thumbnail when the original URL is unavailable", () => {
+    const attachment = {
+      ...makeImageAttachment("preview"),
+      url: null,
+      thumbnailPath: "https://signed.test/preview?token=signed",
+    } as unknown as AttachmentResource
+    const message = zalo(attachment)
+    message.contentAttributes = {
+      zaloAccount: {
+        mediaResources: [
+          { attachmentId: attachment.id, role: "thumbnail", state: "stored" },
+        ],
+      },
+    }
+    const el = renderComponent(<MessageItem message={message} />)
+    expect(el.querySelector("img")?.getAttribute("src")).toBe(
+      attachment.thumbnailPath,
+    )
+  })
+
+  test("never turns private thumbnail keys into preview URLs", () => {
+    const attachment = {
+      ...makeImageAttachment("private-preview"),
+      url: null,
+      thumbnailPath: "workspace/private/preview.jpg",
+    } as unknown as AttachmentResource
+    const el = renderComponent(<MessageItem message={zalo(attachment)} />)
+    expect(el.querySelector("img, a")).toBeNull()
+  })
+})
+
+test("does not treat an unprojected provider HTTPS thumbnail as authorized", () => {
+  const el = renderComponent(
+    <MessageItem
+      message={makeMessage({
+        contentAttributes: { zaloAccount: { accountId: "a" } },
+        attachments: [
+          {
+            ...makeImageAttachment("raw-thumb"),
+            url: null,
+            thumbnailPath: "https://provider.test/private.jpg",
+          } as unknown as AttachmentResource,
+        ],
+      })}
+    />,
+  )
+  expect(el.querySelector("img, a")).toBeNull()
+})

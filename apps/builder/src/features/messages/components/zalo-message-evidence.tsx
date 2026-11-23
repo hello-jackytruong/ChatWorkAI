@@ -1,11 +1,7 @@
 "use client"
 
 import { getZaloAccountMessageEvidence } from "@chatbotx.io/sdk"
-import { Button } from "@chatbotx.io/ui/components/ui/button"
 import { useTranslations } from "next-intl"
-import { useRef, useState } from "react"
-import type { z } from "zod"
-import { inspectZaloAccountMessageAction } from "@/features/zalo-accounts/actions/account-operations.action"
 import { zaloSendAttemptResource } from "@/features/zalo-accounts/schema/send-attempt"
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -45,7 +41,6 @@ export type ZaloMessageInspect = { accountId: string; canInspect: boolean }
 export function ZaloMessageEvidence({
   attributes,
   message,
-  inspect,
 }: {
   attributes: unknown
   message?: {
@@ -54,21 +49,10 @@ export function ZaloMessageEvidence({
     createdAt: Date
     sendError?: string | null
   }
-  inspect?: ZaloMessageInspect
 }) {
   const t = useTranslations("zaloAccount.evidence")
   const evidence = getZaloMessageEvidence(attributes)
-  const [outcome, setOutcome] = useState<z.infer<typeof stateSchema> | null>(
-    null,
-  )
-  const [pending, setPending] = useState(false)
-  const [unavailable, setUnavailable] = useState(false)
-  const inFlight = useRef(false)
-  const inspectedAttributes = useRef(attributes)
-  const attempt =
-    inspectedAttributes.current === attributes
-      ? (outcome ?? evidence?.attempt)
-      : evidence?.attempt
+  const attempt = evidence?.attempt
   if (!(evidence || attempt)) {
     return null
   }
@@ -97,33 +81,6 @@ export function ZaloMessageEvidence({
   } else if (attempt?.status === "applied" && state === "pending") {
     label = "appliedPending"
   }
-  const read = async () => {
-    if (!(message && inspect?.canInspect) || inFlight.current) {
-      return
-    }
-    inFlight.current = true
-    setPending(true)
-    setUnavailable(false)
-    try {
-      const result = await inspectZaloAccountMessageAction(
-        message.workspaceId,
-        inspect.accountId,
-        { messageId: message.id, messageCreatedAt: message.createdAt },
-      )
-      const parsed = stateSchema.safeParse(result?.data)
-      if (parsed.success) {
-        inspectedAttributes.current = attributes
-        setOutcome(parsed.data)
-      } else {
-        setUnavailable(true)
-      }
-    } catch {
-      setUnavailable(true)
-    } finally {
-      inFlight.current = false
-      setPending(false)
-    }
-  }
   return (
     <div className="flex flex-col gap-1 text-muted-foreground text-xs">
       {evidence?.unsupported && (
@@ -131,19 +88,6 @@ export function ZaloMessageEvidence({
       )}
       {label && <span role="status">{t(label)}</span>}
       {attempt?.errorInfo && <span>{t("safeFailure")}</span>}
-      {unavailable && <span role="status">{t("unavailable")}</span>}
-      {message && inspect?.canInspect && (
-        <Button
-          className="self-start"
-          disabled={pending}
-          onClick={read}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          {t("inspect")}
-        </Button>
-      )}
     </div>
   )
 }
