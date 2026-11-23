@@ -448,13 +448,13 @@ export const MessageItem = (props: MessageItemProps) => {
             {tZalo("deletedOnMyZalo")}
           </p>
         )}
-        {!guestDisplay && props.renderZaloActions?.(message)}
         {outgoingTranslationStatus && (
           <OutgoingTranslationStatus status={outgoingTranslationStatus} />
         )}
       </div>
 
       <div className="flex">
+        {!guestDisplay && props.renderZaloActions?.(message)}
         {!(outgoingTranslationStatus || zaloEvidence) &&
           message.sendError &&
           (message.messageType === "outgoing" ||

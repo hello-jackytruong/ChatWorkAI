@@ -7,7 +7,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@chatbotx.io/ui/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@chatbotx.io/ui/components/ui/dropdown-menu"
+import { cn } from "@chatbotx.io/ui/lib/utils"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { EllipsisVerticalIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { useState } from "react"
 import {
@@ -169,65 +177,78 @@ function Actions({
   }
   return (
     <>
-      <Button
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-        size="sm"
-        variant="ghost"
-      >
-        {t(deleteChatOnly ? "deleteChatOnZalo" : "messageActions")}
-      </Button>
-      {expanded && (
-        <div className="flex flex-wrap gap-1">
-          {deleteChatOnly ? (
-            <Button
-              disabled={!caps.data?.enabled}
-              onClick={() => select("deleteChatOnZalo")}
-              size="sm"
-              variant="outline"
-            >
-              {t("deleteChatOnZalo")}
-            </Button>
-          ) : (
-            <>
-              <Button
-                onClick={() => setReview(true)}
-                size="sm"
-                variant="outline"
-              >
-                {t("viewSavedContent")}
-              </Button>
-              <Button
-                onClick={() => select("hide")}
-                size="sm"
-                variant="outline"
-              >
-                {t("hideLocally")}
-              </Button>
-              <Button
-                disabled={!caps.data?.canRecall}
-                onClick={() => select("recall")}
-                size="sm"
-                variant="outline"
-              >
-                {t("recallOnZalo")}
-              </Button>
+      {deleteChatOnly ? (
+        <>
+          <Button
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+            size="sm"
+            variant="ghost"
+          >
+            {t("deleteChatOnZalo")}
+          </Button>
+          {expanded && (
+            <div className="flex flex-wrap gap-1">
               <Button
                 disabled={!caps.data?.enabled}
-                onClick={() => select("deleteOnZalo")}
+                onClick={() => select("deleteChatOnZalo")}
                 size="sm"
                 variant="outline"
               >
-                {t("deleteOnMyZalo")}
+                {t("deleteChatOnZalo")}
               </Button>
-            </>
+              {!caps.data?.enabled && (
+                <p className="text-muted-foreground text-xs">
+                  {t("nativeOperationsDisabled")}
+                </p>
+              )}
+            </div>
           )}
-          {!caps.data?.enabled && (
-            <p className="text-muted-foreground text-xs">
-              {t("nativeOperationsDisabled")}
-            </p>
-          )}
-        </div>
+        </>
+      ) : (
+        <DropdownMenu onOpenChange={setExpanded} open={expanded}>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                aria-label={t("messageActions")}
+                className={cn(
+                  "size-7 self-center opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+                  expanded && "opacity-100",
+                )}
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <EllipsisVerticalIcon aria-hidden className="size-4" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="start" className="w-60">
+            <DropdownMenuItem onClick={() => setReview(true)}>
+              {t("viewSavedContent")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => select("hide")}>
+              {t("hideLocally")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!caps.data?.canRecall}
+              onClick={() => select("recall")}
+            >
+              {t("recallOnZalo")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!caps.data?.enabled}
+              onClick={() => select("deleteOnZalo")}
+            >
+              {t("deleteOnMyZalo")}
+            </DropdownMenuItem>
+            {!caps.data?.enabled && (
+              <p className="px-2 py-1.5 text-muted-foreground text-xs">
+                {t("nativeOperationsDisabled")}
+              </p>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
       <ZaloAccountSavedContentDialog
         onOpenChange={setReview}
