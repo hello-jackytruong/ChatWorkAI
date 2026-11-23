@@ -1,0 +1,2 @@
+ALTER TABLE "ZaloAccountSendAttempt" ADD COLUMN "reconciliation" jsonb;--> statement-breakpoint
+CREATE INDEX "ZaloAccountSendAttempt_reconciliation_idx" ON "ZaloAccountSendAttempt" (("reconciliation"->>'nextAttemptAt'),"id") WHERE "status" = 'applied' AND "reconciliation"->>'state' = 'pending';

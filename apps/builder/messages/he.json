@@ -112,7 +112,21 @@
     "deleteChatConfirm": "למחוק את היסטוריית Zalo עד ההודעה שנבחרה? היסטוריית ה-CRM השמורה נשארת זמינה למעקב.",
     "deleteChatNoBoundary": "אין הודעת גבול זמינה למחיקת היסטוריית Zalo.",
     "deletedOnMyZalo": "נמחק ב-Zalo שלי",
-    "deleteChatBoundary": "גבול מחיקת ההיסטוריה"
+    "deleteChatBoundary": "גבול מחיקת ההיסטוריה",
+    "evidence": {
+      "unsupportedContent": "הודעת Zalo אינה נתמכת",
+      "invalidContent": "לא ניתן לקרוא את הודעת Zalo",
+      "unsupportedSchema": "פורמט הודעת Zalo אינו נתמך",
+      "pending": "ממתין לאישור",
+      "unknown": "התוצאה אינה ידועה — יש לבדוק את המצב",
+      "failed": "ההודעה לא נשלחה",
+      "applied": "נשלח",
+      "appliedPending": "נשלח, מתבצעת התאמה מקומית",
+      "needsReview": "התוצאה דורשת בדיקה",
+      "safeFailure": "לא ניתן להשלים את פעולת Zalo בבטחה",
+      "unavailable": "המצב אינו זמין. נסו שוב.",
+      "inspect": "בדיקת מצב"
+    }
   },
   "actions": {
     "scrollToBottom": "גלול למטה",

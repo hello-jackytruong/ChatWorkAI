@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
     handler?: Handler
   }>,
   scope: vi.fn(),
+  conversationScope: vi.fn(),
+  getCapabilities: vi.fn(),
   access: vi.fn(),
   getSavedContent: vi.fn(),
   getSavedAttachment: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock("@chatbotx.io/business/zalo-account", () => ({
     hideLocally: mocks.hideLocally,
   },
   zaloAccountMessageOperationsService: {
+    getCapabilities: mocks.getCapabilities,
     recall: mocks.recall,
     deleteOnZalo: mocks.deleteOnZalo,
     deleteChatOnZalo: mocks.deleteChatOnZalo,
@@ -67,6 +70,7 @@ vi.mock("@chatbotx.io/business/zalo-account", () => ({
 }))
 vi.mock("@/lib/public-api/member-scope", () => ({
   assertConversationAccessForCaller: mocks.access,
+  conversationScopeForCaller: mocks.conversationScope,
 }))
 await import("../src/features/zalo-accounts/api/message-operations")
 const prefix = "/v1/zalo-accounts/{accountId}/conversations/{conversationId}"
@@ -91,10 +95,39 @@ describe("Zalo retained content and native operation routes", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.access.mockResolvedValue({ id: "12" })
+    mocks.conversationScope.mockResolvedValue(undefined)
     mocks.getSavedContent.mockResolvedValue({
       availability: "stored",
       text: "saved",
     })
+  })
+  it.each([
+    ["GET", "/messages/{messageId}/capabilities", "getCapabilities"],
+    ["GET", "/messages/{messageId}/saved-content", "getSavedContent"],
+    [
+      "GET",
+      "/messages/{messageId}/saved-content/attachments/{attachmentId}",
+      "getSavedAttachment",
+    ],
+    ["POST", "/messages/{messageId}/hide-locally", "hideLocally"],
+    ["POST", "/messages/{messageId}/recall", "recall"],
+    ["POST", "/messages/{messageId}/delete-on-zalo", "deleteOnZalo"],
+    ["POST", "/delete-on-zalo", "deleteChatOnZalo"],
+    ["GET", "/message-operations/{attemptId}", "getOperation"],
+  ] as const)("passes caller scope to shared service for %s %s", async (method, path, service) => {
+    const scope = { chatScope: "assigned", userId: "14", teamIds: [] }
+    mocks.conversationScope.mockResolvedValue(scope)
+    await call(method, path)
+    expect(mocks[service]).toHaveBeenCalledWith(
+      expect.objectContaining({ scope }),
+    )
+    expect(mocks.conversationScope).toHaveBeenCalledWith(context)
+  })
+  it("preserves unscoped workspace-token reads", async () => {
+    await call("GET", "/messages/{messageId}/saved-content")
+    expect(mocks.getSavedContent).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: undefined }),
+    )
   })
   it("registers all operations with inbox scope and distinct GET/POST semantics", () => {
     expect(mocks.routes.every((route) => route.scope === "inbox")).toBe(true)

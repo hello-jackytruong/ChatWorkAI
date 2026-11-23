@@ -112,7 +112,21 @@
     "deleteChatConfirm": "選択したメッセージまでのZalo履歴を削除しますか？ 保存したCRMの履歴は追跡のために保持されます。",
     "deleteChatNoBoundary": "Zalo履歴を削除するための境界メッセージがありません。",
     "deletedOnMyZalo": "自分のZaloから削除済み",
-    "deleteChatBoundary": "履歴の削除範囲"
+    "deleteChatBoundary": "履歴の削除範囲",
+    "evidence": {
+      "unsupportedContent": "未対応のZaloメッセージ",
+      "invalidContent": "Zaloメッセージを読み取れませんでした",
+      "unsupportedSchema": "未対応のZaloメッセージ形式",
+      "pending": "確認待ち",
+      "unknown": "結果不明 — 状態を確認してください",
+      "failed": "メッセージは送信されませんでした",
+      "applied": "送信済み",
+      "appliedPending": "送信済み、ローカル照合中",
+      "needsReview": "結果の確認が必要です",
+      "safeFailure": "Zalo操作を安全に完了できませんでした",
+      "unavailable": "状態を取得できません。もう一度お試しください。",
+      "inspect": "状態を確認"
+    }
   },
   "actions": {
     "scrollToBottom": "一番下へスクロール",

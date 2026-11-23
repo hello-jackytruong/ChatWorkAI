@@ -85,3 +85,24 @@ it("bounds the sticker read command and strict result", () => {
     }).success,
   ).toBe(true)
 })
+
+it("keeps unsupported placeholders free of media locators", () => {
+  const placeholder = {
+    ...message,
+    schemaVersion: 1,
+    unsupported: { reason: "unsupported_content" },
+  }
+  expect(
+    zaloAccountDirectMessageSchema.safeParse({
+      ...placeholder,
+      threadType: "user",
+    }).success,
+  ).toBe(false)
+  const { recipientId: _, ...group } = placeholder
+  expect(
+    zaloAccountGroupMessageSchema.safeParse({
+      ...group,
+      threadType: "group",
+    }).success,
+  ).toBe(false)
+})

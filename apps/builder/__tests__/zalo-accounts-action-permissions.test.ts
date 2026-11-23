@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   policy: vi.fn(),
   labels: vi.fn(),
   send: vi.fn(),
+  inspect: vi.fn(),
   status: vi.fn(),
   groups: vi.fn(),
 }))
@@ -36,7 +37,10 @@ vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountFriendSyncService: { sync: vi.fn() },
 }))
 vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
-  zaloAccountCanonicalSendService: { send: mocks.send },
+  zaloAccountCanonicalSendService: {
+    send: mocks.send,
+    getOutcomeByMessage: mocks.inspect,
+  },
 }))
 const { syncZaloAccountGroupsAction } = await import(
   "../src/features/zalo-accounts/actions/sync-groups.action"
@@ -144,4 +148,37 @@ it("loads status without listing groups and preserves full operations for group 
     accountId: "account",
   })
   expect(mocks.permission).toHaveBeenCalledTimes(2)
+})
+
+it("checks superAdmin before message inspection and shares the scoped canonical outcome", async () => {
+  const { inspectZaloAccountMessageAction } = await import(
+    "../src/features/zalo-accounts/actions/account-operations.action"
+  )
+  const input = {
+    bindArgsParsedInputs: ["workspace", "account"],
+    parsedInput: {
+      messageId: "12",
+      messageCreatedAt: new Date("2026-11-23T00:00:00Z"),
+    },
+  }
+  const inspect = inspectZaloAccountMessageAction as unknown as (
+    input: unknown,
+  ) => Promise<unknown>
+  await expect(inspect(input)).rejects.toThrow("forbidden")
+  expect(mocks.inspect).not.toHaveBeenCalled()
+  mocks.permission.mockResolvedValue(undefined)
+  const safe = {
+    commandId: "c",
+    status: "unknown",
+    messageId: "12",
+    messageCreatedAt: "2026-11-23T00:00:00.000Z",
+    messageIds: [],
+  }
+  mocks.inspect.mockResolvedValue(safe)
+  expect(await inspect(input)).toEqual(safe)
+  expect(mocks.inspect).toHaveBeenCalledWith({
+    ...input.parsedInput,
+    workspaceId: "workspace",
+    accountId: "account",
+  })
 })

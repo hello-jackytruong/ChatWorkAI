@@ -5,6 +5,10 @@ import {
   type PaginationCursor,
 } from "@chatbotx.io/database/repositories"
 import { uploader } from "@chatbotx.io/filesystem"
+import {
+  getZaloAccountErrorInfo,
+  getZaloAccountErrorMessage,
+} from "@chatbotx.io/sdk"
 import { endOfHour } from "date-fns"
 import { contactInboxService } from "../contact-inbox/service"
 import { conversationService } from "../conversation/service"
@@ -139,6 +143,19 @@ export async function withResolvedAttachmentUrls(
   const zaloAttributes = attributes?.zaloAccount
   return {
     ...message,
+    ...(context.channel === "zaloAccount" && message.sendError
+      ? {
+          sendError: getZaloAccountErrorMessage(
+            getZaloAccountErrorInfo(
+              (
+                message.contentAttributes?.zaloAccount as
+                  | { sendAttempt?: { errorInfo?: unknown } }
+                  | undefined
+              )?.sendAttempt?.errorInfo,
+            ),
+          ),
+        }
+      : {}),
     ...(context.channel === "zaloAccount"
       ? {
           contentAttributes: {

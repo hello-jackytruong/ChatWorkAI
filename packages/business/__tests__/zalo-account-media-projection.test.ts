@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  pointerRows: vi.fn(),
   recalls: vi.fn(),
   guard: vi.fn(),
   byId: vi.fn(),
@@ -14,7 +15,10 @@ const mocks = vi.hoisted(() => ({
   updateAttachment: vi.fn(),
 }))
 vi.mock("@chatbotx.io/database/repositories", () => ({
-  zaloAccountMessageRecallRepository: { findTargets: mocks.recalls },
+  zaloAccountMessageRecallRepository: {
+    findTargets: mocks.recalls,
+    findForMessages: mocks.pointerRows,
+  },
   zaloAccountMediaRepository: mocks,
   createMessageRepository: () => Promise.resolve(mocks),
 }))
@@ -49,6 +53,7 @@ const reference = {
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.recalls.mockResolvedValue([])
+  mocks.pointerRows.mockResolvedValue([])
   mocks.guard.mockImplementation((_workspaceId, run) => run())
   mocks.currentOwnerRoute.mockResolvedValue({
     inboxId: "i",

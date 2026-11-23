@@ -35,6 +35,8 @@ vi.mock("@/orpc", () => ({
 
 const mocks = vi.hoisted(() => ({
   canonicalSend: vi.fn(),
+  outcome: vi.fn(),
+  messageOutcome: vi.fn(),
   account: { findById: vi.fn(), listByWorkspace: vi.fn(), status: vi.fn() },
   group: {
     get: vi.fn(),
@@ -51,7 +53,11 @@ vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountService: mocks.account,
 }))
 vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
-  zaloAccountCanonicalSendService: { send: mocks.canonicalSend },
+  zaloAccountCanonicalSendService: {
+    send: mocks.canonicalSend,
+    getOutcome: mocks.outcome,
+    getOutcomeByMessage: mocks.messageOutcome,
+  },
 }))
 vi.mock("@chatbotx.io/business/errors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@chatbotx.io/business/errors")>()),
@@ -298,3 +304,54 @@ it("returns scoped safe status with additive runtime output and rejects private 
     ).toThrow()
   }
 })
+
+it("inspects a canonical message in token scope without replaying writes", async () => {
+  const safe = {
+    commandId: "command",
+    status: "unknown",
+    messageId: "12",
+    messageCreatedAt: "2026-11-23T00:00:00.000Z",
+    messageIds: [],
+    reconciliation: { state: "needs_review" },
+    errorInfo: {
+      code: "send_unknown",
+      phase: "dispatch",
+      safeAction: "inspect",
+    },
+  }
+  mocks.messageOutcome.mockResolvedValue(safe)
+  const input = {
+    accountId: "1",
+    messageId: "12",
+    messageCreatedAt: new Date(safe.messageCreatedAt),
+  }
+  const path = "/v1/zalo-accounts/{accountId}/messages/{messageId}/send-attempt"
+  expect(
+    await procedure(
+      "GET",
+      path,
+    )({ context: { workspace: { id: "workspace-1" } }, input } as never),
+  ).toEqual(safe)
+  expect(mocks.messageOutcome).toHaveBeenCalledWith({
+    ...input,
+    workspaceId: "workspace-1",
+  })
+  const output = captured.find((route) => route.path === path)?.output
+  expect(output?.parse({ ...safe, cookie: "secret" })).toEqual(safe)
+  const legacyOutput = captured.find((route) =>
+    route.path.endsWith("/send-attempts/{commandId}"),
+  )?.output
+  expect(legacyOutput?.parse(safe)).toEqual(safe)
+  mocks.messageOutcome.mockRejectedValueOnce(new Error("not found"))
+  await expect(
+    procedure(
+      "GET",
+      path,
+    )({ context: { workspace: { id: "other" } }, input } as never),
+  ).rejects.toThrow("not found")
+  expect(mocks.canonicalSend).not.toHaveBeenCalled()
+})
+
+vi.mock("@chatbotx.io/business/zalo-account-media", () => ({
+  zaloAccountMediaReadService: { projectProfiles: async () => new Map() },
+}))

@@ -568,6 +568,7 @@
     "contact-sync/contact-sync.action:startContactSyncAction": "covered:contact-sync",
     "zalo-accounts/account-operations.action:getZaloAccountOperationsAction": "covered:zalo-accounts",
     "zalo-accounts/account-operations.action:getZaloAccountStatusAction": "covered:zalo-accounts",
+    "zalo-accounts/account-operations.action:inspectZaloAccountMessageAction": "covered:zalo-accounts",
     "zalo-accounts/account-operations.action:setZaloAccountGroupMessagingAction": "covered:zalo-accounts",
     "zalo-accounts/account-operations.action:syncZaloAccountFriendsAction": "covered:zalo-accounts",
     "zalo-accounts/group-inbox.action:getZaloGroupInboxAction": "covered:zalo-accounts",

@@ -77,6 +77,17 @@ export const zaloAccountGroupInboxService = {
       groupId: group.id,
       contactInboxId: group.contactInboxId,
       conversationId: group.conversationId,
+      beforeMessageReconcile: async (pointer) => {
+        await zaloAccountMediaService.bindMessageAliases({
+          workspaceId: input.workspaceId,
+          accountId: input.accountId,
+          messageId: pointer.id,
+          messageCreatedAt: pointer.createdAt,
+          conversationId,
+          aliases: pointer.providerMessageIds,
+          preserveAttachmentIds: true,
+        })
+      },
       ...(getZaloAccountMediaPolicy().enabled
         ? {
             beforeMessageWrite: async (pointer: {
@@ -100,14 +111,6 @@ export const zaloAccountGroupInboxService = {
                   url: attachment.url,
                   name: attachment.name,
                 })),
-              })
-              await zaloAccountMediaService.bindMessageAliases({
-                workspaceId: input.workspaceId,
-                accountId: input.accountId,
-                messageId: pointer.id,
-                messageCreatedAt: pointer.createdAt,
-                conversationId,
-                aliases: [message.providerMessageId],
               })
             },
           }

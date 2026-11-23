@@ -4,7 +4,10 @@ import type {
   ConversationStatus,
 } from "@chatbotx.io/database/partials"
 import type { MessageTranslationUpdatedData } from "@chatbotx.io/realtime-protocol"
-import { resolveMessagingWindowOpenedAt } from "@chatbotx.io/sdk"
+import {
+  getZaloAccountSendAttemptRevision,
+  resolveMessagingWindowOpenedAt,
+} from "@chatbotx.io/sdk"
 import { createStore } from "zustand/vanilla"
 import type { ContactFilterRequest } from "@/features/contact-filter/schema"
 import type { GetContactResponse } from "@/features/contacts/schema/query"
@@ -1375,10 +1378,29 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
       // shape.
       updateMessageContentAttributes: (messageId, contentAttributes) => {
         set((state) => {
+          const shouldApplyAttributes = (attributes: unknown) => {
+            const currentRevision =
+              getZaloAccountSendAttemptRevision(attributes)
+            const nextRevision =
+              getZaloAccountSendAttemptRevision(contentAttributes)
+            const nextZalo = contentAttributes?.zaloAccount as
+              | { lifecycle?: unknown }
+              | undefined
+            // Lifecycle markers must still hide content when an integrity
+            // status with a newer revision is already cached.
+            return (
+              !!nextZalo?.lifecycle ||
+              currentRevision === undefined ||
+              (nextRevision !== undefined && nextRevision >= currentRevision)
+            )
+          }
           const patch = replaceMessageById(
             state.messages,
             messageId,
-            (message) => ({ ...message, contentAttributes }),
+            (message) =>
+              shouldApplyAttributes(message.contentAttributes)
+                ? { ...message, contentAttributes }
+                : message,
           )
           const za = contentAttributes?.zaloAccount as
             | { sourceId?: string; lifecycle?: Record<string, unknown> }
@@ -1402,7 +1424,10 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
             ? patchConversationPreviews(
                 state.conversations,
                 new Set([messageId]),
-                (message) => ({ ...message, contentAttributes }),
+                (message) =>
+                  shouldApplyAttributes(message.contentAttributes)
+                    ? { ...message, contentAttributes }
+                    : message,
               )
             : null
           if (!(patch || previews || event)) {

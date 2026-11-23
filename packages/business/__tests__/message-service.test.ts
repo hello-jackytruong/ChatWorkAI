@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 const mocks = vi.hoisted(() => {
   const repo = {
     createWithAttachments: vi.fn(),
+    updateContentAttributes: vi.fn(),
+    updateZaloSendAttemptEvidence: vi.fn(),
     bulkCreateAttachments: vi.fn(),
     create: vi.fn(),
     deleteAttachmentsByMessageId: vi.fn(),
@@ -21,11 +23,15 @@ const mocks = vi.hoisted(() => {
   }
   return {
     db: {
-      query: { messageModel: { findFirst: vi.fn(), findMany: vi.fn() } },
+      query: {
+        messageModel: { findFirst: vi.fn(), findMany: vi.fn() },
+        conversationModel: { findFirst: vi.fn() },
+      },
       transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
         await callback({}),
     },
     repo,
+    realtime: vi.fn(),
     createMessageRepository: vi.fn().mockResolvedValue(repo),
     findTranslationSettings: vi.fn(),
     deleteTranslations: vi.fn(),
@@ -61,11 +67,22 @@ vi.mock("@chatbotx.io/redis", () => ({
 // The following are reached only because messageService.createOutgoing is
 // wired in as a class field (module-scope import), not because any test here
 // exercises it — this file only covers the pre-existing read/delete methods.
+vi.mock("../src/message/create-outgoing", () => ({ createOutgoing: vi.fn() }))
+vi.mock("../src/zalo-account-media/service", () => ({
+  zaloAccountMediaService: { bindMessageAliases: vi.fn() },
+}))
+vi.mock("../src/zalo-account-media/read-service", () => ({
+  zaloAccountMediaReadService: { projectMessages: async () => new Map() },
+}))
 vi.mock("@chatbotx.io/filesystem", () => ({}))
 vi.mock("@chatbotx.io/realtime-protocol", () => ({
+  routeForConversation: (conversation: { id: string }) => ({
+    conversationId: conversation.id,
+  }),
   RealtimeEventType: {
     conversationAssigned: "conversationAssigned",
     messageCreated: "messageCreated",
+    messageContentUpdated: "messageContentUpdated",
     whatsappCallClaimedElsewhere: "whatsappCallClaimedElsewhere",
     whatsappCallPermissionUpdated: "whatsappCallPermissionUpdated",
     whatsappCallTransportEnded: "whatsappCallTransportEnded",
@@ -84,6 +101,10 @@ vi.mock("../src/zalo-account/message-recall.service", () => ({
     projectMessagesForRead: async ({ messages }: { messages: unknown[] }) =>
       messages,
   },
+}))
+
+vi.mock("../src/platform/realtime-broadcast", () => ({
+  queueWorkspaceRealtimeEvent: mocks.realtime,
 }))
 
 const { messageService } = await import("../src/message/service")
@@ -566,5 +587,52 @@ describe("messageService changes by provider message id", () => {
       at,
     )
     expect(result).toEqual([{ id: "msg-1", conversationId: "conv-1" }])
+  })
+})
+
+test("updates Zalo pending evidence and publishes the persisted attributes to the scoped conversation", async () => {
+  const createdAt = new Date(0)
+  const stored = {
+    id: "m",
+    conversationId: "conv",
+    contentAttributes: {
+      other: true,
+      zaloAccount: { group: { threadId: "g" } },
+    },
+  }
+  const updated = {
+    ...stored,
+    contentAttributes: {
+      ...stored.contentAttributes,
+      zaloAccount: {
+        ...stored.contentAttributes.zaloAccount,
+        accountId: "a",
+        sendAttempt: { status: "unknown" },
+      },
+    },
+  }
+  mocks.repo.findById
+    .mockResolvedValueOnce(stored)
+    .mockResolvedValueOnce(updated)
+  mocks.db.query.conversationModel.findFirst.mockResolvedValue({ id: "conv" })
+  mocks.repo.updateZaloSendAttemptEvidence.mockResolvedValue({ id: "m" })
+  await messageService.updateSendAttemptEvidence({
+    workspaceId: "w",
+    accountId: "a",
+    id: "m",
+    createdAt,
+    evidence: { status: "unknown" },
+    revision: 1,
+  })
+  expect(mocks.repo.findById).toHaveBeenLastCalledWith(
+    expect.objectContaining({ primaryAndFailOnError: true }),
+  )
+  expect(mocks.repo.updateZaloSendAttemptEvidence).toHaveBeenCalledWith(
+    expect.objectContaining({ revision: 1, evidence: { status: "unknown" } }),
+  )
+  expect(mocks.realtime).toHaveBeenCalledWith("w", {
+    eventType: "messageContentUpdated",
+    data: { messageId: "m", contentAttributes: updated.contentAttributes },
+    route: { conversationId: "conv" },
   })
 })

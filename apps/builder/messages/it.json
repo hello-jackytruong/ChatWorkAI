@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Eliminare la cronologia Zalo fino al messaggio selezionato incluso? La cronologia CRM salvata resta disponibile per il monitoraggio.",
     "deleteChatNoBoundary": "Nessun messaggio limite disponibile per eliminare la cronologia Zalo.",
     "deletedOnMyZalo": "Eliminato dal mio Zalo",
-    "deleteChatBoundary": "Limite di eliminazione della cronologia"
+    "deleteChatBoundary": "Limite di eliminazione della cronologia",
+    "evidence": {
+      "unsupportedContent": "Messaggio Zalo non supportato",
+      "invalidContent": "Impossibile leggere il messaggio Zalo",
+      "unsupportedSchema": "Formato del messaggio Zalo non supportato",
+      "pending": "In attesa di conferma",
+      "unknown": "Esito sconosciuto — controlla lo stato",
+      "failed": "Messaggio non inviato",
+      "applied": "Inviato",
+      "appliedPending": "Inviato, riconciliazione locale in corso",
+      "needsReview": "L’esito richiede una verifica",
+      "safeFailure": "Impossibile completare in sicurezza l’operazione Zalo",
+      "unavailable": "Stato non disponibile. Riprova.",
+      "inspect": "Controlla lo stato"
+    }
   },
   "fields": {
     "optionalHint": "(facoltativo)",

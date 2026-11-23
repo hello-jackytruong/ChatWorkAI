@@ -1,4 +1,7 @@
-import type { ZaloAccountPreparedSend } from "@chatbotx.io/sdk"
+import type {
+  ZaloAccountErrorInfo,
+  ZaloAccountPreparedSend,
+} from "@chatbotx.io/sdk"
 import { sql } from "drizzle-orm"
 import {
   boolean,
@@ -26,6 +29,16 @@ import {
   integrationZaloAccountModel,
 } from "./integration-zalo-account"
 import { workspaceModel } from "./workspace"
+
+export type ZaloAccountReconciliation = {
+  version: 1
+  state: "not_required" | "pending" | "completed" | "needs_review"
+  revision: number
+  attempts: number
+  nextAttemptAt: string
+  lastErrorCode: "reconciliation_conflict" | "internal_error" | null
+  sendError?: ZaloAccountErrorInfo
+}
 
 export const zaloAccountThreadType = pgEnum(
   "zaloAccountThreadType",
@@ -137,6 +150,7 @@ export const zaloAccountSendAttemptModel = pgTable(
     requestHash: text(),
     preparedPayload: jsonb().$type<ZaloAccountPreparedSend>(),
     dispatchedAt: timestamp(timestampConfig),
+    reconciliation: jsonb().$type<ZaloAccountReconciliation>(),
     status: zaloAccountSendAttemptStatus().default("pending").notNull(),
     accountPolicyEpoch: integer(),
     groupPolicyEpoch: integer(),
@@ -160,6 +174,11 @@ export const zaloAccountSendAttemptModel = pgTable(
       table.createdAt,
       table.id,
     ),
+    index("ZaloAccountSendAttempt_reconciliation_idx")
+      .on(sql`(${table.reconciliation}->>'nextAttemptAt')`, table.id)
+      .where(
+        sql`${table.status} = 'applied' AND ${table.reconciliation}->>'state' = 'pending'`,
+      ),
     index("ZaloAccountSendAttempt_prepared_idx")
       .on(table.updatedAt, table.id)
       .where(

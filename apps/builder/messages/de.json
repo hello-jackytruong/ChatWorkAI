@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Zalo-Verlauf bis einschließlich der ausgewählten Nachricht löschen? Der gespeicherte CRM-Verlauf bleibt zur Nachverfolgung erhalten.",
     "deleteChatNoBoundary": "Es ist keine Nachrichtengrenze zum Löschen des Zalo-Verlaufs verfügbar.",
     "deletedOnMyZalo": "Auf meinem Zalo gelöscht",
-    "deleteChatBoundary": "Grenze für die Verlaufslöschung"
+    "deleteChatBoundary": "Grenze für die Verlaufslöschung",
+    "evidence": {
+      "unsupportedContent": "Nicht unterstützte Zalo-Nachricht",
+      "invalidContent": "Zalo-Nachricht konnte nicht gelesen werden",
+      "unsupportedSchema": "Zalo-Nachrichtenformat wird nicht unterstützt",
+      "pending": "Bestätigung ausstehend",
+      "unknown": "Ergebnis unbekannt — Status prüfen",
+      "failed": "Nachricht wurde nicht gesendet",
+      "applied": "Gesendet",
+      "appliedPending": "Gesendet, lokaler Abgleich läuft",
+      "needsReview": "Ergebnis muss geprüft werden",
+      "safeFailure": "Zalo-Vorgang konnte nicht sicher abgeschlossen werden",
+      "unavailable": "Status nicht verfügbar. Erneut versuchen.",
+      "inspect": "Status prüfen"
+    }
   },
   "actions": {
     "scrollToBottom": "Nach unten scrollen",

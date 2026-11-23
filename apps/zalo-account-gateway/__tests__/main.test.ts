@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock("../src/env", () => ({ resolveGatewayEnv: () => mocks.env }))
 vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  takeDirectSendCapacity: vi.fn(),
   zaloAccountGroupService: {},
   zaloAccountLabelService: {},
   zaloAccountSendAttemptService: {},
@@ -40,6 +41,7 @@ vi.mock("../src/runtime/zalo-account-pool", () => ({
   ZaloAccountPool: class {
     reconnect = mocks.reconnect
     shutdown = mocks.shutdown
+    isMessageReady = () => true
   },
 }))
 vi.mock("../src/runtime/zca-client", () => ({

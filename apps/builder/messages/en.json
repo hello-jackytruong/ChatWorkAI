@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Delete Zalo history through the selected message? The saved CRM history remains available for tracking.",
     "deleteChatNoBoundary": "No message boundary is available for deleting Zalo history.",
     "deletedOnMyZalo": "Deleted on my Zalo",
-    "deleteChatBoundary": "History deletion boundary"
+    "deleteChatBoundary": "History deletion boundary",
+    "evidence": {
+      "unsupportedContent": "Unsupported Zalo message",
+      "invalidContent": "Zalo message could not be read",
+      "unsupportedSchema": "Zalo message format is not supported",
+      "pending": "Awaiting confirmation",
+      "unknown": "Outcome unknown — inspect status",
+      "failed": "Message was not sent",
+      "applied": "Sent",
+      "appliedPending": "Sent, reconciling locally",
+      "needsReview": "Outcome needs review",
+      "safeFailure": "A Zalo operation could not complete safely",
+      "unavailable": "Status unavailable. Try inspecting again.",
+      "inspect": "Inspect status"
+    }
   },
   "actions": {
     "scrollToBottom": "Scroll to bottom",

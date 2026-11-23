@@ -1686,6 +1686,7 @@ chatbotx zalo-accounts message send <accountId> <id> --commandId <stable-id> --t
                                                      # Use --attachment <json> instead of --text for one supported image/file
 chatbotx zalo-accounts message send-direct <accountId> --contactInboxId <id> --commandId <stable-id> --text <text>
 chatbotx zalo-accounts send-attempt get <accountId> <commandId> --groupId <groupId>
+chatbotx zalo-accounts send-attempt list <accountId> <messageId> --messageCreatedAt <exact-createdAt>
 chatbotx zalo-accounts message-state list <accountId> --groupId <groupId> --providerMessageIds <id>
 chatbotx zalo-accounts typing add <accountId> --groupId <groupId> --commandId <stable-id>
 chatbotx zalo-accounts tags list <accountId> <groupId>
@@ -1736,7 +1737,12 @@ credentials and phone-number discovery are not exposed. Replies use
 
 Reuse a `commandId` only with identical input. Sends persist a canonical Message
 before dispatch. Inspect the send-attempt endpoint after a timeout; pending and
-unknown outcomes must not be automatically resent. Friend sync follows the
+unknown outcomes must not be automatically resent. The `send-attempt list` command
+reads one canonical Message outcome using its ID and exact creation time from
+`messages list`; it does not send or replay a command. Both inspection methods
+return safe optional reconciliation and error metadata. `needs_review` requires
+inspection, and an applied send with pending local reconciliation is already sent.
+Friend sync follows the
 returned `nextCursor` with a new command ID per page and creates no MAC/activity.
 The generated MCP equivalents include `zalo_account_set_group_messaging` and
 `zalo_account_update_group_policy`; Zalo operations remain discoverable through

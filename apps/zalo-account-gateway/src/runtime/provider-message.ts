@@ -40,11 +40,20 @@ export type NormalizedProviderMessage =
     }
   | { kind: "unsupported"; reason: string }
 
-const asNonEmptyString = (value: unknown): string | undefined => {
+const asNonEmptyString = (
+  value: unknown,
+  maxLength = 512,
+): string | undefined => {
   if (typeof value !== "string" && typeof value !== "number") {
     return
   }
+  if (typeof value === "number" && !Number.isSafeInteger(value)) {
+    return
+  }
   const normalized = String(value).trim()
+  if (normalized.length > maxLength) {
+    return
+  }
   return normalized || undefined
 }
 
@@ -58,11 +67,12 @@ const parseObject = (value: unknown): Record<string, unknown> | undefined => {
   if (direct) {
     return direct
   }
-  if (typeof value !== "string") {
+  if (typeof value !== "string" || value.length > 16_384) {
     return
   }
   try {
-    return asObject(JSON.parse(value) as unknown)
+    const parsed: unknown = JSON.parse(value)
+    return withinBudget(parsed) ? asObject(parsed) : undefined
   } catch {
     return
   }
@@ -73,7 +83,7 @@ const firstUrl = (
   keys: string[],
 ): string | undefined => {
   for (const key of keys) {
-    const candidate = asNonEmptyString(object[key])
+    const candidate = asNonEmptyString(object[key], 65_536)
     if (!candidate) {
       continue
     }
@@ -265,7 +275,7 @@ const quoteOf = (value: unknown): ZaloAccountQuote | undefined => {
   ) {
     return
   }
-  const text = asNonEmptyString(quote.msg ?? quote.content)
+  const text = asNonEmptyString(quote.msg ?? quote.content, 20_000)
   const clientMessageId = asNonEmptyString(quote.cliMsgId)
   return {
     providerMessageId,
@@ -335,7 +345,7 @@ export const normalizeProviderGroupActivity = (input: ProviderMessageInput) => {
     : undefined
 }
 
-export const normalizeProviderMessage = (
+const normalizeLegacyMessage = (
   input: ProviderMessageInput,
 ): NormalizedProviderMessage => {
   const data = input.data
@@ -360,7 +370,7 @@ export const normalizeProviderMessage = (
   }
 
   const rawContent = data?.content
-  const text = asNonEmptyString(rawContent)
+  const text = asNonEmptyString(rawContent, 20_000)
   const contentObject = asObject(rawContent)
   const attachment = contentObject
     ? attachmentOf(msgType, contentObject)
@@ -393,5 +403,157 @@ export const normalizeProviderMessage = (
       ...(mediaResources.length ? { mediaResources } : {}),
       ...(quote ? { quote } : {}),
     }),
+  }
+}
+
+export type MessageNormalizationOptions = {
+  ownUid?: string
+  messageIntegrityEnabled?: boolean
+}
+
+// Inspect selected evidence before parsing or spreading provider objects.
+const withinBudget = (
+  value: unknown,
+  depth = 0,
+  budget = { bytes: 0 },
+): boolean => {
+  if (typeof value === "string") {
+    budget.bytes += value.length * 2
+    return value.length <= 65_536 && budget.bytes <= 262_144
+  }
+  if (value === null || typeof value !== "object") {
+    return true
+  }
+  if (depth > 4) {
+    return false
+  }
+  if (Array.isArray(value)) {
+    return (
+      value.length <= 100 &&
+      value.every((item) => withinBudget(item, depth + 1, budget))
+    )
+  }
+  let count = 0
+  for (const key in value) {
+    if (!Object.hasOwn(value, key)) {
+      continue
+    }
+    if (
+      (key === "params" || key === "ext") &&
+      typeof (value as Record<string, unknown>)[key] === "string" &&
+      ((value as Record<string, unknown>)[key] as string).length > 16_384
+    ) {
+      return false
+    }
+    if (
+      ++count > 64 ||
+      !withinBudget((value as Record<string, unknown>)[key], depth + 1, budget)
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+export const normalizeProviderMessage = (
+  input: ProviderMessageInput,
+  options: MessageNormalizationOptions = {},
+): NormalizedProviderMessage => {
+  try {
+    const data = input.data
+    const threadId = asNonEmptyString(input.threadId)
+    const providerMessageId = asNonEmptyString(data?.msgId)
+    const senderId = asNonEmptyString(data?.uidFrom)
+    const recipientId = asNonEmptyString(data?.idTo)
+    const timestampMs = Number(data?.ts)
+    const group = input.type === 1 || input.type === "group"
+    if (!(threadId && providerMessageId && senderId)) {
+      return { kind: "unsupported", reason: "missing_identity" }
+    }
+    if (
+      !Number.isSafeInteger(timestampMs) ||
+      timestampMs < 0 ||
+      typeof input.isSelf !== "boolean"
+    ) {
+      return { kind: "unsupported", reason: "invalid_fields" }
+    }
+    if (
+      options.ownUid &&
+      (input.isSelf !== (senderId === options.ownUid) ||
+        (!group &&
+          (input.isSelf
+            ? threadId !== recipientId
+            : threadId !== senderId || recipientId !== options.ownUid)))
+    ) {
+      return { kind: "unsupported", reason: "invalid_identity" }
+    }
+    if (!group && input.type !== 0 && input.type !== "user") {
+      return { kind: "unsupported", reason: "unknown_thread_type" }
+    }
+    let result: NormalizedProviderMessage
+    const bounded = withinBudget(data)
+    const unknownSchema =
+      (input as ProviderMessageInput & { schemaVersion?: unknown })
+        .schemaVersion !== undefined &&
+      (input as ProviderMessageInput & { schemaVersion?: unknown })
+        .schemaVersion !== 1
+    try {
+      result =
+        bounded && !unknownSchema
+          ? normalizeLegacyMessage(input)
+          : { kind: "unsupported", reason: "invalid_fields" }
+    } catch {
+      result = { kind: "unsupported", reason: "invalid_fields" }
+    }
+    if (result.kind !== "unsupported") {
+      if (options.messageIntegrityEnabled) {
+        result.message.schemaVersion = 1
+      }
+      return result
+    }
+    if (!options.messageIntegrityEnabled) {
+      return result
+    }
+    let reason = "invalid_content"
+    if (unknownSchema) {
+      reason = "unsupported_schema"
+    } else if (bounded && result.reason === "unsupported_content") {
+      reason = "unsupported_content"
+    }
+    const header = {
+      schemaVersion: 1,
+      providerMessageId,
+      threadId,
+      senderId,
+      timestampMs,
+      msgType: asNonEmptyString(data?.msgType) ?? "unknown",
+      isSelf: input.isSelf,
+      attachments: [],
+      unsupported: { reason },
+    }
+    const parsed = group
+      ? zaloAccountGroupMessageSchema.safeParse({
+          ...header,
+          threadType: "group",
+          mentions: [],
+        })
+      : zaloAccountDirectMessageSchema.safeParse({
+          ...header,
+          threadType: "user",
+          recipientId,
+        })
+    if (!parsed.success) {
+      return { kind: "unsupported", reason: "invalid_identity" }
+    }
+    return group
+      ? {
+          kind: "group",
+          threadId,
+          providerMessageId,
+          message: parsed.data as ZaloAccountGroupMessage,
+        }
+      : { kind: "direct", message: parsed.data as ZaloAccountDirectMessage }
+  } catch {
+    return { kind: "unsupported", reason: "invalid_fields" }
   }
 }

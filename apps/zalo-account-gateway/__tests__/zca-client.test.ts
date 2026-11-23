@@ -2,7 +2,14 @@ import { EventEmitter } from "node:events"
 import { beforeEach, expect, it, vi } from "vitest"
 import type { ZcaListenerHandlers } from "../src/runtime/ports"
 
-const sdk = vi.hoisted(() => ({ login: vi.fn(), loginQR: vi.fn() }))
+const sdk = vi.hoisted(() => ({
+  login: vi.fn(),
+  loginQR: vi.fn(),
+  download: vi.fn(),
+}))
+vi.mock("../src/runtime/outbound-attachment", () => ({
+  downloadOutboundAttachment: sdk.download,
+}))
 vi.mock("zca-js", () => ({
   Zalo: class {
     login = sdk.login
@@ -119,4 +126,43 @@ it("settles cleanup without a phantom socket when SDK start throws", async () =>
   } finally {
     vi.useRealTimers()
   }
+})
+
+it("prepares direct media before admission and never calls the provider after rejection", async () => {
+  const order: string[] = []
+  const sendMessage = vi.fn(() => {
+    order.push("provider")
+    return Promise.resolve({ message: { msgId: "m" }, attachment: [] })
+  })
+  const listener = Object.assign(new EventEmitter(), {
+    start: vi.fn(),
+    stop: vi.fn(),
+  })
+  sdk.login.mockResolvedValue({ listener, sendMessage })
+  sdk.download.mockImplementation(() => {
+    order.push("prepare")
+    return Promise.resolve({ data: Buffer.from("file"), filename: "file.txt" })
+  })
+  const api = await zcaClientFactory.create().login(auth)
+  const message = {
+    recipientId: "peer",
+    text: "caption",
+    attachments: [
+      { kind: "file" as const, url: "https://files.test/a", name: "file.txt" },
+    ],
+  }
+  await expect(
+    api.sendDirect(message, () => {
+      order.push("admission")
+      return Promise.reject(new Error("admission"))
+    }),
+  ).rejects.toThrow("admission")
+  expect(order).toEqual(["prepare", "admission"])
+  expect(sendMessage).not.toHaveBeenCalled()
+  order.length = 0
+  await api.sendDirect(message, () => {
+    order.push("admission")
+    return Promise.resolve()
+  })
+  expect(order).toEqual(["prepare", "admission", "provider"])
 })

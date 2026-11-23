@@ -158,6 +158,39 @@ describe("Zalo retained message client fences", () => {
     )
     expect(JSON.stringify(state.conversations)).not.toContain("private-signed")
   })
+  it("applies recall over newer send evidence and ignores later stale evidence", () => {
+    const store = setup([
+      message("parent", {
+        contentAttributes: {
+          zaloAccount: {
+            sendAttempt: {
+              status: "applied",
+              reconciliation: { revision: 5, state: "needs_review" },
+            },
+          },
+        },
+      }),
+    ])
+    store.getState().updateMessageContentAttributes("parent", {
+      zaloAccount: { sourceId, lifecycle },
+    })
+    store.getState().updateMessageContentAttributes("parent", {
+      zaloAccount: {
+        sendAttempt: {
+          status: "applied",
+          reconciliation: { revision: 4, state: "completed" },
+        },
+      },
+    })
+    expect(store.getState().messages[0]?.text).toBeNull()
+    expect(store.getState().messages[0]?.attachments).toEqual([])
+    expect(JSON.stringify(store.getState().messages)).not.toContain(
+      "ORIGINAL_SENTINEL",
+    )
+    expect(JSON.stringify(store.getState().conversations)).not.toContain(
+      "ORIGINAL_SENTINEL",
+    )
+  })
   it("scrubs loaded quotes for an off-page recalled parent while preserving reply body", () => {
     const reply = message("reply", {
       text: "reply stays",

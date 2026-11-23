@@ -128,6 +128,13 @@ describe("Zalo Account message adapter", () => {
         sourceId: "za:account-1:user:peer-1:message-7",
         messageType: "incoming",
         text: "hello",
+        contentAttributes: {
+          zaloAccount: {
+            recipientId: "self-1",
+            isSelf: false,
+            threadType: "user",
+          },
+        },
       },
       contact: { sourceId: "peer-1", firstName: "Customer" },
     })

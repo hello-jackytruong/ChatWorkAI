@@ -70,6 +70,26 @@ const {
 } = await import("../src/message/list-for-conversation")
 
 describe("message list-for-conversation", () => {
+  test("redacts legacy raw send errors only on Zalo Account without extra lookups", async () => {
+    const message = {
+      id: "m",
+      createdAt: new Date(),
+      attachments: [],
+      sendError: "SECRET https://private.invalid/token",
+    }
+    const zalo = await withResolvedAttachmentUrls(message as never, {
+      channel: "zaloAccount",
+      workspaceId: "w",
+    })
+    const other = await withResolvedAttachmentUrls(message as never, {
+      channel: "messenger",
+      workspaceId: "w",
+    })
+    expect(zalo.sendError).not.toContain("SECRET")
+    expect(other.sendError).toBe(message.sendError)
+    expect(mocks.createMessageRepository).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.createMessageRepository.mockResolvedValue(mocks.repo)

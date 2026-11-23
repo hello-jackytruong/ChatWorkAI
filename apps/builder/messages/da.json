@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Slet Zalo-historik til og med den valgte besked? Den gemte CRM-historik bevares til sporing.",
     "deleteChatNoBoundary": "Ingen beskedgrænse er tilgængelig til sletning af Zalo-historik.",
     "deletedOnMyZalo": "Slettet på min Zalo",
-    "deleteChatBoundary": "Grænse for sletning af historik"
+    "deleteChatBoundary": "Grænse for sletning af historik",
+    "evidence": {
+      "unsupportedContent": "Zalo-beskeden understøttes ikke",
+      "invalidContent": "Zalo-beskeden kunne ikke læses",
+      "unsupportedSchema": "Zalo-beskedformatet understøttes ikke",
+      "pending": "Afventer bekræftelse",
+      "unknown": "Ukendt resultat — kontrollér status",
+      "failed": "Beskeden blev ikke sendt",
+      "applied": "Sendt",
+      "appliedPending": "Sendt, afstemmer lokalt",
+      "needsReview": "Resultatet kræver gennemgang",
+      "safeFailure": "Zalo-handlingen kunne ikke fuldføres sikkert",
+      "unavailable": "Status er utilgængelig. Prøv igen.",
+      "inspect": "Kontrollér status"
+    }
   },
   "actions": {
     "scrollToBottom": "Rul til bunden",

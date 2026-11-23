@@ -202,6 +202,36 @@ export const zaloAccountMessageRecallRepository = {
       )
       .limit(100)
   },
+  async findForMessages(input: {
+    workspaceId: string
+    messages: Array<{ id: string; createdAt: Date; conversationId: string }>
+  }) {
+    if (!input.messages.length) {
+      return []
+    }
+    if (input.messages.length > 100) {
+      throw new Error("Zalo recall lookup exceeds page limit")
+    }
+    return await db
+      .select()
+      .from(recall)
+      .where(
+        and(
+          eq(recall.workspaceId, input.workspaceId),
+          isNull(recall.discardedAt),
+          or(
+            ...input.messages.map((message) =>
+              and(
+                eq(recall.conversationId, message.conversationId),
+                eq(recall.messageId, message.id),
+                eq(recall.messageCreatedAt, message.createdAt),
+              ),
+            ),
+          ),
+        ),
+      )
+      .limit(100)
+  },
   async record(
     input: ZaloAccountRecallTarget & {
       transition: "recall" | "localHide" | "providerDelete"

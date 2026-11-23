@@ -6,7 +6,12 @@ import {
   conversationService,
   getContactInputAttachments,
 } from "@chatbotx.io/business"
+import { zaloAccountSendAttemptService } from "@chatbotx.io/business/zalo-account"
 import { emit } from "@chatbotx.io/event-bus"
+import {
+  getZaloAccountMessageEvidence,
+  zaloAccountDirectMessageSchema,
+} from "@chatbotx.io/sdk"
 import {
   IntegrationJobAction,
   type IntegrationJobReceiveMessage,
@@ -26,8 +31,26 @@ import { recordWhatsappCallPermissionReply } from "./whatsapp-call-permission-re
 export async function processIncomingMessage(
   data: IntegrationJobReceiveMessage["data"],
 ): Promise<void> {
+  let confirmedZaloOwnEcho = false
+  if (data.integrationType === "zaloAccount" && data.zaloAccountRoute) {
+    const payload = zaloAccountDirectMessageSchema.safeParse(data.payload)
+    if (payload.success && payload.data.isSelf) {
+      confirmedZaloOwnEcho = await zaloAccountSendAttemptService.resolveOwnEcho(
+        {
+          workspaceId: data.zaloAccountRoute.workspaceId,
+          accountId: data.zaloAccountRoute.accountId,
+          inboxId: data.zaloAccountRoute.inboxId,
+          threadType: "user",
+          threadId: payload.data.threadId,
+          providerMessageId: payload.data.providerMessageId,
+          clientMessageId: payload.data.clientMessageId,
+        },
+      )
+    }
+  }
   const received = await receiveMessage(data)
-  if (!received) {
+  // Canonical ingestion retains media/recall evidence even for a confirmed echo.
+  if (confirmedZaloOwnEcho || !received) {
     return
   }
   const {
@@ -41,6 +64,13 @@ export async function processIncomingMessage(
     suppressAutomation,
     stepInputSkipHandled,
   } = received
+
+  if (
+    inboxChannel === "zaloAccount" &&
+    getZaloAccountMessageEvidence(message?.contentAttributes)
+  ) {
+    return
+  }
 
   if (!message) {
     return

@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Poistetaanko Zalon historia valittuun viestiin asti? Tallennettu CRM-historia säilyy seurantaa varten.",
     "deleteChatNoBoundary": "Zalon historian poistamiseen ei ole viestirajaa.",
     "deletedOnMyZalo": "Poistettu omasta Zalosta",
-    "deleteChatBoundary": "Historian poiston raja"
+    "deleteChatBoundary": "Historian poiston raja",
+    "evidence": {
+      "unsupportedContent": "Zalo-viestiä ei tueta",
+      "invalidContent": "Zalo-viestiä ei voitu lukea",
+      "unsupportedSchema": "Zalo-viestimuotoa ei tueta",
+      "pending": "Odotetaan vahvistusta",
+      "unknown": "Tulos tuntematon — tarkista tila",
+      "failed": "Viestiä ei lähetetty",
+      "applied": "Lähetetty",
+      "appliedPending": "Lähetetty, paikallinen täsmäytys käynnissä",
+      "needsReview": "Tulos vaatii tarkistuksen",
+      "safeFailure": "Zalo-toimintoa ei voitu suorittaa turvallisesti",
+      "unavailable": "Tila ei saatavilla. Yritä uudelleen.",
+      "inspect": "Tarkista tila"
+    }
   },
   "actions": {
     "scrollToBottom": "Vieritä alas",

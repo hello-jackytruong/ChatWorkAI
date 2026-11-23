@@ -1070,6 +1070,7 @@ export const zaloAccountMediaRepository = {
   async bindMessageAliases(
     input: Scope & {
       messageId: string
+      preserveAttachmentIds?: boolean
       aliases: string[]
       attachmentId?: string
       conversationId?: string
@@ -1100,13 +1101,21 @@ export const zaloAccountMediaRepository = {
           ),
         ),
       )
-      .limit(50)
+      .limit(301)
       .for("update")
+    // Ten acknowledged provider messages can each carry twelve originals and
+    // their previews. Never partially rebind before destructive shard merging.
+    if (refs.length > 300) {
+      throw new Error(
+        "Media alias reconciliation exceeds bounded reference limit",
+      )
+    }
     for (const ref of refs) {
       const canonical = refs.find(
         (candidate) =>
           candidate.id !== ref.id &&
           candidate.messageId === input.messageId &&
+          candidate.assetId === ref.assetId &&
           candidate.role === ref.role &&
           candidate.slot === ref.slot,
       )
@@ -1138,7 +1147,9 @@ export const zaloAccountMediaRepository = {
           messageId: input.messageId,
           attachmentId:
             input.attachmentId ??
-            (ref.messageId === input.messageId ? ref.attachmentId : null),
+            (ref.messageId === input.messageId || input.preserveAttachmentIds
+              ? ref.attachmentId
+              : null),
           conversationId: input.conversationId ?? ref.conversationId,
           messageCreatedAt: input.messageCreatedAt ?? ref.messageCreatedAt,
         })

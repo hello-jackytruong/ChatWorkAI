@@ -112,7 +112,21 @@
     "deleteChatConfirm": "هل تريد حذف سجل Zalo حتى الرسالة المحددة؟ يبقى السجل المحفوظ في CRM متاحًا للتتبع.",
     "deleteChatNoBoundary": "لا توجد رسالة حدية لحذف سجل Zalo.",
     "deletedOnMyZalo": "تم الحذف على حسابي في Zalo",
-    "deleteChatBoundary": "حد حذف السجل"
+    "deleteChatBoundary": "حد حذف السجل",
+    "evidence": {
+      "unsupportedContent": "رسالة Zalo غير مدعومة",
+      "invalidContent": "تعذرت قراءة رسالة Zalo",
+      "unsupportedSchema": "تنسيق رسالة Zalo غير مدعوم",
+      "pending": "بانتظار التأكيد",
+      "unknown": "النتيجة غير معروفة — تحقق من الحالة",
+      "failed": "لم تُرسل الرسالة",
+      "applied": "تم الإرسال",
+      "appliedPending": "تم الإرسال، جارٍ التوفيق محليًا",
+      "needsReview": "النتيجة تحتاج إلى مراجعة",
+      "safeFailure": "تعذر إكمال عملية Zalo بأمان",
+      "unavailable": "الحالة غير متاحة. حاول مجددًا.",
+      "inspect": "تحقق من الحالة"
+    }
   },
   "actions": {
     "scrollToBottom": "التمرير إلى الأسفل",

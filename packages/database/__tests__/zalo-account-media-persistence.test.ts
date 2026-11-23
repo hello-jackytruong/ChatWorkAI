@@ -299,6 +299,52 @@ describe("media repository bounded lifecycle", () => {
       expect.objectContaining({ aliases: ["local", "provider", "new"] }),
     )
   })
+  it("retains distinct assets from different provider pieces sharing slot zero", async () => {
+    mocks.selected.push([
+      {
+        ...baseRef,
+        id: "first",
+        messageId: "canonical",
+        assetId: "asset-first",
+        slot: "0",
+      },
+      {
+        ...baseRef,
+        id: "second",
+        messageId: "echo-msg",
+        assetId: "asset-second",
+        slot: "0",
+      },
+    ])
+    await repo.bindMessageAliases(
+      {
+        ...scope,
+        conversationId: "conv",
+        messageId: "canonical",
+        aliases: ["p1", "p2"],
+        preserveAttachmentIds: true,
+      },
+      tx(),
+    )
+    expect(mocks.changes).toHaveBeenCalledTimes(2)
+    expect(
+      mocks.changes.mock.calls.every(
+        ([change]) => !("projectionState" in change),
+      ),
+    ).toBe(true)
+  })
+  it("fails closed instead of partially rebinding an oversized alias set", async () => {
+    mocks.selected.push(
+      Array.from({ length: 301 }, (_, i) => ({ ...baseRef, id: String(i) })),
+    )
+    await expect(
+      repo.bindMessageAliases(
+        { ...scope, messageId: "canonical", aliases: ["p"] },
+        tx(),
+      ),
+    ).rejects.toThrow("bounded reference limit")
+    expect(mocks.changes).not.toHaveBeenCalled()
+  })
   it("scopes reads, retries and projection CAS to workspace and account", async () => {
     await repo.list({
       ...scope,

@@ -4,7 +4,10 @@ import { zaloAccountGroupInboxService } from "@chatbotx.io/business/zalo-account
 import { zaloAccountMessageRecallService } from "@chatbotx.io/business/zalo-account/message-recall"
 import logger from "@chatbotx.io/logger"
 import { distributedLock } from "@chatbotx.io/redis"
-import { zaloAccountGroupMessageSchema } from "@chatbotx.io/sdk"
+import {
+  getZaloAccountErrorInfo,
+  zaloAccountGroupMessageSchema,
+} from "@chatbotx.io/sdk"
 import {
   enqueueIntegrationJob,
   IntegrationJobAction,
@@ -25,6 +28,7 @@ async function recoverPending(): Promise<void> {
   await zaloAccountMessageRecallService.recoverPending({
     deadline: Math.min(deadline, Date.now() + 10_000),
   })
+  await zaloAccountCanonicalSendService.recoverReconciliation()
   for (const attempt of await zaloAccountCanonicalSendService.pendingPrepared()) {
     if (Date.now() >= deadline) {
       break
@@ -35,7 +39,7 @@ async function recoverPending(): Promise<void> {
       } catch (err) {
         logger.warn(
           {
-            err,
+            errorInfo: getZaloAccountErrorInfo(err),
             workspaceId: attempt.workspaceId,
             accountId: attempt.accountId,
             attemptId: attempt.id,

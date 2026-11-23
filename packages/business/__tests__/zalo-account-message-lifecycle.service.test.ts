@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   account: vi.fn(),
+  ownAttempt: vi.fn(),
   group: vi.fn(),
   inbox: vi.fn(),
   conversation: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock("../src/platform/realtime-broadcast", () => ({
 }))
 vi.mock("@chatbotx.io/database/repositories", () => ({
   integrationZaloAccountGroupRepository: { findByProviderId: mocks.group },
+  zaloAccountSendAttemptRepository: { findByProviderMessage: mocks.ownAttempt },
   contactInboxRepository: {
     findFullByIdForWorkspace: mocks.inbox,
     findWithConversationAndContact: mocks.inbox,

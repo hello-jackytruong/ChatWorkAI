@@ -103,6 +103,8 @@ export type ZcaQrEvent =
 export type ZcaListenerPort = { start: () => void; stop: () => void }
 
 export type ZcaListenerHandlers = {
+  ownUid?: string
+  messageIntegrityEnabled?: boolean
   onEvent?: () => void
   onThreadEvent?: (event: ZaloAccountThreadEvent) => void
   onConnected?: () => void
@@ -134,7 +136,10 @@ export type ZcaApiPort = {
   sendTyping?: (threadId: string, threadType: "user" | "group") => Promise<void>
   getOwnId: () => Promise<string>
   listen: (handlers: ZcaListenerHandlers) => ZcaListenerPort
-  sendDirect: (message: ZaloAccountOutboundMessage) => Promise<{
+  sendDirect: (
+    message: ZaloAccountOutboundMessage,
+    beforeDispatch?: () => Promise<void>,
+  ) => Promise<{
     messageIds: string[]
     sentCount: number
   }>

@@ -36,11 +36,14 @@ const normalizeQrImage = (image: string) =>
 const prepareOutboundAttachment = async (attachment: ZaloAccountAttachment) => {
   try {
     return await downloadOutboundAttachment(attachment)
-  } catch (error) {
+  } catch {
     throw new ZaloAccountPreDispatchError(
-      error instanceof Error
-        ? error.message
-        : "Zalo Account attachment preparation failed",
+      "Zalo Account attachment preparation failed before sending",
+      {
+        code: "preparation_failed",
+        phase: "preparation",
+        safeAction: "new_attempt",
+      },
     )
   }
 }
@@ -215,17 +218,24 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
           )
           api.listener.on("error", () => handlers.onError?.("unknown"))
           api.listener.on("message", (message) => {
-            const normalized = normalizeProviderMessage(message)
-            if (normalized.kind === "direct") {
-              handlers.onDirectMessage(normalized.message)
-            } else if (normalized.kind === "group") {
-              handlers.onGroupMessage(normalized)
-            } else {
-              const activity = normalizeProviderGroupActivity(message)
-              if (activity) {
-                handlers.onGroupMessage(activity)
+            try {
+              const normalized = normalizeProviderMessage(message, {
+                ownUid: handlers.ownUid,
+                messageIntegrityEnabled: handlers.messageIntegrityEnabled,
+              })
+              if (normalized.kind === "direct") {
+                handlers.onDirectMessage(normalized.message)
+              } else if (normalized.kind === "group") {
+                handlers.onGroupMessage(normalized)
+              } else {
+                const activity = normalizeProviderGroupActivity(message)
+                if (activity) {
+                  handlers.onGroupMessage(activity)
+                }
+                handlers.onUnsupported(normalized.reason)
               }
-              handlers.onUnsupported(normalized.reason)
+            } catch {
+              handlers.onUnsupported("invalid_fields")
             }
           })
           api.listener.on("seen_messages", (messages) => {
@@ -331,13 +341,14 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
         stop: () => api.listener.stop(),
       }
     },
-    sendDirect: async (message) => {
+    sendDirect: async (message, beforeDispatch) => {
       const attachments: Awaited<
         ReturnType<typeof downloadOutboundAttachment>
       >[] = []
       for (const attachment of message.attachments) {
         attachments.push(await prepareOutboundAttachment(attachment))
       }
+      await beforeDispatch?.()
       const result = await api.sendMessage(
         {
           msg: message.text ?? "",

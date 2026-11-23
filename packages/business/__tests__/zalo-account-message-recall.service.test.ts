@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const m = vi.hoisted(() => ({
+  pointer: vi.fn(),
+  pointerRows: vi.fn(),
   reconcile: vi.fn(),
   attempt: vi.fn(),
   media: vi.fn(),
@@ -39,6 +41,8 @@ vi.mock("@chatbotx.io/database/repositories", () => ({
   zaloAccountMessageRecallRepository: {
     recordOriginalObserved: m.observed,
     withTargetLock: m.lock,
+    bindPointer: m.pointer,
+    findForMessages: m.pointerRows,
     findTarget: m.find,
     findTargets: m.batch,
     markApplied: m.applied,
@@ -113,6 +117,9 @@ const row = {
 beforeEach(() => {
   vi.clearAllMocks()
   m.media.mockResolvedValue([])
+  m.pointerRows.mockResolvedValue([])
+  m.attempt.mockResolvedValue(undefined)
+  m.reconcile.mockResolvedValue({ message: { id: "m" }, removedEchoes: [] })
   m.account.mockResolvedValue({ id: "a", inboxId: "in" })
   m.conversation.mockResolvedValue({
     id: "c",
@@ -207,6 +214,7 @@ it("denies stale ordinary attachment tokens for a pending Zalo recall", async ()
       workspaceId: "w",
       messageId: "m",
       messageCreatedAt: input.messageCreatedAt,
+      providerMessageIds: ["p"],
     }),
   ).toBe(false)
   expect(m.head).not.toHaveBeenCalled()
@@ -412,6 +420,7 @@ describe("retained echo media aliases", () => {
     m.attempt.mockResolvedValue({
       messageId: "m",
       messageCreatedAt: input.messageCreatedAt,
+      providerMessageIds: ["p"],
     })
     m.message.mockResolvedValue({
       id: "m",
@@ -433,6 +442,7 @@ describe("retained echo media aliases", () => {
       conversationId: "c",
       messageCreatedAt: input.messageCreatedAt,
       aliases: ["p"],
+      preserveAttachmentIds: true,
     })
     expect(m.bindMediaAliases.mock.invocationCallOrder[0]).toBeLessThan(
       m.reconcile.mock.invocationCallOrder[0] as number,
@@ -446,4 +456,127 @@ describe("retained echo media aliases", () => {
     expect(m.reconcile).not.toHaveBeenCalled()
     delete process.env.ZALO_ACCOUNT_MEDIA_STORAGE_ENABLED
   })
+})
+
+describe("secondary outgoing aliases", () => {
+  const persist = vi.fn()
+  const ingest = () =>
+    service.persistOriginal({
+      inboxId: "in",
+      message: {
+        workspaceId: "w",
+        conversationId: "c",
+        contactInboxId: "ci",
+        sourceId: "za:a:user:u:p",
+        messageType: "outgoing",
+        id: "echo",
+        createdAt: input.messageCreatedAt,
+      } as never,
+      attachments: [],
+      persist,
+    })
+  beforeEach(() => {
+    m.attempt.mockResolvedValue({
+      messageId: "m",
+      messageCreatedAt: input.messageCreatedAt,
+      providerMessageIds: ["primary", "p"],
+    })
+    m.message.mockResolvedValue({
+      id: "m",
+      createdAt: input.messageCreatedAt,
+      conversationId: "c",
+      contactInboxId: "ci",
+      sourceId: "za:a:user:u:primary",
+      messageType: "outgoing",
+      attachments: [],
+    })
+    persist.mockReset()
+  })
+  it("keeps the primary source and uses the alias-aware reparenting path", async () => {
+    expect(await ingest()).toMatchObject({ isNew: false, message: { id: "m" } })
+    expect(m.reconcile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: "za:a:user:u:primary",
+        aliasSources: ["za:a:user:u:primary", "za:a:user:u:p"],
+      }),
+    )
+    expect(persist).not.toHaveBeenCalled()
+  })
+  it("applies an undo received before the secondary echo to the canonical primary without resurrection", async () => {
+    m.find.mockResolvedValue(row)
+    m.pointer.mockResolvedValue(row)
+    m.observed.mockResolvedValue(row)
+    m.message.mockResolvedValue({
+      ...(await m.message()),
+      deletedAt: new Date(),
+    })
+    expect(await ingest()).toMatchObject({
+      isNew: false,
+      message: { id: "m", attachments: [] },
+    })
+    expect(m.reconcile).not.toHaveBeenCalled()
+    expect(m.exact).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: "za:a:user:u:primary", id: "m" }),
+    )
+    expect(m.createStable).not.toHaveBeenCalled()
+    expect(persist).not.toHaveBeenCalled()
+  })
+  it("refuses to recreate a hard-purged canonical message from its secondary echo", async () => {
+    m.message.mockResolvedValue(null)
+    await expect(ingest()).rejects.toThrow()
+    expect(m.createStable).not.toHaveBeenCalled()
+    expect(persist).not.toHaveBeenCalled()
+  })
+  it("uses an exact canonical pointer to show secondary recall lifecycle in saved content", async () => {
+    m.pointerRows.mockResolvedValue([row])
+    expect(await service.getSavedContent(input)).toMatchObject({
+      lifecycle: { recalled: true },
+    })
+  })
+  it("repairs a secondary recall using the exact canonical primary source", async () => {
+    m.find.mockResolvedValue(row)
+    await service.repair(row as never)
+    expect(m.exact).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: "za:a:user:u:primary", id: "m" }),
+    )
+  })
+})
+
+it("keeps ambiguous provider slot-zero originals as distinct saved resources", async () => {
+  const entry = (id: string, key: string) => ({
+    reference: {
+      id,
+      workspaceId: "w",
+      accountId: "a",
+      ownerKind: "message",
+      messageId: "m",
+      messageCreatedAt: input.messageCreatedAt,
+      conversationId: "c",
+      attachmentId: null,
+      role: "original",
+      slot: "0",
+    },
+    asset: {
+      state: "stored",
+      deletionPhase: "active",
+      objectKey: `workspace/w/zalo-account/a/${key}`,
+      kind: "image",
+      mimeType: "image/jpeg",
+      size: 12,
+    },
+  })
+  m.media.mockResolvedValue([entry("r1", "one"), entry("r2", "two")])
+  const saved = await service.getSavedContent(input)
+  expect(saved.attachments.map((a) => a.id)).toEqual([
+    "file",
+    "media:r1",
+    "media:r2",
+  ])
+  expect(
+    await service.getSavedAttachment({ ...input, attachmentId: "file" }),
+  ).toMatchObject({ availability: "not_archived" })
+  m.head.mockResolvedValue({})
+  m.sign.mockResolvedValue("signed")
+  await service.getSavedAttachment({ ...input, attachmentId: "media:r2" })
+  expect(m.sign).toHaveBeenCalledWith("workspace/w/zalo-account/a/two", 60)
 })

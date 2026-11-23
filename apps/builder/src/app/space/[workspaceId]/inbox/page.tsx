@@ -11,6 +11,8 @@ import {
   buildContactPermissionScope,
   type ContactPermissionScope,
 } from "@/features/contacts/permissions"
+import { ZaloInspectPermissionProvider } from "@/features/zalo-accounts/components/zalo-inspect-permission"
+import { hasWorkspacePermission } from "@/lib/auth/permission-routes"
 import { requireContactsAccess } from "@/lib/auth/require-workspace-permission"
 import { getCurrentUserAndTargetWorkspace } from "@/lib/auth/utils"
 import { logger } from "@/lib/log"
@@ -113,12 +115,19 @@ async function InboxContent({
   })
 
   return (
-    <ChatStoreProvider initialState={initialState ?? undefined}>
-      <ChatLayout
-        canViewEmailAndPhone={canViewEmailAndPhone}
-        layout={layout}
-        workspaceId={workspaceId}
-      />
-    </ChatStoreProvider>
+    <ZaloInspectPermissionProvider
+      allowed={
+        !!memberScope.member?.permissions &&
+        hasWorkspacePermission(memberScope.member.permissions, "superAdmin")
+      }
+    >
+      <ChatStoreProvider initialState={initialState ?? undefined}>
+        <ChatLayout
+          canViewEmailAndPhone={canViewEmailAndPhone}
+          layout={layout}
+          workspaceId={workspaceId}
+        />
+      </ChatStoreProvider>
+    </ZaloInspectPermissionProvider>
   )
 }

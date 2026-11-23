@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Xóa lịch sử Zalo đến tin nhắn đã chọn? Bản lưu trong CRM vẫn được giữ để tracking.",
     "deleteChatNoBoundary": "Chưa có mốc tin nhắn để xóa lịch sử Zalo.",
     "deletedOnMyZalo": "Đã xóa phía mình trên Zalo",
-    "deleteChatBoundary": "Mốc xóa lịch sử"
+    "deleteChatBoundary": "Mốc xóa lịch sử",
+    "evidence": {
+      "unsupportedContent": "Tin nhắn Zalo chưa được hỗ trợ",
+      "invalidContent": "Không thể đọc tin nhắn Zalo",
+      "unsupportedSchema": "Định dạng tin nhắn Zalo chưa được hỗ trợ",
+      "pending": "Đang xác nhận",
+      "unknown": "Chưa xác định kết quả — kiểm tra trạng thái",
+      "failed": "Chưa gửi được",
+      "applied": "Đã gửi",
+      "appliedPending": "Đã gửi, đang đối soát",
+      "needsReview": "Kết quả cần kiểm tra",
+      "safeFailure": "Không thể hoàn tất thao tác Zalo an toàn",
+      "unavailable": "Chưa có trạng thái. Hãy kiểm tra lại.",
+      "inspect": "Kiểm tra trạng thái"
+    }
   },
   "actions": {
     "scrollToBottom": "Cuộn xuống cuối",

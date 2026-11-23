@@ -99,6 +99,11 @@ export const zaloAccountGroupInboxRepository = {
     accountPolicyEpoch: number
     groupPolicyEpoch: number
     message: ZaloAccountGroupMessage
+    beforeMessageReconcile?: (pointer: {
+      id: string
+      createdAt: Date
+      providerMessageIds: string[]
+    }) => Promise<void>
     beforeMessageWrite?: (pointer: {
       id: string
       createdAt: Date
@@ -185,7 +190,7 @@ export const zaloAccountGroupInboxRepository = {
     }
     // Persist media intent/aliases in MAIN before shard reconciliation or payload clearing.
     // This also repairs an interrupted capture when a provider event is replayed.
-    if (input.beforeMessageWrite) {
+    if (input.beforeMessageWrite || input.beforeMessageReconcile) {
       const [pointer] = await db
         .select({
           id: zaloAccountMessageIdentityModel.messageId,
@@ -195,7 +200,13 @@ export const zaloAccountGroupInboxRepository = {
         .where(identityWhere(scope))
         .limit(1)
       if (pointer) {
-        await input.beforeMessageWrite(pointer)
+        await input.beforeMessageWrite?.(pointer)
+        await input.beforeMessageReconcile?.({
+          ...pointer,
+          providerMessageIds: attempt?.providerMessageIds ?? [
+            input.message.providerMessageId,
+          ],
+        })
       }
     }
     return await db.transaction(async (tx) => {
@@ -248,7 +259,15 @@ export const zaloAccountGroupInboxRepository = {
           workspaceId: input.workspaceId,
           conversationId: input.conversationId,
           contactInboxId: input.contactInboxId,
-          sourceId: `za:${encodeURIComponent(input.accountId)}:group:${encodeURIComponent(input.message.threadId)}:${encodeURIComponent(input.message.providerMessageId)}`,
+          sourceId: `za:${encodeURIComponent(input.accountId)}:group:${encodeURIComponent(input.message.threadId)}:${encodeURIComponent(attempt?.providerMessageIds[0] ?? input.message.providerMessageId)}`,
+          ...(attempt
+            ? {
+                aliasSources: attempt.providerMessageIds.map(
+                  (id) =>
+                    `za:${encodeURIComponent(input.accountId)}:group:${encodeURIComponent(input.message.threadId)}:${encodeURIComponent(id)}`,
+                ),
+              }
+            : {}),
           contentAttributesOverlay: {
             zaloAccount: { group: identity.payload },
           },
@@ -271,14 +290,17 @@ export const zaloAccountGroupInboxRepository = {
           tx,
         })
       }
+      if (!message && localMessage) {
+        throw new Error("Zalo canonical group message no longer exists")
+      }
       const recalled = !!(recall?.recallReceivedAt || identity.undoneAt)
-      if (message && recalled && recall) {
+      if (message && recalled && recall && !localMessage) {
         const payload = identity.payload as ZaloAccountGroupMessage
         message = await repo.fillZaloAccountOriginalExact({
           workspaceId: input.workspaceId,
           conversationId: input.conversationId,
           contactInboxId: input.contactInboxId,
-          sourceId: `za:${encodeURIComponent(input.accountId)}:group:${encodeURIComponent(input.message.threadId)}:${encodeURIComponent(input.message.providerMessageId)}`,
+          sourceId: `za:${encodeURIComponent(input.accountId)}:group:${encodeURIComponent(input.message.threadId)}:${encodeURIComponent(localMessage ? (attempt?.providerMessageIds[0] ?? input.message.providerMessageId) : input.message.providerMessageId)}`,
           id: message.id,
           createdAt: message.createdAt,
           message: {
@@ -355,7 +377,7 @@ export const zaloAccountGroupInboxRepository = {
             workspaceId: input.workspaceId,
             conversationId: input.conversationId,
             contactInboxId: input.contactInboxId,
-            sourceId: `za:${encodeURIComponent(input.accountId)}:group:${encodeURIComponent(input.message.threadId)}:${encodeURIComponent(input.message.providerMessageId)}`,
+            sourceId: `za:${encodeURIComponent(input.accountId)}:group:${encodeURIComponent(input.message.threadId)}:${encodeURIComponent(localMessage ? (attempt?.providerMessageIds[0] ?? input.message.providerMessageId) : input.message.providerMessageId)}`,
             id: message.id,
             createdAt: message.createdAt,
             lifecycle: {
@@ -399,6 +421,40 @@ export const zaloAccountGroupInboxRepository = {
         recalled,
       }
     })
+  },
+  async rebindConfirmed(input: {
+    workspaceId: string
+    accountId: string
+    groupId: string
+    providerMessageIds: string[]
+    messageId: string
+    messageCreatedAt: Date
+  }) {
+    if (
+      !input.providerMessageIds.length ||
+      input.providerMessageIds.length > 10
+    ) {
+      return
+    }
+    await db
+      .update(zaloAccountMessageIdentityModel)
+      .set({
+        messageId: input.messageId,
+        messageCreatedAt: input.messageCreatedAt,
+        // Published rows keep their delivery timestamp and never regain payload.
+        payload: sql`CASE WHEN ${zaloAccountMessageIdentityModel.publishedAt} IS NOT NULL THEN NULL ELSE ${zaloAccountMessageIdentityModel.payload} END`,
+      })
+      .where(
+        and(
+          eq(zaloAccountMessageIdentityModel.workspaceId, input.workspaceId),
+          eq(zaloAccountMessageIdentityModel.accountId, input.accountId),
+          eq(zaloAccountMessageIdentityModel.groupId, input.groupId),
+          inArray(
+            zaloAccountMessageIdentityModel.providerMessageId,
+            input.providerMessageIds,
+          ),
+        ),
+      )
   },
   async markPublished(input: Scope) {
     await db

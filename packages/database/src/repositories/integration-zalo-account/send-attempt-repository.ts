@@ -1,3 +1,4 @@
+import type { ZaloAccountErrorInfo } from "@chatbotx.io/sdk"
 import {
   and,
   type DatabaseClient,
@@ -170,10 +171,27 @@ export const zaloAccountSendAttemptRepository = {
       return rows
     })
   },
-  async failPreparation(input: Scope) {
+  async failPreparation(input: Scope & { sendError?: ZaloAccountErrorInfo }) {
     await db
       .update(zaloAccountSendAttemptModel)
-      .set({ status: "failed", preparedPayload: null, updatedAt: new Date() })
+      .set({
+        status: "failed",
+        preparedPayload: null,
+        updatedAt: new Date(),
+        reconciliation: {
+          version: 1,
+          state: "not_required",
+          revision: 0,
+          attempts: 0,
+          nextAttemptAt: new Date().toISOString(),
+          lastErrorCode: null,
+          sendError: input.sendError ?? {
+            code: "preparation_failed",
+            phase: "preparation",
+            safeAction: "new_attempt",
+          },
+        },
+      })
       .where(
         and(
           where(input),
@@ -195,22 +213,247 @@ export const zaloAccountSendAttemptRepository = {
     input: Scope & {
       status: "applied" | "failed" | "unknown"
       providerMessageIds?: string[]
+      sendError?: ZaloAccountErrorInfo
+    },
+  ) {
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL lock_timeout = '500ms'`)
+      await tx.execute(sql`SET LOCAL statement_timeout = '1s'`)
+
+      const [row] = await tx
+        .select()
+        .from(zaloAccountSendAttemptModel)
+        .where(where(input))
+        .limit(1)
+        .for("update")
+      if (!row) {
+        throw new Error("Zalo send attempt disappeared")
+      }
+      if (input.status === "applied") {
+        const ids = [...new Set(input.providerMessageIds ?? [])]
+        if (
+          !ids.length ||
+          ids.length > 10 ||
+          ids.some((id) => !id || id.length > 200)
+        ) {
+          throw new Error("Invalid Zalo acknowledgement IDs")
+        }
+        if (row.status === "applied") {
+          const conflict =
+            JSON.stringify(row.providerMessageIds) !== JSON.stringify(ids)
+          if (!conflict) {
+            return { row, conflict: false }
+          }
+          const previous = row.reconciliation
+          const [winner] = await tx
+            .update(zaloAccountSendAttemptModel)
+            .set({
+              reconciliation: {
+                version: 1,
+                state: "needs_review",
+                revision: (previous?.revision ?? 0) + 1,
+                attempts: previous?.attempts ?? 0,
+                nextAttemptAt: new Date().toISOString(),
+                lastErrorCode: "reconciliation_conflict",
+                sendError: {
+                  code: "reconciliation_conflict",
+                  phase: "reconciliation",
+                  safeAction: "inspect",
+                },
+              },
+              updatedAt: new Date(),
+            })
+            .where(where(input))
+            .returning()
+          if (!winner) {
+            throw new Error("Zalo acknowledgement disappeared")
+          }
+          return { row: winner, conflict: true }
+        }
+        const [applied] = await tx
+          .update(zaloAccountSendAttemptModel)
+          .set({
+            status: "applied",
+            preparedPayload: null,
+            providerMessageIds: ids,
+            updatedAt: new Date(),
+            reconciliation: {
+              version: 1,
+              state:
+                row.messageId && row.messageCreatedAt
+                  ? "pending"
+                  : "not_required",
+              revision: (row.reconciliation?.revision ?? 0) + 1,
+              attempts: 0,
+              nextAttemptAt: new Date().toISOString(),
+              lastErrorCode: null,
+            },
+          })
+          .where(where(input))
+          .returning()
+        if (!applied) {
+          throw new Error("Zalo acknowledgement disappeared")
+        }
+        return { row: applied, conflict: false }
+      }
+      if (row.status === "applied" || row.status === "failed") {
+        return { row, conflict: false }
+      }
+      const [settled] = await tx
+        .update(zaloAccountSendAttemptModel)
+        .set({
+          status: input.status,
+          preparedPayload: null,
+          updatedAt: new Date(),
+          reconciliation: {
+            version: 1,
+            state: "not_required",
+            revision: (row.reconciliation?.revision ?? 0) + 1,
+            attempts: 0,
+            nextAttemptAt: new Date().toISOString(),
+            lastErrorCode: null,
+            sendError: input.sendError,
+          },
+        })
+        .where(where(input))
+        .returning()
+      if (!settled) {
+        throw new Error("Zalo acknowledgement disappeared")
+      }
+      return { row: settled, conflict: false }
+    })
+  },
+  async findByMessage(input: {
+    workspaceId: string
+    accountId: string
+    messageId: string
+    messageCreatedAt: Date
+  }) {
+    return await db.query.zaloAccountSendAttemptModel.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        messageId: input.messageId,
+        messageCreatedAt: { eq: input.messageCreatedAt },
+      },
+    })
+  },
+  async observeClientId(
+    input: Scope & { providerMessageId: string; clientMessageId: string },
+  ) {
+    if (!input.clientMessageId || input.clientMessageId.length > 200) {
+      return
+    }
+    await db.transaction(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(zaloAccountSendAttemptModel)
+        .where(where(input))
+        .limit(1)
+        .for("update")
+      if (
+        row?.status !== "applied" ||
+        !row.providerMessageIds.includes(input.providerMessageId) ||
+        row.providerClientMessageIds.includes(input.clientMessageId) ||
+        row.providerClientMessageIds.length >= 10
+      ) {
+        return
+      }
+      await tx
+        .update(zaloAccountSendAttemptModel)
+        .set({
+          providerClientMessageIds: [
+            ...row.providerClientMessageIds,
+            input.clientMessageId,
+          ],
+        })
+        .where(where(input))
+    })
+  },
+  async claimReconciliation(input: { limit: number; scope?: Scope }) {
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL lock_timeout = '500ms'`)
+      await tx.execute(sql`SET LOCAL statement_timeout = '1s'`)
+
+      const rows = await tx
+        .select()
+        .from(zaloAccountSendAttemptModel)
+        .where(
+          and(
+            input.scope ? where(input.scope) : undefined,
+            eq(zaloAccountSendAttemptModel.status, "applied"),
+            sql`${zaloAccountSendAttemptModel.reconciliation}->>'state' = 'pending'`,
+            sql`${zaloAccountSendAttemptModel.reconciliation}->>'nextAttemptAt' <= ${new Date().toISOString()}`,
+          ),
+        )
+        .orderBy(
+          sql`${zaloAccountSendAttemptModel.reconciliation}->>'nextAttemptAt'`,
+          zaloAccountSendAttemptModel.id,
+        )
+        .limit(Math.max(1, Math.min(input.limit, 20)))
+        .for("update", { skipLocked: true })
+      const claimed: typeof rows = []
+      for (const row of rows) {
+        const previous = row.reconciliation
+        if (!previous) {
+          continue
+        }
+        if (previous.attempts >= 3) {
+          const [review] = await tx
+            .update(zaloAccountSendAttemptModel)
+            .set({
+              reconciliation: {
+                ...previous,
+                state: "needs_review",
+                revision: previous.revision + 1,
+                lastErrorCode: "reconciliation_conflict",
+              },
+            })
+            .where(where(row))
+            .returning()
+          if (review) {
+            claimed.push(review)
+          }
+          continue
+        }
+        const reconciliation = {
+          ...previous,
+          revision: previous.revision + 1,
+          attempts: Math.min(previous.attempts + 1, 3),
+          nextAttemptAt: new Date(Date.now() + 30_000).toISOString(),
+        }
+        const [updated] = await tx
+          .update(zaloAccountSendAttemptModel)
+          .set({ reconciliation })
+          .where(where(row))
+          .returning()
+        if (updated) {
+          claimed.push(updated)
+        }
+      }
+      return claimed
+    })
+  },
+  async finishReconciliation(
+    input: Scope & {
+      revision: number
+      providerMessageIds: string[]
+      success: boolean
+      needsReview?: boolean
     },
   ) {
     await db
       .update(zaloAccountSendAttemptModel)
       .set({
-        status: input.status,
-        preparedPayload: null,
-        ...(input.providerMessageIds
-          ? { providerMessageIds: input.providerMessageIds }
-          : {}),
+        reconciliation: sql`${zaloAccountSendAttemptModel.reconciliation} || jsonb_build_object('revision', (${zaloAccountSendAttemptModel.reconciliation}->>'revision')::int + 1, 'state', CASE WHEN ${input.success} THEN 'completed' WHEN ${!!input.needsReview} OR (${zaloAccountSendAttemptModel.reconciliation}->>'attempts')::int >= 3 THEN 'needs_review' ELSE 'pending' END, 'lastErrorCode', CASE WHEN ${input.success} THEN NULL ELSE 'reconciliation_conflict' END, 'sendError', CASE WHEN ${input.success} THEN NULL ELSE jsonb_build_object('code', 'reconciliation_conflict', 'phase', 'reconciliation', 'safeAction', 'inspect') END)`,
         updatedAt: new Date(),
       })
       .where(
         and(
           where(input),
-          inArray(zaloAccountSendAttemptModel.status, ["pending", "unknown"]),
+          sql`${zaloAccountSendAttemptModel.reconciliation}->>'state' = 'pending'`,
+          sql`(${zaloAccountSendAttemptModel.reconciliation}->>'revision')::int = ${input.revision}`,
+          sql`${zaloAccountSendAttemptModel.providerMessageIds} = ${JSON.stringify(input.providerMessageIds)}::jsonb`,
         ),
       )
   },
@@ -226,6 +469,7 @@ export const zaloAccountSendAttemptRepository = {
       .from(zaloAccountSendAttemptModel)
       .where(
         and(
+          eq(zaloAccountSendAttemptModel.status, "applied"),
           eq(zaloAccountSendAttemptModel.workspaceId, input.workspaceId),
           eq(zaloAccountSendAttemptModel.accountId, input.accountId),
           eq(zaloAccountSendAttemptModel.threadType, input.threadType),

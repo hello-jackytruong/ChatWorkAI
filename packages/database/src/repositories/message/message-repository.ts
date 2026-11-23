@@ -62,10 +62,12 @@ export interface CreateMessageResult {
 }
 
 export interface ReconcileOutgoingSourceIdParams {
+  aliasSources?: string[]
   contactInboxId: string
   contentAttributesOverlay?: Record<string, unknown>
   conversationId: string
   createdAt: Date
+  echoAddresses?: Array<{ id: string; createdAt: Date }>
   id: string
   sourceId: string
   workspaceId: string
@@ -73,6 +75,7 @@ export interface ReconcileOutgoingSourceIdParams {
 
 export interface ReconcileOutgoingSourceIdResult {
   message: { id: string } | null
+  needsReview?: boolean
   removedEchoes: Array<{ id: string; createdAt: Date }>
 }
 
@@ -676,4 +679,14 @@ export interface IMessageRepository {
     workspaceId: string,
     newText: string,
   ): Promise<{ conversationId: string; id: string } | null>
+
+  /** Atomically merges Zalo send evidence unless a newer revision is stored. */
+  updateZaloSendAttemptEvidence(params: {
+    workspaceId: string
+    accountId: string
+    id: string
+    createdAt: Date
+    evidence: Record<string, unknown>
+    revision: number
+  }): Promise<{ id: string } | null>
 }

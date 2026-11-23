@@ -101,6 +101,8 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P0 · 4. Toàn vẹn tin nhắn và khả năng phục hồi
 
+**Cập nhật triển khai 2026-11-23:** đã thêm metadata có version, placeholder hữu hạn, đối soát nhiều provider ID với primary ổn định, repair local không gửi lại, admission và lỗi an toàn, API/Inbox xem trạng thái theo yêu cầu. Xem [bằng chứng nhánh nguồn](../plans/261123-0500-zalo-account-message-integrity-recovery-tdd/reports/implementation.md) và [đối soát tích hợp](../plans/261123-zalo-account-p0-integration/reports/integration.md). Cờ producer mặc định tắt; giữ checkbox hoàn thiện chưa tick đến khi đủ gate DB, coverage và live provider; chưa áp migration.
+
 - [x] Canonical send, command ID, send-attempt và trạng thái `pending / applied / failed / unknown`.
 - [x] Chống tự gửi lại khi kết quả gửi chưa xác định.
 - [ ] Mọi loại gửi mới đều đi qua cùng cơ chế canonical send.

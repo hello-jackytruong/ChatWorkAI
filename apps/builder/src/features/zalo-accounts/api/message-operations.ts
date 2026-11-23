@@ -10,7 +10,10 @@ import {
   possibleErrorsOnMutatingResource,
   possibleIdempotencyErrors,
 } from "@/lib/orpc/orpc-error-helper"
-import { assertConversationAccessForCaller } from "@/lib/public-api/member-scope"
+import {
+  assertConversationAccessForCaller,
+  conversationScopeForCaller,
+} from "@/lib/public-api/member-scope"
 import { workspaceTokenAuthAPIForScope } from "@/orpc"
 import {
   zaloMessageCommand,
@@ -54,9 +57,10 @@ export const zaloAccountMessageOperations = {
     .errors(possibleErrorsOnFindingResource)
     .handler(async ({ context, input }) => {
       await assertConversationAccessForCaller(context, input.conversationId)
-      return await zaloAccountMessageOperationsService.getCapabilities(
-        targetOf(context.workspace.id, input),
-      )
+      return await zaloAccountMessageOperationsService.getCapabilities({
+        ...targetOf(context.workspace.id, input),
+        scope: await conversationScopeForCaller(context),
+      })
     }),
   getSavedMessageContent: api
     .route({
@@ -74,6 +78,7 @@ export const zaloAccountMessageOperations = {
       await assertConversationAccessForCaller(context, input.conversationId)
       return await zaloAccountMessageRecallService.getSavedContent({
         ...targetOf(context.workspace.id, input),
+        scope: await conversationScopeForCaller(context),
         actorUserId: context.user?.id,
       })
     }),
@@ -103,6 +108,7 @@ export const zaloAccountMessageOperations = {
       await assertConversationAccessForCaller(context, input.conversationId)
       return await zaloAccountMessageRecallService.getSavedAttachment({
         ...targetOf(context.workspace.id, input),
+        scope: await conversationScopeForCaller(context),
         attachmentId: input.attachmentId,
         actorUserId: context.user?.id,
       })
@@ -124,6 +130,7 @@ export const zaloAccountMessageOperations = {
       await assertConversationAccessForCaller(context, input.conversationId)
       await zaloAccountMessageRecallService.hideLocally({
         ...targetOf(context.workspace.id, input),
+        scope: await conversationScopeForCaller(context),
         actorUserId: context.user?.id,
       })
       return { success: true }
@@ -145,6 +152,7 @@ export const zaloAccountMessageOperations = {
       await assertConversationAccessForCaller(context, input.conversationId)
       return await zaloAccountMessageOperationsService.recall({
         ...targetOf(context.workspace.id, input),
+        scope: await conversationScopeForCaller(context),
         commandId: input.commandId,
       })
     }),
@@ -165,6 +173,7 @@ export const zaloAccountMessageOperations = {
       await assertConversationAccessForCaller(context, input.conversationId)
       return await zaloAccountMessageOperationsService.deleteOnZalo({
         ...targetOf(context.workspace.id, input),
+        scope: await conversationScopeForCaller(context),
         commandId: input.commandId,
       })
     }),
@@ -202,6 +211,7 @@ export const zaloAccountMessageOperations = {
       return await zaloAccountMessageOperationsService.deleteChatOnZalo({
         ...input,
         workspaceId: context.workspace.id,
+        scope: await conversationScopeForCaller(context),
       })
     }),
   getMessageOperation: api
@@ -228,6 +238,7 @@ export const zaloAccountMessageOperations = {
         ...input,
         operationId: input.attemptId,
         workspaceId: context.workspace.id,
+        scope: await conversationScopeForCaller(context),
       })
     }),
 }

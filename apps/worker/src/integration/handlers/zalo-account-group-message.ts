@@ -13,6 +13,9 @@ export const receiveZaloAccountGroupMessage = async (
   await zaloAccountGroupInboxService.receive(
     input,
     async ({ message, conversation, contactInbox }) => {
+      if (input.message.unsupported) {
+        return
+      }
       const audience = await zaloAccountGroupService.createAudience({
         workspaceId: input.workspaceId,
         contactInboxId: contactInbox.id,

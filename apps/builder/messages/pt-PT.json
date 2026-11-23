@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Eliminar o histórico do Zalo até à mensagem selecionada? O histórico guardado no CRM mantém-se disponível para acompanhamento.",
     "deleteChatNoBoundary": "Não existe uma mensagem limite para eliminar o histórico do Zalo.",
     "deletedOnMyZalo": "Eliminado no meu Zalo",
-    "deleteChatBoundary": "Limite de eliminação do histórico"
+    "deleteChatBoundary": "Limite de eliminação do histórico",
+    "evidence": {
+      "unsupportedContent": "Mensagem do Zalo não suportada",
+      "invalidContent": "Não foi possível ler a mensagem do Zalo",
+      "unsupportedSchema": "Formato de mensagem do Zalo não suportado",
+      "pending": "A aguardar confirmação",
+      "unknown": "Resultado desconhecido — verificar estado",
+      "failed": "A mensagem não foi enviada",
+      "applied": "Enviada",
+      "appliedPending": "Enviada, a reconciliar localmente",
+      "needsReview": "O resultado necessita de revisão",
+      "safeFailure": "Não foi possível concluir a operação do Zalo em segurança",
+      "unavailable": "Estado indisponível. Tente novamente.",
+      "inspect": "Verificar estado"
+    }
   },
   "actions": {
     "scrollToBottom": "Deslocar para o fim",

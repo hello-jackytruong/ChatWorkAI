@@ -703,3 +703,7 @@ test("retained quote shows a safe recall marker without hiding the reply body", 
   expect(el.textContent).toContain("reply body")
   expect(el.querySelector("blockquote")?.textContent).toContain("recalled")
 })
+
+vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
+  inspectZaloAccountMessageAction: vi.fn(),
+}))

@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Ta bort Zalo-historik till och med det valda meddelandet? Den sparade CRM-historiken finns kvar för uppföljning.",
     "deleteChatNoBoundary": "Ingen meddelandegräns finns för att ta bort Zalo-historik.",
     "deletedOnMyZalo": "Borttaget på min Zalo",
-    "deleteChatBoundary": "Gräns för borttagning av historik"
+    "deleteChatBoundary": "Gräns för borttagning av historik",
+    "evidence": {
+      "unsupportedContent": "Zalo-meddelandet stöds inte",
+      "invalidContent": "Zalo-meddelandet kunde inte läsas",
+      "unsupportedSchema": "Zalo-meddelandeformatet stöds inte",
+      "pending": "Väntar på bekräftelse",
+      "unknown": "Okänt resultat — kontrollera status",
+      "failed": "Meddelandet skickades inte",
+      "applied": "Skickat",
+      "appliedPending": "Skickat, stämmer av lokalt",
+      "needsReview": "Resultatet behöver granskas",
+      "safeFailure": "Zalo-åtgärden kunde inte slutföras säkert",
+      "unavailable": "Status är inte tillgänglig. Försök igen.",
+      "inspect": "Kontrollera status"
+    }
   },
   "QRCode": {
     "description": "Dela den här koden så att personer öppnar din spårningslänk.",

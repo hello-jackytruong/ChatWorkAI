@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   pending: vi.fn(),
   recall: vi.fn(),
+  reconciliation: vi.fn(),
   enqueue: vi.fn(),
   guard: vi.fn(async (_ws, fn) => await fn()),
   lock: vi.fn(async ({ fn }: { fn: () => Promise<unknown> }) => await fn()),
@@ -20,6 +21,7 @@ vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
   zaloAccountCanonicalSendService: {
     pendingPrepared: async () => [],
     recoverPrepared: vi.fn(),
+    recoverReconciliation: mocks.reconciliation,
   },
 }))
 vi.mock("@chatbotx.io/business", () => ({ withBlockedOwnerGuard: mocks.guard }))
@@ -93,4 +95,16 @@ it("gives recall recovery the first ten seconds inside the shared deadline", asy
     mocks.pending.mock.invocationCallOrder[0] ?? Number.NaN,
   )
   vi.restoreAllMocks()
+})
+
+it("recovers local reconciliation after recall without replaying provider sends", async () => {
+  mocks.pending.mockResolvedValue([])
+  await recoverZaloGroupInbox()
+  expect(mocks.reconciliation).toHaveBeenCalledOnce()
+  expect(mocks.recall.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.reconciliation.mock.invocationCallOrder[0] ?? Number.NaN,
+  )
+  expect(mocks.reconciliation.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.pending.mock.invocationCallOrder[0] ?? Number.NaN,
+  )
 })

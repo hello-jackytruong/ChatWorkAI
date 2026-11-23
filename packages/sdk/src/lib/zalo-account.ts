@@ -283,9 +283,144 @@ export const isZaloAccountSecretEventAadValid = (
   )
 }
 
+export const zaloAccountErrorInfoSchema = z
+  .object({
+    code: z.enum([
+      "admission_paused",
+      "rate_limited",
+      "admission_unavailable",
+      "preparation_failed",
+      "provider_failed",
+      "pre_dispatch_failed",
+      "send_unknown",
+      "reconciliation_conflict",
+      "receive_invalid",
+      "internal_error",
+    ]),
+    phase: z.enum([
+      "validation",
+      "preparation",
+      "admission",
+      "dispatch",
+      "reconciliation",
+      "receive",
+    ]),
+    safeAction: z.enum(["inspect", "retry_read", "new_attempt", "none"]),
+    retryAfterMs: z.number().int().positive().max(86_400_000).optional(),
+  })
+  .strict()
+export type ZaloAccountErrorInfo = z.infer<typeof zaloAccountErrorInfoSchema>
+
 /** The provider has not been called; retry policy may distinguish this from an ambiguous write. */
 export class ZaloAccountPreDispatchError extends Error {
   override name = "ZaloAccountPreDispatchError"
+  readonly errorInfo?: ZaloAccountErrorInfo
+  constructor(message: string, errorInfo?: ZaloAccountErrorInfo) {
+    super(message)
+    this.errorInfo = errorInfo
+  }
+}
+
+/** Projects only bounded machine-readable evidence, never an arbitrary provider error. */
+export function getZaloAccountErrorInfo(error: unknown): ZaloAccountErrorInfo {
+  const record =
+    error && typeof error === "object"
+      ? (error as Record<string, unknown>)
+      : undefined
+  const parsed = zaloAccountErrorInfoSchema.safeParse(
+    record?.errorInfo ?? error,
+  )
+  if (parsed.success) {
+    return parsed.data
+  }
+  if (record?.code === "zaloSendUnknown") {
+    return { code: "send_unknown", phase: "dispatch", safeAction: "inspect" }
+  }
+  if (error instanceof ZaloAccountPreDispatchError) {
+    return {
+      code: "pre_dispatch_failed",
+      phase: "validation",
+      safeAction: "new_attempt",
+    }
+  }
+  return { code: "internal_error", phase: "dispatch", safeAction: "inspect" }
+}
+
+export function getZaloAccountErrorMessage(info: ZaloAccountErrorInfo): string {
+  const messages: Record<ZaloAccountErrorInfo["code"], string> = {
+    admission_paused: "Zalo Account sends are temporarily paused.",
+    rate_limited: "Zalo Account send limit reached. Wait before a new attempt.",
+    admission_unavailable: "Zalo Account send admission is unavailable.",
+    preparation_failed:
+      "Zalo Account attachment preparation failed before sending.",
+    provider_failed: "Zalo Account could not complete this request.",
+    pre_dispatch_failed: "Zalo Account request was rejected before sending.",
+    send_unknown:
+      "Zalo Account send outcome is unknown. Inspect before sending again.",
+    reconciliation_conflict:
+      "Zalo Account message reconciliation needs review.",
+    receive_invalid: "Zalo Account message could not be normalized.",
+    internal_error:
+      "Zalo Account request could not be completed. Inspect its status.",
+  }
+  return messages[info.code]
+}
+
+export const zaloAccountUnsupportedSchema = z
+  .object({
+    reason: z.enum([
+      "unsupported_content",
+      "invalid_content",
+      "unsupported_schema",
+    ]),
+  })
+  .strict()
+
+export function getZaloAccountSendAttemptRevision(
+  attributes: unknown,
+): number | undefined {
+  const revision = (
+    attributes as {
+      zaloAccount?: {
+        sendAttempt?: { reconciliation?: { revision?: unknown } }
+      }
+    } | null
+  )?.zaloAccount?.sendAttempt?.reconciliation?.revision
+  return typeof revision === "number" &&
+    Number.isSafeInteger(revision) &&
+    revision >= 0
+    ? revision
+    : undefined
+}
+
+export function getZaloAccountMessageEvidence(attributes: unknown): {
+  schemaVersion: 1
+  unsupported: z.infer<typeof zaloAccountUnsupportedSchema>
+} | null {
+  if (!attributes || typeof attributes !== "object") {
+    return null
+  }
+  const account = (attributes as Record<string, unknown>).zaloAccount
+  if (!account || typeof account !== "object") {
+    return null
+  }
+  const fields = account as Record<string, unknown>
+  if (fields.schemaVersion !== undefined && fields.schemaVersion !== 1) {
+    return { schemaVersion: 1, unsupported: { reason: "unsupported_schema" } }
+  }
+  const group =
+    fields.group && typeof fields.group === "object"
+      ? (fields.group as Record<string, unknown>)
+      : undefined
+  const marker = fields.unsupported ?? group?.unsupported
+  if (marker === undefined) {
+    return null
+  }
+  const parsed = zaloAccountUnsupportedSchema.safeParse(marker)
+  return {
+    schemaVersion: 1,
+    unsupported: parsed.success ? parsed.data : { reason: "invalid_content" },
+  }
 }
 
 export type ZaloAccountRuntimeOrder = {
@@ -370,6 +505,8 @@ export type ZaloAccountQuote = z.infer<typeof zaloAccountQuoteSchema>
 
 export const zaloAccountDirectMessageSchema = z
   .object({
+    schemaVersion: z.literal(1).optional(),
+    unsupported: zaloAccountUnsupportedSchema.optional(),
     providerMessageId: z.string().min(1),
     clientMessageId: z.string().min(1).optional(),
     threadId: z.string().min(1),
@@ -388,11 +525,18 @@ export const zaloAccountDirectMessageSchema = z
   .strict()
   .refine(
     (message) =>
-      Boolean(
-        message.text?.trim() ||
-          message.attachments.length ||
-          message.mediaResources?.length,
-      ),
+      message.unsupported
+        ? !(
+            message.text ||
+            message.attachments.length ||
+            message.mediaResources?.length ||
+            message.quote
+          )
+        : Boolean(
+            message.text?.trim() ||
+              message.attachments.length ||
+              message.mediaResources?.length,
+          ),
     { message: "Zalo Account message has no supported content" },
   )
 export type ZaloAccountDirectMessage = z.infer<
@@ -401,6 +545,8 @@ export type ZaloAccountDirectMessage = z.infer<
 
 export const zaloAccountGroupMessageSchema = z
   .object({
+    schemaVersion: z.literal(1).optional(),
+    unsupported: zaloAccountUnsupportedSchema.optional(),
     providerMessageId: z.string().min(1).max(200),
     clientMessageId: z.string().min(1).max(200).optional(),
     threadId: z.string().min(1).max(200),
@@ -431,11 +577,19 @@ export const zaloAccountGroupMessageSchema = z
   .strict()
   .superRefine((message, context) => {
     if (
-      !(
-        message.text?.trim() ||
-        message.attachments.length ||
-        message.mediaResources?.length
-      )
+      message.unsupported
+        ? Boolean(
+            message.text ||
+              message.attachments.length ||
+              message.mediaResources?.length ||
+              message.quote ||
+              message.mentions.length,
+          )
+        : !(
+            message.text?.trim() ||
+            message.attachments.length ||
+            message.mediaResources?.length
+          )
     ) {
       context.addIssue({
         code: "custom",
@@ -862,6 +1016,7 @@ export const zaloAccountCommandResultSchema = z.discriminatedUnion("status", [
     .object({
       status: z.literal("failed"),
       error: z.string().min(1),
+      errorInfo: zaloAccountErrorInfoSchema.optional(),
     })
     .strict(),
   z

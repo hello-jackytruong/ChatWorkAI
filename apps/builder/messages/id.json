@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Hapus riwayat Zalo hingga pesan yang dipilih? Riwayat CRM tersimpan tetap tersedia untuk pelacakan.",
     "deleteChatNoBoundary": "Tidak ada batas pesan untuk menghapus riwayat Zalo.",
     "deletedOnMyZalo": "Dihapus di Zalo saya",
-    "deleteChatBoundary": "Batas penghapusan riwayat"
+    "deleteChatBoundary": "Batas penghapusan riwayat",
+    "evidence": {
+      "unsupportedContent": "Pesan Zalo tidak didukung",
+      "invalidContent": "Pesan Zalo tidak dapat dibaca",
+      "unsupportedSchema": "Format pesan Zalo tidak didukung",
+      "pending": "Menunggu konfirmasi",
+      "unknown": "Hasil belum diketahui — periksa status",
+      "failed": "Pesan tidak terkirim",
+      "applied": "Terkirim",
+      "appliedPending": "Terkirim, sedang mencocokkan data lokal",
+      "needsReview": "Hasil perlu ditinjau",
+      "safeFailure": "Operasi Zalo tidak dapat diselesaikan dengan aman",
+      "unavailable": "Status tidak tersedia. Coba lagi.",
+      "inspect": "Periksa status"
+    }
   },
   "actions": {
     "scrollToBottom": "Gulir ke bawah",

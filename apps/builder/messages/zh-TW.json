@@ -112,7 +112,21 @@
     "deleteChatConfirm": "刪除截至所選訊息的Zalo歷史記錄？CRM中儲存的歷史記錄將保留以供追蹤。",
     "deleteChatNoBoundary": "沒有可用於刪除Zalo歷史記錄的訊息邊界。",
     "deletedOnMyZalo": "已從我的 Zalo 刪除",
-    "deleteChatBoundary": "歷史記錄刪除邊界"
+    "deleteChatBoundary": "歷史記錄刪除邊界",
+    "evidence": {
+      "unsupportedContent": "不支援的 Zalo 訊息",
+      "invalidContent": "無法讀取 Zalo 訊息",
+      "unsupportedSchema": "不支援此 Zalo 訊息格式",
+      "pending": "等待確認",
+      "unknown": "結果未知 — 請檢查狀態",
+      "failed": "訊息未傳送",
+      "applied": "已傳送",
+      "appliedPending": "已傳送，正在本地核對",
+      "needsReview": "結果需要檢查",
+      "safeFailure": "無法安全完成 Zalo 操作",
+      "unavailable": "狀態無法使用，請重試。",
+      "inspect": "檢查狀態"
+    }
   },
   "fields": {
     "optionalHint": "(可選)",

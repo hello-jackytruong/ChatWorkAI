@@ -481,6 +481,7 @@ export class ZaloAccountMediaService {
   bindMessageAliases(
     input: MediaScope & {
       messageId: string
+      preserveAttachmentIds?: boolean
       aliases: string[]
       attachmentId?: string
       conversationId?: string

@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Seçilmiş mesaja qədər Zalo tarixçəsi silinsin? Saxlanmış CRM tarixçəsi izləmə üçün qalır.",
     "deleteChatNoBoundary": "Zalo tarixçəsini silmək üçün mesaj sərhədi yoxdur.",
     "deletedOnMyZalo": "Zalo hesabımda silinib",
-    "deleteChatBoundary": "Tarixçənin silinmə sərhədi"
+    "deleteChatBoundary": "Tarixçənin silinmə sərhədi",
+    "evidence": {
+      "unsupportedContent": "Dəstəklənməyən Zalo mesajı",
+      "invalidContent": "Zalo mesajı oxunmadı",
+      "unsupportedSchema": "Zalo mesaj formatı dəstəklənmir",
+      "pending": "Təsdiq gözlənilir",
+      "unknown": "Nəticə məlum deyil — statusu yoxlayın",
+      "failed": "Mesaj göndərilmədi",
+      "applied": "Göndərildi",
+      "appliedPending": "Göndərildi, yerli uzlaşdırma aparılır",
+      "needsReview": "Nəticə nəzərdən keçirilməlidir",
+      "safeFailure": "Zalo əməliyyatı təhlükəsiz tamamlanmadı",
+      "unavailable": "Status əlçatan deyil. Yenidən cəhd edin.",
+      "inspect": "Statusu yoxla"
+    }
   },
   "actions": {
     "scrollToBottom": "Aşağı sürüşdür",

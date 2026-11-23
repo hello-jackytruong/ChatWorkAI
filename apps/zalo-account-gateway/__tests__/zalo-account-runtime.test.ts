@@ -757,3 +757,83 @@ describe("ReconnectPolicy", () => {
     })
   })
 })
+
+it("bounds pending account messages and restores readiness after draining", async () => {
+  const { client, runtime, sink } = makeHarness({ account: true })
+  await runtime.reconnect(auth, auth.zaloUid)
+  let release!: () => void
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  vi.mocked(sink.publishDirectMessage).mockImplementation(() => blocked)
+  const message = {
+    providerMessageId: "m",
+    threadId: "peer",
+    threadType: "user" as const,
+    senderId: "peer",
+    recipientId: "uid-1",
+    timestampMs: 1,
+    msgType: "webchat",
+    isSelf: false,
+    text: "hello",
+    attachments: [],
+  }
+  for (let i = 0; i < 30; i++) {
+    client.reconnectApis[0].handlers?.onDirectMessage({
+      ...message,
+      providerMessageId: String(i),
+    })
+  }
+  expect(runtime.snapshot()).toMatchObject({ messageReady: false })
+  release()
+  await vi.waitFor(() =>
+    expect(runtime.snapshot()).toMatchObject({ messageReady: true }),
+  )
+  expect(sink.publishDirectMessage).toHaveBeenCalledTimes(20)
+  await runtime.stop()
+})
+
+it("caps all account callback reservations at 200 while allowing independent accounts to drain", async () => {
+  const harnesses = Array.from({ length: 11 }, () =>
+    makeHarness({ account: true }),
+  )
+  const releases: (() => void)[] = []
+  for (const { client, runtime, sink } of harnesses) {
+    await runtime.reconnect(auth, auth.zaloUid)
+    const blocked = new Promise<void>((resolve) => releases.push(resolve))
+    vi.mocked(sink.publishDirectMessage).mockImplementation(() => blocked)
+    for (let i = 0; i < 20; i++) {
+      client.reconnectApis[0].handlers?.onDirectMessage({
+        providerMessageId: String(i),
+        threadId: "p",
+        threadType: "user",
+        senderId: "p",
+        recipientId: "uid-1",
+        timestampMs: 1,
+        msgType: "webchat",
+        isSelf: false,
+        text: "hello",
+        attachments: [],
+      })
+    }
+  }
+  expect(harnesses[10].runtime.snapshot()).toMatchObject({
+    messageReady: false,
+  })
+  for (const release of releases) {
+    release()
+  }
+  await vi.waitFor(() =>
+    expect(harnesses.every((h) => h.runtime.snapshot().messageReady)).toBe(
+      true,
+    ),
+  )
+  expect(
+    harnesses.reduce(
+      (total, h) =>
+        total + vi.mocked(h.sink.publishDirectMessage).mock.calls.length,
+      0,
+    ),
+  ).toBe(200)
+  await Promise.all(harnesses.map((h) => h.runtime.stop()))
+})

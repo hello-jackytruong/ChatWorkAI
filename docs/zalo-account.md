@@ -211,6 +211,59 @@ message IDs per request (reaction aggregates are bounded to 2,500 rows).
 `POST /v1/zalo-accounts/{accountId}/typing` is ephemeral, throttled to one call
 per thread per five seconds; the Inbox expires the indicator locally. Outbound reactions remain unavailable. Native recall/delete dispatch is default-off until controlled live provider proof; dedicated local hide retains originals and makes no provider call. Generic delete remains rejected for this channel.
 
+### Message integrity and bounded recovery
+
+The normalized message reader accepts legacy payloads and optional
+`schemaVersion: 1` evidence. Deploy compatible SDK, worker and Inbox readers
+before setting gateway `ZALO_ACCOUNT_MESSAGE_INTEGRITY_ENABLED=true` (default
+`false`). With the producer gate off, new message fields are omitted. A message
+with valid identity but unsupported content is retained as a localized
+placeholder, without synthetic customer text, attachments or automation. Invalid
+identity is diagnosed without retaining the raw provider body. Minute diagnostics
+use fixed reason codes and bounded callback backlog counts/bytes.
+
+Confirmed ACKs retain up to ten provider IDs, with a stable primary ID. An exact
+alias may reconcile own-echo rows to the canonical Message; matching text, time
+or client command ID alone does not prove ownership. Native-phone echoes remain
+visible. Merges preserve attachments and reply references; unsafe shard or
+translation cases retain data and become `needs_review`. Provider send status
+and local reconciliation status are separate.
+
+Inspect an Inbox/flow send with
+`GET /v1/zalo-accounts/{accountId}/messages/{messageId}/send-attempt`, passing
+`messageCreatedAt` from `messages.list`. This complements the command-ID route;
+both return the same bounded outcome projection and remain readable when sending
+is disabled. The Inbox inspect action requires workspace `superAdmin`; the
+public read requires the existing `channels` token scope. Inspect is on demand,
+with no per-message polling. Pending, unknown and accepted sends are not
+resendable. Errors expose safe enum codes, phase, action and optional
+`retryAfterMs`; arbitrary provider errors are not displayed.
+
+Local repair reuses the existing recovery scheduler: at most 20 rows, a five-second admission budget per tick and at
+most three repair attempts. New ACK/claim/merge transactions bound lock waits to
+500 ms and individual SQL statements to one second; existing account/shard
+registry reads mean the tick is not a hard five-second wall-clock deadline. It never invokes a provider
+send. Legacy attempts without reconciliation JSON do not become a new backlog.
+The nullable reconciliation column and partial index require the reviewed core
+migration before deploying these readers/writers. Do not apply it automatically.
+
+Operational send defaults are 60 direct sends per account/minute; groups retain
+60/account/minute and 10/group/minute. These are application limits, not published
+Zalo quotas. Capacity is checked immediately before dispatch after preparation;
+groups are not charged twice. Admission fails closed when Redis is unavailable.
+Only pure reads (`sync_groups`, `sync_friends`, `get_labels`) may retry once,
+within the original deadline and after rechecking ownership/admission. Writes
+with uncertain dispatch remain unknown and are never replayed automatically.
+
+Rollback: disable the integrity message producer gate and drain new-format events
+before downgrading strict readers. Structured command-result errors also need
+compatible readers; retain them until new-format retained results are drained
+or expired. The message gate only controls normalized message fields. Retain reconciliation and message evidence. Stop
+repair before rolling back its consumer; preserve the additive column/index
+until a separately approved data-retention decision. Automated evidence and
+remaining database/live-provider gates are tracked in the
+[implementation report](../plans/261123-0500-zalo-account-message-integrity-recovery-tdd/reports/implementation.md).
+
 ## Friend sync and safe status
 
 `POST /v1/zalo-accounts/{accountId}/friends/sync` imports up to 500 provider

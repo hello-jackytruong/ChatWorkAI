@@ -27,7 +27,6 @@ import { notFoundException } from "../errors"
 import { logger } from "../logger"
 import { publishWorkspaceRealtimeEvent } from "../platform/realtime-broadcast"
 import { withBlockedOwnerGuard } from "../workspace-lifecycle/with-blocked-owner-guard"
-import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
 import { zaloAccountMediaService } from "../zalo-account-media/service"
 import {
   lifecycleOfRecall,
@@ -60,6 +59,25 @@ export type ZaloAccountSavedMessageInput = {
 const sourceOf = (target: Target) =>
   `za:${encodeURIComponent(target.accountId)}:${target.threadType}:${encodeURIComponent(target.threadId)}:${encodeURIComponent(target.providerMessageId)}`
 const unavailable = () => notFoundException("Zalo Account message not found")
+
+async function pointerRecall(
+  workspaceId: string,
+  message: MessageWithAttachments,
+) {
+  const rows = await recalls.findForMessages({
+    workspaceId,
+    messages: [
+      {
+        id: message.id,
+        createdAt: message.createdAt,
+        conversationId: message.conversationId,
+      },
+    ],
+  })
+  return (
+    rows.find((row) => row.recallReceivedAt || row.localHiddenAt) ?? rows[0]
+  )
+}
 
 // The retained viewer has already authorized the current parent. Normal media
 // readers deliberately deny deletedAt; this path preserves an undo's archive.
@@ -94,10 +112,21 @@ async function savedMedia(
       let attachment = message.attachments.find(
         (a) => a.id === reference.attachmentId,
       )
-      if (!reference.attachmentId && NUMERIC_SLOT.test(reference.slot)) {
+      const unambiguousSlot =
+        rows.filter(
+          (row) =>
+            row.reference.role === reference.role &&
+            row.reference.slot === reference.slot,
+        ).length === 1
+      if (
+        !reference.attachmentId &&
+        unambiguousSlot &&
+        NUMERIC_SLOT.test(reference.slot)
+      ) {
         attachment = message.attachments[Number(reference.slot)]
       } else if (
         !reference.attachmentId &&
+        unambiguousSlot &&
         message.attachments.length === 1 &&
         reference.slot === "original"
       ) {
@@ -227,16 +256,20 @@ export const zaloAccountMessageRecallService = {
     if (!target) {
       return true
     }
-    const recall = await recalls.findTarget({
-      ...target,
-      workspaceId: input.workspaceId,
-    })
+    const recall =
+      (await pointerRecall(input.workspaceId, message)) ??
+      (await recalls.findTarget({
+        ...target,
+        workspaceId: input.workspaceId,
+      }))
     const projected = projectZaloAccountRetainedMessage(message, recall)
     return projected === message
   },
   async getSavedContent(input: ZaloAccountSavedMessageInput) {
     const { message, target } = await this.resolveTarget(input)
-    const recall = await recalls.findTarget(target)
+    const recall =
+      (await pointerRecall(input.workspaceId, message)) ??
+      (await recalls.findTarget(target))
     const media = (await savedMedia(input, message)).map(
       ({ objectKey: _key, ...descriptor }) => descriptor,
     )
@@ -481,6 +514,8 @@ export const zaloAccountMessageRecallService = {
         tx,
       )
       const repository = await createMessageRepository()
+      let canonicalSource = sourceOf(target)
+      let canonicalMessage: MessageWithAttachments | null = null
       if (input.message.messageType === "outgoing") {
         const attempt =
           await zaloAccountSendAttemptRepository.findByProviderMessage(target)
@@ -493,39 +528,56 @@ export const zaloAccountMessageRecallService = {
             primaryAndFailOnError: true,
           })
           if (
-            canonical &&
-            canonical.contactInboxId === input.message.contactInboxId
+            !canonical &&
+            attempt.providerMessageIds?.includes(target.providerMessageId)
           ) {
-            if (getZaloAccountMediaPolicy().enabled) {
-              await zaloAccountMediaService.bindMessageAliases({
-                workspaceId: target.workspaceId,
-                accountId: target.accountId,
-                messageId: canonical.id,
-                conversationId: canonical.conversationId,
-                messageCreatedAt: canonical.createdAt,
-                aliases: [target.providerMessageId],
-              })
-            }
-            await repository.reconcileOutgoingSourceId({
+            throw unavailable()
+          }
+          if (
+            canonical &&
+            canonical.contactInboxId === input.message.contactInboxId &&
+            attempt.providerMessageIds?.includes(target.providerMessageId)
+          ) {
+            canonicalMessage = canonical
+            const aliasSources = attempt.providerMessageIds.map(
+              (providerMessageId) => sourceOf({ ...target, providerMessageId }),
+            )
+            canonicalSource = aliasSources[0] ?? sourceOf(target)
+            await zaloAccountMediaService.bindMessageAliases({
               workspaceId: target.workspaceId,
+              accountId: target.accountId,
+              messageId: canonical.id,
               conversationId: canonical.conversationId,
-              contactInboxId: canonical.contactInboxId,
-              id: canonical.id,
-              createdAt: canonical.createdAt,
-              sourceId: sourceOf(target),
-              contentAttributesOverlay: {
-                zaloAccount: {
-                  ...((canonical.contentAttributes?.zaloAccount as Record<
-                    string,
-                    unknown
-                  >) ?? {}),
-                  ...((input.message.contentAttributes?.zaloAccount as Record<
-                    string,
-                    unknown
-                  >) ?? {}),
-                },
-              },
+              messageCreatedAt: canonical.createdAt,
+              aliases: attempt.providerMessageIds,
+              preserveAttachmentIds: true,
             })
+            if (!canonical.deletedAt) {
+              const reconciled = await repository.reconcileOutgoingSourceId({
+                workspaceId: target.workspaceId,
+                conversationId: canonical.conversationId,
+                contactInboxId: canonical.contactInboxId,
+                id: canonical.id,
+                createdAt: canonical.createdAt,
+                sourceId: canonicalSource,
+                aliasSources,
+                contentAttributesOverlay: {
+                  zaloAccount: {
+                    ...((canonical.contentAttributes?.zaloAccount as Record<
+                      string,
+                      unknown
+                    >) ?? {}),
+                    ...((input.message.contentAttributes?.zaloAccount as Record<
+                      string,
+                      unknown
+                    >) ?? {}),
+                  },
+                },
+              })
+              if (reconciled.needsReview || !reconciled.message) {
+                throw new Error("Zalo echo reconciliation requires review")
+              }
+            }
             if (!row || row.discardedAt) {
               return { message: canonical, isNew: false }
             }
@@ -562,6 +614,7 @@ export const zaloAccountMessageRecallService = {
       }
       const message = {
         ...input.message,
+        sourceId: canonicalSource,
         id: row.messageId,
         createdAt: row.messageCreatedAt,
       }
@@ -572,31 +625,33 @@ export const zaloAccountMessageRecallService = {
         createdAt: message.createdAt,
         primaryAndFailOnError: true,
       })
-      const saved = existing
-        ? await repository.fillZaloAccountOriginalExact({
-            ...message,
-            sourceId: sourceOf(target),
-            message,
-            attachments: input.attachments,
-          })
-        : (
-            await repository.createWithStableIdentity(
-              {
-                ...message,
-                contentAttributes: {
-                  ...message.contentAttributes,
-                  zaloAccount: {
-                    ...((message.contentAttributes?.zaloAccount as Record<
-                      string,
-                      unknown
-                    >) ?? {}),
-                    lifecycle: lifecycleOfRecall(row),
+      const saved =
+        canonicalMessage ??
+        (existing
+          ? await repository.fillZaloAccountOriginalExact({
+              ...message,
+              sourceId: canonicalSource,
+              message,
+              attachments: input.attachments,
+            })
+          : (
+              await repository.createWithStableIdentity(
+                {
+                  ...message,
+                  contentAttributes: {
+                    ...message.contentAttributes,
+                    zaloAccount: {
+                      ...((message.contentAttributes?.zaloAccount as Record<
+                        string,
+                        unknown
+                      >) ?? {}),
+                      lifecycle: lifecycleOfRecall(row),
+                    },
                   },
                 },
-              },
-              input.attachments,
-            )
-          ).result
+                input.attachments,
+              )
+            ).result)
       if (!saved) {
         throw new Error("Zalo retained original could not be persisted")
       }
@@ -608,7 +663,7 @@ export const zaloAccountMessageRecallService = {
         })) ?? row
       const applied = await repository.applyZaloAccountLifecycleExact({
         ...message,
-        sourceId: sourceOf(target),
+        sourceId: canonicalSource,
         lifecycle: lifecycleOfRecall(row),
       })
       // A retained original never re-enters message-received automation or unread tracking.
@@ -716,14 +771,22 @@ export const zaloAccountMessageRecallService = {
     }
     const repository = await createMessageRepository()
     const target = { ...row, groupId: row.groupId ?? undefined }
+    const mappedAttempt =
+      await zaloAccountSendAttemptRepository.findByProviderMessage(target)
+    const primarySource =
+      mappedAttempt?.providerMessageIds.includes(target.providerMessageId) &&
+      mappedAttempt.providerMessageIds[0]
+        ? sourceOf({
+            ...target,
+            providerMessageId: mappedAttempt.providerMessageIds[0],
+          })
+        : sourceOf(target)
     if (!(row.messageId && row.messageCreatedAt)) {
       const identity =
         row.threadType === "group"
           ? await recalls.findGroupIdentity(target)
           : null
-      const attempt = identity
-        ? null
-        : await zaloAccountSendAttemptRepository.findByProviderMessage(target)
+      const attempt = identity ? null : mappedAttempt
       const candidate = [identity, attempt].find(
         (candidate) => candidate?.messageId && candidate.messageCreatedAt,
       )
@@ -742,7 +805,11 @@ export const zaloAccountMessageRecallService = {
       if (
         identity ||
         (known &&
-          known.sourceId === sourceOf(target) &&
+          (known.sourceId === sourceOf(target) ||
+            (known.sourceId === primarySource &&
+              mappedAttempt?.messageId === known.id &&
+              mappedAttempt.messageCreatedAt?.getTime() ===
+                known.createdAt.getTime())) &&
           known.contactInboxId === contactInbox.id)
       ) {
         located = { message: known ?? undefined, complete: true }
@@ -834,7 +901,12 @@ export const zaloAccountMessageRecallService = {
         workspaceId: row.workspaceId,
         conversationId: repairConversation.id,
         contactInboxId: repairContactInbox.id,
-        sourceId: sourceOf(target),
+        sourceId:
+          mappedAttempt?.messageId === current.messageId &&
+          mappedAttempt.messageCreatedAt?.getTime() ===
+            current.messageCreatedAt.getTime()
+            ? primarySource
+            : sourceOf(target),
         id: current.messageId,
         createdAt: current.messageCreatedAt,
       }
@@ -1001,6 +1073,30 @@ export const zaloAccountMessageRecallService = {
         })),
       )
     }
+    const pointers = input.messages.flatMap((message) => {
+      const row = message as {
+        id?: string
+        createdAt?: Date
+        conversationId?: string
+      }
+      return row.id && row.createdAt && row.conversationId
+        ? [
+            {
+              id: row.id,
+              createdAt: row.createdAt,
+              conversationId: row.conversationId,
+            },
+          ]
+        : []
+    })
+    for (let offset = 0; offset < pointers.length; offset += 100) {
+      rows.push(
+        ...(await recalls.findForMessages({
+          workspaceId: input.workspaceId,
+          messages: pointers.slice(offset, offset + 100),
+        })),
+      )
+    }
     const bySource = new Map(
       rows.map((row) => [
         sourceOf({ ...row, groupId: row.groupId ?? undefined }),
@@ -1010,7 +1106,19 @@ export const zaloAccountMessageRecallService = {
     return input.messages.map((message) => {
       let projected = projectZaloAccountRetainedMessage(
         message,
-        bySource.get((message as { sourceId?: string }).sourceId ?? ""),
+        rows.find((row) => {
+          const current = message as {
+            id?: string
+            conversationId?: string
+            createdAt?: Date
+          }
+          return (
+            row.messageId === current.id &&
+            row.conversationId === current.conversationId &&
+            row.messageCreatedAt?.getTime() === current.createdAt?.getTime() &&
+            (row.recallReceivedAt || row.localHiddenAt)
+          )
+        }) ?? bySource.get((message as { sourceId?: string }).sourceId ?? ""),
       )
       const quote = quoteTarget(message)
       const recall = quote

@@ -19,6 +19,7 @@ import {
   sql,
 } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
+import { db as primaryDb } from "../../../client"
 import {
   isMessageStorageError,
   MessageShardUnavailableError,
@@ -69,6 +70,7 @@ import type {
   ZaloAccountExactTarget,
 } from "../../../repositories/message/message-repository"
 import type { RichResponseContentAttributes } from "../../../schema"
+import { messageTranslationModel } from "../../../schema/message-translation"
 import type { AttachmentModel, MessageModel } from "../../../types"
 import {
   endOfHour,
@@ -566,6 +568,26 @@ export class ShardedMessageRepository implements IMessageRepository {
     })
   }
 
+  updateZaloSendAttemptEvidence(params: {
+    workspaceId: string
+    accountId: string
+    id: string
+    createdAt: Date
+    evidence: Record<string, unknown>
+    revision: number
+  }): Promise<{ id: string } | null> {
+    return this.updateAcrossShards(
+      params.id,
+      params.workspaceId,
+      {
+        contentAttributes: sql`COALESCE(${messageModel.contentAttributes}, '{}'::jsonb) || jsonb_build_object('zaloAccount', COALESCE(${messageModel.contentAttributes}->'zaloAccount', '{}'::jsonb) || jsonb_build_object('accountId', ${params.accountId}::text, 'sendAttempt', ${JSON.stringify(params.evidence)}::jsonb))`,
+      },
+      "updateZaloSendAttemptEvidence",
+      params.createdAt,
+      sql`COALESCE((${messageModel.contentAttributes} #>> '{zaloAccount,sendAttempt,reconciliation,revision}')::int, 0) <= ${params.revision}`,
+    )
+  }
+
   updateContentAttributes(
     messageId: string,
     workspaceId: string,
@@ -892,6 +914,9 @@ export class ShardedMessageRepository implements IMessageRepository {
   async reconcileOutgoingSourceId(
     params: ReconcileOutgoingSourceIdParams,
   ): Promise<ReconcileOutgoingSourceIdResult> {
+    if (params.aliasSources) {
+      return await this.reconcileOutgoingAliases(params)
+    }
     const lockKey = this.buildLockKey(params.conversationId, params.sourceId)
 
     return await this.executeWithLock(lockKey, async () => {
@@ -986,6 +1011,280 @@ export class ShardedMessageRepository implements IMessageRepository {
         }
       })
     })
+  }
+
+  private async reconcileOutgoingAliases(
+    params: ReconcileOutgoingSourceIdParams,
+  ): Promise<ReconcileOutgoingSourceIdResult> {
+    const review = { message: null, removedEchoes: [], needsReview: true }
+    const sources = [...new Set(params.aliasSources)]
+    if (
+      !sources.length ||
+      sources.length > 10 ||
+      !sources.includes(params.sourceId) ||
+      sources.some((id) => !id || id.length > 1000) ||
+      (params.echoAddresses?.length ?? 0) > 20
+    ) {
+      return review
+    }
+    const keys = sources
+      .map((source) => this.buildLockKey(params.conversationId, source))
+      .sort()
+    const locked = async (
+      i: number,
+    ): Promise<ReconcileOutgoingSourceIdResult> =>
+      keys[i]
+        ? await this.executeWithLock(keys[i], () => locked(i + 1))
+        : await merge()
+    const merge = async (): Promise<ReconcileOutgoingSourceIdResult> => {
+      // Probe only the canonical window and current ingestion window. A source
+      // outside these addresses needs review, never an unbounded history scan.
+      const windows = [
+        params.createdAt,
+        ...(params.echoAddresses ?? []).map((row) => row.createdAt),
+        new Date(),
+      ]
+      const ranges = (
+        await Promise.all(
+          windows.map((date) =>
+            this.getShardsForRange(startOfHour(date), endOfHour(date)),
+          ),
+        )
+      ).flat()
+      const shards = dedupeShardsByPhysicalId(ranges)
+      if (!shards.length || shards.length > 2) {
+        return review
+      }
+      const snapshots: Array<{
+        client: MessageShardDatabaseClient
+        rows: MessageModel[]
+      }> = []
+      for (const shard of shards) {
+        const client = await this.shardManager.getShardClient(shard.shard)
+        const rows = await client
+          .select()
+          .from(messageModel)
+          .where(
+            and(
+              eq(messageModel.workspaceId, params.workspaceId),
+              eq(messageModel.conversationId, params.conversationId),
+              eq(messageModel.contactInboxId, params.contactInboxId),
+              isNull(messageModel.deletedAt),
+              or(
+                and(
+                  eq(messageModel.id, params.id),
+                  matchesCreatedAt(messageModel.createdAt, params.createdAt),
+                ),
+                inArray(messageModel.sourceId, sources),
+              ),
+            ),
+          )
+          .limit(22)
+        if (rows.length > 21) {
+          return review
+        }
+        snapshots.push({ client, rows })
+      }
+      const canonical = snapshots.find(({ rows }) =>
+        rows.some(
+          (row) =>
+            row.id === params.id &&
+            row.createdAt.getTime() === params.createdAt.getTime(),
+        ),
+      )
+      if (!canonical) {
+        return review
+      }
+      const echoes = snapshots.flatMap(({ rows }) =>
+        rows.filter((row) => row.id !== params.id),
+      )
+      if (
+        echoes.length > 20 ||
+        echoes.some(
+          (row) =>
+            row.messageType !== "outgoing" ||
+            !row.sourceId ||
+            !sources.includes(row.sourceId),
+        )
+      ) {
+        return review
+      }
+      // Cross-store moves cannot be committed together. Keep their evidence for
+      // inspection instead of deleting a remote row or its attachments.
+      if (
+        snapshots.some(
+          (snapshot) => snapshot !== canonical && snapshot.rows.length,
+        )
+      ) {
+        return review
+      }
+      // Replies may have arrived on an intermediate historical shard. With
+      // distinct canonical/current stores, bounded windows cannot prove their
+      // absence; retain the echo for review instead of creating dangling refs.
+      if (snapshots.length > 1 && echoes.length) {
+        return review
+      }
+      const echoIds = echoes.map((row) => row.id)
+      if (echoIds.length) {
+        for (const snapshot of snapshots) {
+          const replies = await snapshot.client
+            .select({ id: messageModel.id })
+            .from(messageModel)
+            .where(
+              and(
+                eq(messageModel.workspaceId, params.workspaceId),
+                eq(messageModel.conversationId, params.conversationId),
+                inArray(messageModel.parentId, echoIds),
+              ),
+            )
+            .limit(101)
+          const attachments = await snapshot.client
+            .select({ id: attachmentModel.id })
+            .from(attachmentModel)
+            .where(
+              and(
+                eq(attachmentModel.workspaceId, params.workspaceId),
+                eq(attachmentModel.conversationId, params.conversationId),
+                inArray(attachmentModel.messageId, echoIds),
+              ),
+            )
+            .limit(101)
+          if (
+            replies.length > 100 ||
+            attachments.length > 100 ||
+            (snapshot !== canonical && (replies.length || attachments.length))
+          ) {
+            return review
+          }
+        }
+      }
+      if (echoIds.length) {
+        const translations = await primaryDb
+          .select({ id: messageTranslationModel.id })
+          .from(messageTranslationModel)
+          .where(
+            and(
+              eq(messageTranslationModel.workspaceId, params.workspaceId),
+              inArray(messageTranslationModel.messageId, echoIds),
+            ),
+          )
+          .limit(1)
+        if (translations.length) {
+          return review
+        }
+      }
+      return await canonical.client.transaction(async (tx) => {
+        await tx.execute(sql`SET LOCAL lock_timeout = '500ms'`)
+        await tx.execute(sql`SET LOCAL statement_timeout = '1s'`)
+
+        const rows = await tx
+          .select()
+          .from(messageModel)
+          .where(
+            and(
+              eq(messageModel.workspaceId, params.workspaceId),
+              eq(messageModel.conversationId, params.conversationId),
+              eq(messageModel.contactInboxId, params.contactInboxId),
+              isNull(messageModel.deletedAt),
+              or(
+                and(
+                  eq(messageModel.id, params.id),
+                  matchesCreatedAt(messageModel.createdAt, params.createdAt),
+                ),
+                inArray(messageModel.sourceId, sources),
+              ),
+            ),
+          )
+          .limit(22)
+          .for("update")
+        const local = rows.find(
+          (row) =>
+            row.id === params.id &&
+            row.createdAt.getTime() === params.createdAt.getTime(),
+        )
+        const currentEchoes = rows.filter((row) => row.id !== params.id)
+        if (
+          !local ||
+          currentEchoes.length !== echoes.length ||
+          currentEchoes.some((row) => !echoIds.includes(row.id))
+        ) {
+          return review
+        }
+        const overlay = Object.assign(
+          {},
+          ...currentEchoes.map((row) => row.contentAttributes ?? {}),
+          local.contentAttributes ?? {},
+          params.contentAttributesOverlay ?? {},
+        )
+        const accountMetadata = Object.assign(
+          {},
+          ...currentEchoes.map(
+            (row) => row.contentAttributes?.zaloAccount ?? {},
+          ),
+          local.contentAttributes?.zaloAccount ?? {},
+          params.contentAttributesOverlay?.zaloAccount ?? {},
+        )
+        if (Object.keys(accountMetadata).length) {
+          overlay.zaloAccount = accountMetadata
+        }
+        // Reparent, rather than delete, every echo attachment and reply before
+        // deleting the duplicate Message. The transaction rolls all steps back.
+        if (echoIds.length) {
+          await tx
+            .update(attachmentModel)
+            .set({ messageId: params.id, messageCreatedAt: params.createdAt })
+            .where(
+              and(
+                eq(attachmentModel.workspaceId, params.workspaceId),
+                eq(attachmentModel.conversationId, params.conversationId),
+                inArray(attachmentModel.messageId, echoIds),
+              ),
+            )
+          await tx
+            .update(messageModel)
+            .set({ parentId: params.id })
+            .where(
+              and(
+                eq(messageModel.workspaceId, params.workspaceId),
+                eq(messageModel.conversationId, params.conversationId),
+                inArray(messageModel.parentId, echoIds),
+              ),
+            )
+        }
+        const [message] = await tx
+          .update(messageModel)
+          .set({ sourceId: params.sourceId, contentAttributes: overlay })
+          .where(
+            and(
+              eq(messageModel.workspaceId, params.workspaceId),
+              eq(messageModel.id, params.id),
+              matchesCreatedAt(messageModel.createdAt, params.createdAt),
+            ),
+          )
+          .returning({ id: messageModel.id })
+        if (echoIds.length) {
+          await tx
+            .delete(messageModel)
+            .where(
+              and(
+                eq(messageModel.workspaceId, params.workspaceId),
+                eq(messageModel.conversationId, params.conversationId),
+                eq(messageModel.contactInboxId, params.contactInboxId),
+                inArray(messageModel.id, echoIds),
+                inArray(messageModel.sourceId, sources),
+              ),
+            )
+        }
+        return {
+          message: message ?? null,
+          removedEchoes: currentEchoes.map(({ id, createdAt }) => ({
+            id,
+            createdAt,
+          })),
+        }
+      })
+    }
+    return await locked(0)
   }
 
   updateSourceIdAndEmail(

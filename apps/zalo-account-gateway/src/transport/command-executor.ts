@@ -1,6 +1,7 @@
 import {
   parseZaloAccountCommandEnvelope,
   type ZaloAccountCommandEnvelope,
+  type ZaloAccountErrorInfo,
   type ZaloAccountFriendSync,
   type ZaloAccountGroup,
   type ZaloAccountGroupSync,
@@ -43,7 +44,7 @@ export type CommandExecutionOutcome =
     }
   | { status: "rejected_stale" }
   | { status: "unknown" }
-  | { status: "failed"; error: string }
+  | { status: "failed"; error: string; errorInfo?: ZaloAccountErrorInfo }
 
 type CommandState =
   | { status: "pending" }
@@ -123,6 +124,33 @@ type ExecutorOptions = {
   stateTtlMs?: number
 }
 
+const operationSafety = (
+  kind: ZaloAccountCommandEnvelope["kind"],
+): "read" | "write" | "typing" | "lifecycle" => {
+  switch (kind) {
+    case "sync_groups":
+    case "sync_friends":
+    case "get_labels":
+    case "get_sticker_resources":
+      return "read"
+    case "send_direct":
+    case "send_group":
+    case "update_labels":
+    case "native_operation":
+      return "write"
+    case "send_typing":
+      return "typing"
+    case "start_qr":
+    case "reconnect":
+    case "stop":
+      return "lifecycle"
+    default: {
+      const exhaustive: never = kind
+      return exhaustive
+    }
+  }
+}
+
 export class ZaloAccountCommandExecutor {
   private readonly options: Required<
     Pick<ExecutorOptions, "now" | "stateTtlMs">
@@ -168,11 +196,20 @@ export class ZaloAccountCommandExecutor {
 
     const accountId =
       command.route.kind === "account" ? command.route.accountId : undefined
-    const retryAfterMs = this.options.admission?.check(accountId) ?? 0
+    const retryAfterMs =
+      command.kind === "stop"
+        ? 0
+        : (this.options.admission?.check(accountId) ?? 0)
     if (retryAfterMs > 0) {
       const outcome: CommandExecutionOutcome = {
         status: "failed",
         error: `Zalo Account provider admission is paused; retry after ${retryAfterMs}ms`,
+        errorInfo: {
+          code: "admission_paused",
+          phase: "admission",
+          retryAfterMs: Math.min(60_000, retryAfterMs),
+          safeAction: "new_attempt",
+        },
       }
       await this.options.stateStore.complete(
         key,
@@ -183,8 +220,10 @@ export class ZaloAccountCommandExecutor {
     }
 
     try {
-      const result = await this.dispatch(command)
-      this.options.admission?.recordSuccess(accountId)
+      const result = await this.dispatchWithReadRetry(command)
+      if (command.kind !== "stop") {
+        this.options.admission?.recordSuccess(accountId)
+      }
       const outcome: CommandExecutionOutcome = { status: "applied", result }
       await this.options.stateStore.complete(
         key,
@@ -193,21 +232,34 @@ export class ZaloAccountCommandExecutor {
       )
       return outcome
     } catch (error) {
-      if (!(error instanceof ZaloAccountPreDispatchError)) {
+      if (
+        command.kind !== "stop" &&
+        !(error instanceof ZaloAccountPreDispatchError)
+      ) {
         this.options.admission?.recordFailure(accountId)
       }
       const outcome: CommandExecutionOutcome = {
         ...(!(error instanceof ZaloAccountPreDispatchError) &&
-        (command.kind === "send_direct" ||
-          command.kind === "send_group" ||
-          command.kind === "update_labels")
+        operationSafety(command.kind) === "write"
           ? { status: "unknown" as const }
           : {
               status: "failed" as const,
               error:
-                error instanceof Error
-                  ? error.message
-                  : "Unknown command error",
+                error instanceof ZaloAccountPreDispatchError
+                  ? "Zalo Account command rejected before dispatch"
+                  : "Zalo Account provider operation failed",
+              errorInfo:
+                error instanceof ZaloAccountPreDispatchError
+                  ? (error.errorInfo ?? {
+                      code: "pre_dispatch_failed" as const,
+                      phase: "validation" as const,
+                      safeAction: "new_attempt" as const,
+                    })
+                  : {
+                      code: "provider_failed" as const,
+                      phase: "dispatch" as const,
+                      safeAction: "retry_read" as const,
+                    },
             }),
       }
       await this.options.stateStore.complete(
@@ -303,6 +355,51 @@ export class ZaloAccountCommandExecutor {
     }
   }
 
+  private async dispatchWithReadRetry(command: ZaloAccountCommandEnvelope) {
+    const pureRead = operationSafety(command.kind) === "read"
+    try {
+      return await this.dispatch(command)
+    } catch (error) {
+      if (!pureRead || error instanceof ZaloAccountPreDispatchError) {
+        throw error
+      }
+      if (this.options.now().getTime() + 100 >= Date.parse(command.expiresAt)) {
+        throw error
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 100))
+      if (this.options.now().getTime() >= Date.parse(command.expiresAt)) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account read deadline expired",
+        )
+      }
+      if (
+        command.kind !== "start_qr" &&
+        command.target &&
+        this.options.ownsTarget &&
+        !(await this.options.ownsTarget(command))
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account read ownership changed",
+        )
+      }
+      const delay =
+        this.options.admission?.check(
+          command.route.kind === "account"
+            ? command.route.accountId
+            : undefined,
+        ) ?? 0
+      if (delay > 0) {
+        throw new ZaloAccountPreDispatchError("Zalo Account admission paused", {
+          code: "admission_paused",
+          phase: "admission",
+          retryAfterMs: Math.min(60_000, delay),
+          safeAction: "retry_read",
+        })
+      }
+      return await this.dispatch(command)
+    }
+  }
+
   private async dispatch(command: ZaloAccountCommandEnvelope): Promise<{
     status: string
     messageIds?: string[]
@@ -336,6 +433,9 @@ export class ZaloAccountCommandExecutor {
       throw new Error("Account command requires an account route")
     }
     const poolCommand = {
+      ...(command.kind === "reconnect" || command.kind === "stop"
+        ? {}
+        : { deadlineAt: Date.parse(command.expiresAt) }),
       workspaceId: command.route.workspaceId,
       runtime: { kind: "account" as const, id: command.route.accountId },
       inboxId: command.route.inboxId,

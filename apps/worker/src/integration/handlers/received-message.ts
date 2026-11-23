@@ -105,6 +105,7 @@ import {
   getInboundOrder,
   getStoryReply,
   getWhatsappFlowResponse,
+  getZaloAccountMessageEvidence,
   type IncomingContact,
   type IncomingMessage,
   isSourceUserIdKeyedIdentity,
@@ -442,7 +443,10 @@ export const receiveMessage = async (
   // instead of per-branch checks; `canAutomate` replaces `isWorkspaceActive`
   // in every automation branch below).
   const threadControl = parsedMessage.threadControl
-  const suppressAutomation = threadControl?.delivery === "standby"
+  const suppressAutomation =
+    threadControl?.delivery === "standby" ||
+    (inbox.channel === "zaloAccount" &&
+      !!getZaloAccountMessageEvidence(parsedIncomingMessage?.contentAttributes))
   const canAutomate = isWorkspaceActive && !suppressAutomation
   const appointmentCancelToken = suppressAutomation
     ? null
@@ -1223,6 +1227,13 @@ const isEchoOfOwnSend = async (
 ): Promise<boolean> => {
   const { conversation, message } = props
   const { pendingOnly = false } = options
+  // Confirmed Zalo aliases are reconciled before this generic ingestion path.
+  if (
+    message.sourceId?.startsWith("za:") ||
+    message.contentAttributes?.zaloAccount
+  ) {
+    return false
+  }
   const repository = await createMessageRepository()
   const recentOutgoing = await repository.findLastByConversation(
     conversation.id,

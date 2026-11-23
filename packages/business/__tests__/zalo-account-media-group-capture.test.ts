@@ -98,6 +98,11 @@ describe("group durable media admission", () => {
     })
     mocks.persist.mockImplementation(async (args) => {
       await args.beforeMessageWrite({ id: "8", createdAt: new Date(100) })
+      await args.beforeMessageReconcile({
+        id: "8",
+        createdAt: new Date(100),
+        providerMessageIds: ["p"],
+      })
       order.push("shard")
       return { isNew: false }
     })
@@ -110,6 +115,30 @@ describe("group durable media admission", () => {
         threadType: "group",
       }),
     )
+  })
+  it("keeps alias maintenance before merging when transfers are disabled without changing capture behavior", async () => {
+    vi.stubEnv("ZALO_ACCOUNT_MEDIA_STORAGE_ENABLED", "false")
+    const order: string[] = []
+    mocks.bind.mockImplementation(() => order.push("aliases"))
+    mocks.persist.mockImplementation(async (args) => {
+      expect(args.beforeMessageWrite).toBeUndefined()
+      await args.beforeMessageReconcile({
+        id: "8",
+        createdAt: new Date(100),
+        providerMessageIds: ["primary", "p"],
+      })
+      order.push("shard")
+      return { isNew: false }
+    })
+    await zaloAccountGroupInboxService.receive(input)
+    expect(order).toEqual(["aliases", "shard"])
+    expect(mocks.bind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aliases: ["primary", "p"],
+        preserveAttachmentIds: true,
+      }),
+    )
+    expect(mocks.capture).not.toHaveBeenCalled()
   })
   it("does not publish or acknowledge when durable intent fails", async () => {
     mocks.capture.mockRejectedValue(new Error("ledger unavailable"))

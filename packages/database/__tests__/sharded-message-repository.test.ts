@@ -1116,6 +1116,25 @@ describe("ShardedMessageRepository.reconcileOutgoingSourceId", () => {
     vi.clearAllMocks()
   })
 
+  test("rejects an over-budget exact alias merge before touching a shard", async () => {
+    const write = vi.fn()
+    const repo = new ShardedMessageRepository(
+      { getShardForWrite: write } as never,
+      passthroughLock as never,
+    )
+    const result = await repo.reconcileOutgoingSourceId({
+      id: "local",
+      contactInboxId: "ci",
+      conversationId: "conv",
+      sourceId: "primary",
+      workspaceId: "w",
+      createdAt,
+      aliasSources: Array.from({ length: 11 }, (_, i) => `id-${i}`),
+    } as never)
+    expect(result).toMatchObject({ needsReview: true, removedEchoes: [] })
+    expect(write).not.toHaveBeenCalled()
+  })
+
   test("keeps the local outgoing row and removes a provider echo atomically", async () => {
     const echo = {
       id: "echo-1",

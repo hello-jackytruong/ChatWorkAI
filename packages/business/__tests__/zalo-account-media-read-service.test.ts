@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  pointerRows: vi.fn(),
   recalls: vi.fn(),
   list: vi.fn(),
   parents: vi.fn(),
@@ -17,7 +18,10 @@ const mocks = vi.hoisted(() => ({
   contactOwner: vi.fn(),
 }))
 vi.mock("@chatbotx.io/database/repositories", () => ({
-  zaloAccountMessageRecallRepository: { findTargets: mocks.recalls },
+  zaloAccountMessageRecallRepository: {
+    findTargets: mocks.recalls,
+    findForMessages: mocks.pointerRows,
+  },
   integrationZaloAccountGroupRepository: { findByProviderId: mocks.group },
   zaloAccountMediaRepository: {
     list: mocks.list,
@@ -93,6 +97,7 @@ const { zaloAccountMediaReadService: service } = await import(
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.recalls.mockResolvedValue([])
+  mocks.pointerRows.mockResolvedValue([])
   mocks.account.mockResolvedValue({ id: "a", inboxId: "i" })
   mocks.list.mockResolvedValue([row])
   mocks.parents.mockResolvedValue([
@@ -654,4 +659,24 @@ it("keeps normal archive access after provider-only deletion", async () => {
   expect(await service.download(input)).toMatchObject({
     url: "https://signed.example.test/a",
   })
+})
+
+it("denies a secondary recall bound to the exact canonical pointer", async () => {
+  const parent = {
+    ...(await mocks.parents())[0],
+    sourceId: "za:a:user:u:primary",
+    deletedAt: null,
+  }
+  mocks.parents.mockResolvedValue([parent])
+  mocks.pointerRows.mockResolvedValue([
+    {
+      accountId: "a",
+      messageId: "m",
+      messageCreatedAt: time,
+      conversationId: "c",
+      recallReceivedAt: new Date(),
+    },
+  ])
+  await expect(service.download(input)).rejects.toThrow()
+  expect(mocks.sign).not.toHaveBeenCalled()
 })

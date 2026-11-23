@@ -704,12 +704,29 @@ export const createOutgoing = async (props: {
       zaloAccountQuote: groupQuote,
     }
   }
-  const contentAttributes = props.deliveryIdentity?.commandId
+  let contentAttributes = props.deliveryIdentity?.commandId
     ? {
         ...replyContentAttributes,
         zaloAccountCommandId: props.deliveryIdentity.commandId,
       }
     : replyContentAttributes
+  if (contactInbox.channel === "zaloAccount") {
+    const accountId =
+      groupAudience?.accountId ??
+      (
+        await zaloAccountService.findByInboxId({
+          workspaceId: conversation.workspaceId,
+          inboxId: contactInbox.inboxId,
+        })
+      )?.id
+    if (!accountId) {
+      throw notFoundException("Zalo Account not found")
+    }
+    contentAttributes = {
+      ...contentAttributes,
+      zaloAccount: { accountId, sendAttempt: { status: "pending" } },
+    }
+  }
   const messageInput = {
     ...(props.deliveryIdentity ? { id: props.deliveryIdentity.id } : {}),
     text: productMessage ? productMessage.text : plainText,

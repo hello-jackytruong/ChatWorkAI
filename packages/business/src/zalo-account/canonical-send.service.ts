@@ -10,6 +10,7 @@ import type {
   ZaloAccountGroupAudience,
   ZaloAccountPreparedSend,
 } from "@chatbotx.io/sdk"
+import { getZaloAccountErrorInfo } from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import { sha256Hex } from "@chatbotx.io/utils/crypto"
 import { conversationService } from "../conversation/service"
@@ -20,6 +21,7 @@ import {
 } from "../errors"
 import { createOutgoing } from "../message/create-outgoing"
 import { assertPublicUrl } from "../net/ssrf-guard"
+import { withBlockedOwnerGuard } from "../workspace-lifecycle/with-blocked-owner-guard"
 import { zaloAccountGroupService } from "./group.service"
 import { zaloAccountSendAttemptService } from "./send-attempt.service"
 import { zaloAccountService } from "./service"
@@ -59,7 +61,101 @@ const resultOf = (
       }
     : null
 
+const projectOutcome = (row: ZaloAccountSendAttemptModel) => ({
+  commandId: row.commandId,
+  status: row.status,
+  messageId: row.messageId,
+  messageCreatedAt: row.messageCreatedAt?.toISOString() ?? null,
+  messageIds: row.providerMessageIds,
+  ...(row.reconciliation
+    ? {
+        reconciliation: {
+          state: row.reconciliation.state,
+          attempts: row.reconciliation.attempts,
+          lastErrorCode: row.reconciliation.lastErrorCode,
+        },
+        errorInfo: row.reconciliation.sendError
+          ? getZaloAccountErrorInfo(row.reconciliation.sendError)
+          : undefined,
+      }
+    : {}),
+})
+
 export const zaloAccountCanonicalSendService = {
+  async getOutcomeByMessage(input: {
+    workspaceId: string
+    accountId: string
+    messageId: string
+    messageCreatedAt: Date
+  }) {
+    await requireAccount(input)
+    const row = await zaloAccountSendAttemptRepository.findByMessage(input)
+    if (!row) {
+      throw notFoundException("Zalo send attempt not found")
+    }
+    return projectOutcome(row)
+  },
+  async reconcileMessage(input: {
+    workspaceId: string
+    inboxId: string
+    messageId: string
+    createdAt: Date
+  }): Promise<boolean> {
+    const account = await zaloAccountService.findByInboxId(input)
+    if (!account) {
+      return false
+    }
+    const row = await zaloAccountSendAttemptRepository.findByMessage({
+      ...input,
+      accountId: account.id,
+      messageCreatedAt: input.createdAt,
+    })
+    if (!row) {
+      return false
+    }
+    return await zaloAccountSendAttemptService.reconcileAttempt(
+      row,
+      input.inboxId,
+    )
+  },
+  async recoverReconciliation(): Promise<void> {
+    const deadline = Date.now() + 5000
+    // Claim one at a time so the five-second budget does not strand an entire
+    // batch behind leases when one shard is slow.
+    for (let count = 0; count < 20 && Date.now() < deadline; count++) {
+      const [row] = await zaloAccountSendAttemptRepository.claimReconciliation({
+        limit: 1,
+      })
+      if (!row?.reconciliation) {
+        break
+      }
+      let success = false
+      try {
+        const account = await requireAccount(row)
+        success =
+          (await withBlockedOwnerGuard(row.workspaceId, () =>
+            zaloAccountSendAttemptService.reconcileAttempt(
+              row,
+              account.inboxId,
+            ),
+          )) ?? false
+      } catch {
+        // The durable marker, rather than provider dispatch, is retried.
+      }
+      if (!success) {
+        await zaloAccountSendAttemptRepository.finishReconciliation({
+          ...row,
+          revision: row.reconciliation.revision,
+          providerMessageIds: row.providerMessageIds,
+          success: false,
+        })
+        const durable = await zaloAccountSendAttemptRepository.find(row)
+        if (durable) {
+          await zaloAccountSendAttemptService.publishOutcome(durable)
+        }
+      }
+    }
+  },
   async getOutcome(
     input: Omit<
       SendInput,
@@ -103,11 +199,8 @@ export const zaloAccountCanonicalSendService = {
       throw notFoundException("Zalo send attempt not found")
     }
     return {
+      ...projectOutcome(row),
       commandId: input.commandId,
-      status: row.status,
-      messageId: row.messageId,
-      messageCreatedAt: row.messageCreatedAt?.toISOString() ?? null,
-      messageIds: row.providerMessageIds,
     }
   },
   async recoverPrepared(row: ZaloAccountSendAttemptModel): Promise<void> {

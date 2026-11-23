@@ -25,6 +25,7 @@ import {
   zaloAccountGroupService,
   zaloAccountSendAttemptService,
 } from "@chatbotx.io/business/zalo-account"
+import { zaloAccountCanonicalSendService } from "@chatbotx.io/business/zalo-account/canonical-send"
 import {
   channelTypes,
   messageTypes,
@@ -63,6 +64,8 @@ import {
 import { logDiagnostic } from "@chatbotx.io/logger"
 import { RealtimeEventType } from "@chatbotx.io/realtime-protocol"
 import {
+  getZaloAccountErrorInfo,
+  getZaloAccountErrorMessage,
   IntegrationException,
   type MessageButtonTemplate,
   type MessageCardTemplate,
@@ -1163,6 +1166,21 @@ export async function sendFlowStep({
 
     const [channelResult] = await Promise.all([channelSend, ...broadcasts])
     const providerMessageId = channelResult.messageIds[0]
+    if (targetContactInbox.channel === "zaloAccount" && message) {
+      try {
+        await zaloAccountCanonicalSendService.reconcileMessage({
+          workspaceId: conversation.workspaceId,
+          inboxId: targetContactInbox.inboxId,
+          messageId: message.id,
+          createdAt: message.createdAt,
+        })
+      } catch {
+        logger.warn(
+          { messageId: message.id, workspaceId: conversation.workspaceId },
+          "Zalo Account local reconciliation remains pending",
+        )
+      }
+    }
     if (targetContactInbox.contactKind === "channelGroup") {
       return
     }
@@ -1226,7 +1244,11 @@ export async function sendFlowStep({
       })
     }
   } catch (error) {
-    const parsedError = await parseSdkError(error)
+    const safeError =
+      targetContactInbox.channel === "zaloAccount"
+        ? new Error(getZaloAccountErrorMessage(getZaloAccountErrorInfo(error)))
+        : error
+    const parsedError = await parseSdkError(safeError)
     if (
       targetContactInbox.contactKind === "channelGroup" ||
       (targetContactInbox.channel === "zaloAccount" &&
@@ -1239,7 +1261,7 @@ export async function sendFlowStep({
         })))
     ) {
       logger.error(
-        { err: error, conversationId },
+        { err: safeError, conversationId },
         "Zalo group flow send failed",
       )
       await recordMessageSendError(
@@ -1254,7 +1276,7 @@ export async function sendFlowStep({
     }
 
     logger.error(
-      error,
+      { err: safeError },
       `sendFlowStep error for conversationId: ${conversationId}`,
     )
 
@@ -1267,7 +1289,10 @@ export async function sendFlowStep({
       errorData: parsedError,
       // Captured here while the throw is still in hand: `errorData` is a
       // stackless `ParsedError`, so `ErrorLog.stackTrace` has no other source.
-      errorStack: resolveStackFrames(error),
+      errorStack:
+        targetContactInbox.channel === "zaloAccount"
+          ? undefined
+          : resolveStackFrames(error),
       occurredAt: new Date(),
       // Always terminal: this catch swallows the error rather than rethrowing,
       // so the step's BullMQ job completes and nothing re-attempts the send.

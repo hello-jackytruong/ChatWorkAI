@@ -1,5 +1,7 @@
 import { cacheConnections, type Redis } from "@chatbotx.io/redis"
 import {
+  getZaloAccountErrorInfo,
+  getZaloAccountErrorMessage,
   parseZaloAccountCommandEnvelope,
   type ZaloAccountCommandEnvelope,
   type ZaloAccountCommandResult,
@@ -651,10 +653,17 @@ export class ZaloAccountCommandTransport {
             `Zalo Account ${operation} outcome is unknown; do not retry automatically`,
           )
         }
+        const errorInfo =
+          result.status === "failed" && result.errorInfo
+            ? result.errorInfo
+            : getZaloAccountErrorInfo(
+                new ZaloAccountPreDispatchError(
+                  "Zalo Account request rejected",
+                ),
+              )
         throw new ZaloAccountPreDispatchError(
-          result.status === "failed"
-            ? `Zalo Account ${operation} failed: ${result.error}`
-            : `Zalo Account runtime ${operation} was not confirmed: ${result.status}`,
+          getZaloAccountErrorMessage(errorInfo),
+          errorInfo,
         )
       }
       await new Promise((resolve) => setTimeout(resolve, 50))

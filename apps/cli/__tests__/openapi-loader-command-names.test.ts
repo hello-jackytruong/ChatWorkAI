@@ -650,6 +650,10 @@ describe("Zalo Account policy names", () => {
       ["POST", "/v1/zalo-accounts/{accountId}/messages"],
       ["POST", "/v1/zalo-accounts/{accountId}/typing"],
       ["GET", "/v1/zalo-accounts/{accountId}/send-attempts/{commandId}"],
+      [
+        "GET",
+        "/v1/zalo-accounts/{accountId}/messages/{messageId}/send-attempt",
+      ],
       ["GET", "/v1/zalo-accounts/{accountId}/message-state"],
       ["GET", "/v1/zalo-accounts/{accountId}/groups/{groupId}/tags"],
       ["PATCH", "/v1/zalo-accounts/{accountId}/groups/{groupId}/tags"],

@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Zalo-geschiedenis tot en met het geselecteerde bericht verwijderen? De opgeslagen CRM-geschiedenis blijft beschikbaar voor opvolging.",
     "deleteChatNoBoundary": "Er is geen berichtgrens beschikbaar om de Zalo-geschiedenis te verwijderen.",
     "deletedOnMyZalo": "Verwijderd op mijn Zalo",
-    "deleteChatBoundary": "Grens voor verwijderen van geschiedenis"
+    "deleteChatBoundary": "Grens voor verwijderen van geschiedenis",
+    "evidence": {
+      "unsupportedContent": "Niet-ondersteund Zalo-bericht",
+      "invalidContent": "Zalo-bericht kon niet worden gelezen",
+      "unsupportedSchema": "Zalo-berichtindeling wordt niet ondersteund",
+      "pending": "Wacht op bevestiging",
+      "unknown": "Resultaat onbekend — controleer status",
+      "failed": "Bericht is niet verzonden",
+      "applied": "Verzonden",
+      "appliedPending": "Verzonden, lokaal afstemmen",
+      "needsReview": "Resultaat moet worden beoordeeld",
+      "safeFailure": "Zalo-bewerking kon niet veilig worden voltooid",
+      "unavailable": "Status niet beschikbaar. Probeer opnieuw.",
+      "inspect": "Status controleren"
+    }
   },
   "actions": {
     "scrollToBottom": "Naar beneden scrollen",

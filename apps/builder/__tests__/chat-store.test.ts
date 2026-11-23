@@ -2611,3 +2611,27 @@ test("an attachment readiness patch cannot restore a recalled message", () => {
   })
   expect(store.getState().messages[0]).toEqual(original)
 })
+test("late Zalo send evidence cannot replace a newer conflict revision", () => {
+  const store = createChatStore()
+  const evidence = (revision: number, state: string) => ({
+    zaloAccount: {
+      sendAttempt: { status: "applied", reconciliation: { revision, state } },
+    },
+  })
+  const current = evidence(5, "needs_review")
+  store.setState({
+    messages: [
+      { ...makeMessage("c", new Date(), "m"), contentAttributes: current },
+    ] as never,
+  })
+  store.getState().updateMessageContentAttributes("m", evidence(4, "completed"))
+  expect(store.getState().messages[0]?.contentAttributes).toEqual(current)
+  store.getState().updateMessageContentAttributes("m", {
+    zaloAccount: { providerMessageId: "legacy" },
+  })
+  expect(store.getState().messages[0]?.contentAttributes).toEqual(current)
+  store.getState().updateMessageContentAttributes("m", evidence(6, "completed"))
+  expect(store.getState().messages[0]?.contentAttributes).toEqual(
+    evidence(6, "completed"),
+  )
+})

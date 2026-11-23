@@ -112,7 +112,21 @@
     "deleteChatConfirm": "Ștergi istoricul Zalo până la mesajul selectat inclusiv? Istoricul salvat în CRM rămâne disponibil pentru urmărire.",
     "deleteChatNoBoundary": "Nu există un mesaj limită pentru ștergerea istoricului Zalo.",
     "deletedOnMyZalo": "Șters din Zalo al meu",
-    "deleteChatBoundary": "Limita de ștergere a istoricului"
+    "deleteChatBoundary": "Limita de ștergere a istoricului",
+    "evidence": {
+      "unsupportedContent": "Mesaj Zalo neacceptat",
+      "invalidContent": "Mesajul Zalo nu a putut fi citit",
+      "unsupportedSchema": "Format de mesaj Zalo neacceptat",
+      "pending": "Se așteaptă confirmarea",
+      "unknown": "Rezultat necunoscut — verificați starea",
+      "failed": "Mesajul nu a fost trimis",
+      "applied": "Trimis",
+      "appliedPending": "Trimis, se reconciliază local",
+      "needsReview": "Rezultatul necesită verificare",
+      "safeFailure": "Operația Zalo nu a putut fi finalizată în siguranță",
+      "unavailable": "Starea nu este disponibilă. Încercați din nou.",
+      "inspect": "Verificați starea"
+    }
   },
   "flows": {
     "export": {

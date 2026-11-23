@@ -99,8 +99,15 @@ import {
   ZaloGroupMessageStatus,
 } from "./zalo-group-message-context"
 import { ZaloGroupText } from "./zalo-group-text"
+import {
+  canResendZaloMessage,
+  getZaloMessageEvidence,
+  ZaloMessageEvidence,
+  type ZaloMessageInspect,
+} from "./zalo-message-evidence"
 
 type MessageItemProps = {
+  zaloInspect?: ZaloMessageInspect
   zaloGroup?: boolean
   zaloState?: ZaloGroupMessageState
   message: MessageResourceWithRelations
@@ -205,6 +212,8 @@ export const MessageItem = (props: MessageItemProps) => {
       break
   }
 
+  const zaloEvidence = getZaloMessageEvidence(message.contentAttributes)
+  const zaloResendAllowed = canResendZaloMessage(message.contentAttributes)
   const isComment = message.type === "comment"
   const isDeleted = message.deletedAt != null || retentionLabel !== null
   const zaloGroupMessage = props.zaloGroup
@@ -249,7 +258,8 @@ export const MessageItem = (props: MessageItemProps) => {
       ? undefined
       : getWhatsappFlowResponse(message.contentAttributes)
   const suppressRawText = Boolean(
-    flowResponse ||
+    zaloEvidence?.unsupported ||
+      flowResponse ||
       inboundOrder ||
       whatsappCall ||
       callPermissionReply ||
@@ -399,6 +409,17 @@ export const MessageItem = (props: MessageItemProps) => {
             )}
           </>
         )}
+        {!isDeleted && zaloEvidence && (
+          <ZaloMessageEvidence
+            attributes={message.contentAttributes}
+            inspect={guestDisplay ? undefined : props.zaloInspect}
+            message={
+              guestDisplay || message.messageType !== "outgoing"
+                ? undefined
+                : message
+            }
+          />
+        )}
         {RenderContentAttributes({ ...props, message }, paymentRequests)}
         {props.zaloGroup && !isDeleted && (
           <ZaloGroupMessageStatus state={props.zaloState} />
@@ -434,7 +455,7 @@ export const MessageItem = (props: MessageItemProps) => {
       </div>
 
       <div className="flex">
-        {!outgoingTranslationStatus &&
+        {!(outgoingTranslationStatus || zaloEvidence) &&
           message.sendError &&
           (message.messageType === "outgoing" ||
             (guestDisplay && message.messageType === "incoming")) && (
@@ -445,6 +466,7 @@ export const MessageItem = (props: MessageItemProps) => {
           )}
         {!guestDisplay &&
           renderResend &&
+          zaloResendAllowed &&
           isResendableMessage(message) &&
           renderResend(message)}
         {/* Meta can terminate an ANSWERED call with no audio (e.g. error

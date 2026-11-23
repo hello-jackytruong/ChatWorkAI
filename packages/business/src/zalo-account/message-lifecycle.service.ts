@@ -3,6 +3,7 @@ import {
   createMessageRepository,
   integrationZaloAccountGroupRepository,
   zaloAccountMessageStateRepository,
+  zaloAccountSendAttemptRepository,
 } from "@chatbotx.io/database/repositories"
 import {
   RealtimeEventType,
@@ -129,7 +130,16 @@ export const zaloAccountMessageLifecycleService = {
     ) {
       return {}
     }
-    const sourceId = `za:${encodeURIComponent(input.accountId)}:${event.threadType}:${encodeURIComponent(event.threadId)}:${encodeURIComponent(event.providerMessageId)}`
+    const ownAttempt =
+      await zaloAccountSendAttemptRepository.findByProviderMessage({
+        ...input,
+        threadType: event.threadType,
+        threadId: event.threadId,
+        providerMessageId: event.providerMessageId,
+      })
+    const providerMessageId =
+      ownAttempt?.providerMessageIds[0] ?? event.providerMessageId
+    const sourceId = `za:${encodeURIComponent(input.accountId)}:${event.threadType}:${encodeURIComponent(event.threadId)}:${encodeURIComponent(providerMessageId)}`
     const scope = {
       workspaceId: input.workspaceId,
       accountId: input.accountId,

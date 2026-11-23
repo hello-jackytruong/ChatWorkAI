@@ -12,6 +12,11 @@ import {
   zaloAccountAuthorizationEventSchema,
   zaloAccountLifecycleEventSchema,
 } from "@chatbotx.io/sdk"
+import {
+  messageBacklog,
+  messageBacklogReady,
+  recordMessageDiagnostic,
+} from "./message-diagnostics"
 import type {
   AccountLease,
   AccountLeasePort,
@@ -44,6 +49,7 @@ type LifecyclePayload = ZaloAccountLifecycleEvent extends infer T
   : never
 
 type RuntimeOptions = RuntimeOwnershipHooks & {
+  messageIntegrityEnabled?: boolean
   qrDeadlineAt?: number
   loginTimeoutMs?: number
   initialDeadlineAt?: number
@@ -78,6 +84,9 @@ const cookieContent = (auth: ZaloAccountAuth) =>
   )
 
 export class ZaloAccountRuntime {
+  private pendingMessages = 0
+  private pendingMessageBytes = 0
+  private messageSaturated = false
   private active = false
   private api: ZcaApiPort | null = null
   private authorization: ZaloAccountAuth | null = null
@@ -133,12 +142,16 @@ export class ZaloAccountRuntime {
 
   snapshot(): {
     active: boolean
+    messageReady: boolean
     epoch: number
     state: RuntimeState
     settled: boolean
   } {
     return {
       active: this.active,
+      messageReady:
+        (!this.messageSaturated || this.pendingMessages === 0) &&
+        messageBacklogReady(),
       settled: this.settled,
       epoch: this.options.epoch,
       state: this.state,
@@ -253,6 +266,7 @@ export class ZaloAccountRuntime {
 
   async sendDirect(
     message: ZaloAccountOutboundMessage,
+    beforeDispatch?: () => Promise<void>,
   ): Promise<RuntimeSendResult> {
     if (
       !(
@@ -266,7 +280,25 @@ export class ZaloAccountRuntime {
         "Zalo Account runtime is not connected",
       )
     }
-    const result = await this.api.sendDirect(message)
+    const api = this.api
+    const assertConnected = () => {
+      if (
+        !this.active ||
+        this.api !== api ||
+        this.state !== "connected" ||
+        this.closeObserved ||
+        Date.now() >= this.leaseExpiresAt
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account runtime ownership changed before sending",
+        )
+      }
+    }
+    const result = await api.sendDirect(message, async () => {
+      assertConnected()
+      await beforeDispatch?.()
+      assertConnected()
+    })
     return { status: "sent", ...result }
   }
 
@@ -813,6 +845,8 @@ export class ZaloAccountRuntime {
     }
     this.api = api
     this.listener = api.listen({
+      ownUid: zaloUid,
+      messageIntegrityEnabled: this.options.messageIntegrityEnabled,
       onEvent: () => {
         if (this.isCurrent(generation) && !this.closeDecision) {
           this.lastEventAt = new Date().toISOString()
@@ -866,7 +900,7 @@ export class ZaloAccountRuntime {
         })
       },
       onThreadEvent: (event) => {
-        this.enqueueEvent(generation, async () => {
+        this.enqueueMessage(generation, event, async () => {
           if (this.lease && this.isCurrent(generation)) {
             await this.options.eventSink.publishThreadEvent?.(event, {
               ...this.eventContext(),
@@ -878,23 +912,32 @@ export class ZaloAccountRuntime {
       },
       onClosed: (reason, code) => this.scheduleClose(reason, generation, code),
       onDirectMessage: (message) => {
-        this.enqueueEvent(generation, async () => {
+        this.enqueueMessage(generation, message, async () => {
+          if (message.unsupported && !this.options.messageIntegrityEnabled) {
+            return
+          }
           await this.publishDirectMessage(message, generation)
         })
       },
       onDirectStatus: (status) => {
-        this.enqueueEvent(generation, async () => {
+        this.enqueueMessage(generation, status, async () => {
           await this.publishDirectStatus(status, generation)
         })
       },
       onDirectUndo: (undo) => {
-        this.enqueueEvent(generation, async () => {
+        this.enqueueMessage(generation, undo, async () => {
           await this.publishDirectUndo(undo, generation)
         })
       },
       onGroupMessage: (activity) => {
-        this.enqueueEvent(generation, async () => {
-          if (activity.message && this.lease && this.isCurrent(generation)) {
+        this.enqueueMessage(generation, activity, async () => {
+          if (
+            activity.message &&
+            (!activity.message.unsupported ||
+              this.options.messageIntegrityEnabled) &&
+            this.lease &&
+            this.isCurrent(generation)
+          ) {
             await this.options.eventSink.publishGroupMessage?.(
               activity.message,
               {
@@ -913,10 +956,7 @@ export class ZaloAccountRuntime {
           )
         })
       },
-      onUnsupported: () => {
-        // Unsupported provider payloads are intentionally non-fatal. Metrics
-        // are emitted by the transport publisher once their typed route exists.
-      },
+      onUnsupported: recordMessageDiagnostic,
     })
     this.watchdog = setTimeout(
       () => this.scheduleClose("timeout", generation),
@@ -1412,12 +1452,55 @@ export class ZaloAccountRuntime {
     task.catch(() => undefined)
   }
 
+  private enqueueMessage(
+    generation: number,
+    payload: unknown,
+    task: () => Promise<void>,
+  ): void {
+    if (!this.isCurrent(generation) || this.closeObserved) {
+      return
+    }
+    let bytes: number
+    try {
+      bytes = Buffer.byteLength(JSON.stringify(payload))
+    } catch {
+      recordMessageDiagnostic("invalid_fields")
+      return
+    }
+    if (
+      this.pendingMessages >= 20 ||
+      this.pendingMessageBytes + bytes > 1024 * 1024 ||
+      messageBacklog.count >= 200 ||
+      messageBacklog.bytes + bytes > 16 * 1024 * 1024
+    ) {
+      this.messageSaturated = true
+      recordMessageDiagnostic("saturation")
+      return
+    }
+    this.pendingMessages++
+    this.pendingMessageBytes += bytes
+    messageBacklog.count++
+    messageBacklog.bytes += bytes
+    const release = () => {
+      this.pendingMessages--
+      this.pendingMessageBytes -= bytes
+      messageBacklog.count--
+      messageBacklog.bytes -= bytes
+      if (this.pendingMessages === 0) {
+        this.messageSaturated = false
+      }
+    }
+    this.enqueueEvent(generation, task, false, release)
+  }
+
   private enqueueEvent(
     generation: number,
     task: () => Promise<void>,
     allowClosed = false,
+    onComplete?: () => void,
   ): void {
     if (!this.isCurrent(generation) || (this.closeObserved && !allowClosed)) {
+      onComplete?.()
       return
     }
     const observation = {
@@ -1434,7 +1517,13 @@ export class ZaloAccountRuntime {
         }
       }
     })
-    this.eventQueue = queued.catch(() => undefined)
+    this.eventQueue = queued
+      .catch(() => {
+        if (onComplete) {
+          recordMessageDiagnostic("publish_failed")
+        }
+      })
+      .finally(() => onComplete?.())
   }
 
   private clearWatchdog(): void {

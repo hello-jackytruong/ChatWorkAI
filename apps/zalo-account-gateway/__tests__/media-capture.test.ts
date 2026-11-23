@@ -141,3 +141,32 @@ it("bounds explicit card media and skips nested webpage URLs", () => {
     })
   }
 })
+
+it.each([
+  0, 1,
+])("preserves descriptor-only media with integrity enabled in thread %s", (type) => {
+  const result = normalizeProviderMessage(
+    {
+      ...base,
+      type,
+      threadId: type === 0 ? "peer" : "group",
+      data: {
+        ...base.data,
+        msgType: "video",
+        content: { url: "https://cdn.example.test/original" },
+      },
+    },
+    { ownUid: "self", messageIntegrityEnabled: true },
+  )
+  expect(result).toMatchObject({
+    kind: type === 0 ? "direct" : "group",
+    message: {
+      schemaVersion: 1,
+      attachments: [],
+      mediaResources: [{ kind: "video", role: "original" }],
+    },
+  })
+  if (result.kind !== "unsupported") {
+    expect(result.message.unsupported).toBeUndefined()
+  }
+})

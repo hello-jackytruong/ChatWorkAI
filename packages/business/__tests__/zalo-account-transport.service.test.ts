@@ -258,3 +258,32 @@ describe("ZaloAccountCommandTransport", () => {
     ).rejects.toThrow("snapshot version regressed")
   })
 })
+
+it("preserves structured admission failure without exposing a provider message", async () => {
+  redis.get.mockReset()
+  redis.get.mockResolvedValueOnce("owner-1:9").mockResolvedValueOnce(
+    JSON.stringify({
+      status: "failed",
+      error: "https://secret.test/raw-body",
+      errorInfo: {
+        code: "rate_limited",
+        phase: "admission",
+        retryAfterMs: 1234,
+        safeAction: "new_attempt",
+      },
+    }),
+  )
+  const sending = transport.sendDirectAndWait({
+    commandId: "typed-failure",
+    workspaceId: "w",
+    accountId: "a",
+    inboxId: "i",
+    message: { recipientId: "p", text: "hello", attachments: [] },
+    ttlMs: 30_000,
+    waitTimeoutMs: 100,
+  })
+  await expect(sending).rejects.toMatchObject({
+    errorInfo: { code: "rate_limited", retryAfterMs: 1234 },
+  })
+  await expect(sending).rejects.not.toThrow("https://secret.test")
+})

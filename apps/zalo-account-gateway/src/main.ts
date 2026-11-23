@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url"
 import {
+  takeDirectSendCapacity,
   zaloAccountGroupService,
   zaloAccountLabelService,
   zaloAccountSendAttemptService,
@@ -50,6 +51,7 @@ export const main = async (): Promise<void> => {
   const leaseStore = new RedisAccountLeaseStore(redis)
   const eventSink = env.enabled
     ? new FencedEventPublisher({
+        messageIntegrityEnabled: env.messageIntegrityEnabled,
         appendPort: leaseStore,
         eventStreamKey: zaloAccountTransportKeys.eventStream,
         maxLen: 100_000,
@@ -59,6 +61,8 @@ export const main = async (): Promise<void> => {
       })
     : disabledEventSink
   const pool = new ZaloAccountPool({
+    messageIntegrityEnabled: env.messageIntegrityEnabled,
+    admitDirectSend: takeDirectSendCapacity,
     onLeaseLost: () => scheduleRecovery(0),
     claim: (input) => zaloAccountRuntimeStateService.claim(input),
     hold: (input) => zaloAccountRuntimeStateService.hold(input),
@@ -203,7 +207,8 @@ export const main = async (): Promise<void> => {
       !shuttingDown &&
       !transportFailed &&
       redis.status === "ready" &&
-      consumer?.isReady() === true,
+      consumer?.isReady() === true &&
+      pool.isMessageReady(),
   })
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => reject(error)
