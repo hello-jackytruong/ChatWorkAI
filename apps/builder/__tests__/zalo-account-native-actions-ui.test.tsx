@@ -57,8 +57,13 @@ const render = async () => {
   await settle()
 }
 const button = (label: string) =>
-  Array.from(container.querySelectorAll("button")).find(
-    (item) => item.textContent === label,
+  Array.from(
+    document.body.querySelectorAll<HTMLButtonElement>(
+      'button, [role="menuitem"]',
+    ),
+  ).find(
+    (item) =>
+      item.textContent === label || item.getAttribute("aria-label") === label,
   )
 const click = async (label: string) => {
   expect(button(label)).toBeDefined()
@@ -91,21 +96,25 @@ afterEach(() => {
 })
 it("does not prefetch capabilities or original content until the user opens actions", async () => {
   await render()
+  expect(button("messageActions")?.textContent).toBe("")
+  expect(button("viewSavedContent")).toBeUndefined()
   expect(actions.capabilities).not.toHaveBeenCalled()
   expect(actions.content).not.toHaveBeenCalled()
   await click("messageActions")
+  expect(document.body.querySelector('[role="menu"]')).not.toBeNull()
   expect(actions.capabilities).toHaveBeenCalledTimes(1)
   expect(actions.content).not.toHaveBeenCalled()
   await click("viewSavedContent")
+  expect(document.body.querySelector('[role="menu"]')).toBeNull()
   expect(actions.content).toHaveBeenCalledTimes(1)
 })
 it("keeps native operations disabled while local hide remains available", async () => {
   await render()
   await click("messageActions")
-  expect(button("recallOnZalo")?.disabled).toBe(true)
-  expect(button("deleteOnMyZalo")?.disabled).toBe(true)
-  expect(button("hideLocally")?.disabled).toBe(false)
-  expect(container.textContent).toContain("nativeOperationsDisabled")
+  expect(button("recallOnZalo")?.getAttribute("aria-disabled")).toBe("true")
+  expect(button("deleteOnMyZalo")?.getAttribute("aria-disabled")).toBe("true")
+  expect(button("hideLocally")?.getAttribute("aria-disabled")).not.toBe("true")
+  expect(document.body.textContent).toContain("nativeOperationsDisabled")
   await click("recallOnZalo")
   expect(actions.mutate).not.toHaveBeenCalled()
 })
