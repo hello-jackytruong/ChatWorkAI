@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Konfigurasi",
+    "connectionStatus": "Status koneksi",
+    "active": "Aktif",
+    "disconnected": "Terputus",
+    "paused": "Dijeda",
+    "connectSuccess": "Akun Zalo berhasil terhubung.",
+    "connectFailed": "Koneksi gagal atau kedaluwarsa. Silakan coba lagi.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Configurar",
+    "connectionStatus": "Estado de conexión",
+    "active": "Activo",
+    "disconnected": "Desconectado",
+    "paused": "En pausa",
+    "connectSuccess": "Cuenta de Zalo conectada correctamente.",
+    "connectFailed": "La conexión falló o caducó. Inténtalo de nuevo.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

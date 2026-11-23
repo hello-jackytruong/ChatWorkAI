@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Konfigurer",
+    "connectionStatus": "Forbindelsesstatus",
+    "active": "Aktiv",
+    "disconnected": "Afbrudt",
+    "paused": "Sat på pause",
+    "connectSuccess": "Zalo-kontoen er tilsluttet.",
+    "connectFailed": "Forbindelsen mislykkedes eller udløb. Prøv igen.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

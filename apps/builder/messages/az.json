@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Tənzimlə",
+    "connectionStatus": "Bağlantı vəziyyəti",
+    "active": "Aktiv",
+    "disconnected": "Bağlantı kəsilib",
+    "paused": "Dayandırılıb",
+    "connectSuccess": "Zalo hesabı uğurla qoşuldu.",
+    "connectFailed": "Bağlantı uğursuz oldu və ya vaxtı bitdi. Yenidən cəhd edin.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

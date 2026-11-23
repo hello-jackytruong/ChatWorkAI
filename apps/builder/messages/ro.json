@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Configurează",
+    "connectionStatus": "Starea conexiunii",
+    "active": "Activ",
+    "disconnected": "Deconectat",
+    "paused": "În pauză",
+    "connectSuccess": "Contul Zalo a fost conectat cu succes.",
+    "connectFailed": "Conexiunea a eșuat sau a expirat. Încearcă din nou.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

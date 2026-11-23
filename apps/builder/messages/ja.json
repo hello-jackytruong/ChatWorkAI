@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "設定",
+    "connectionStatus": "接続状態",
+    "active": "稼働中",
+    "disconnected": "切断済み",
+    "paused": "一時停止中",
+    "connectSuccess": "Zaloアカウントの接続が完了しました。",
+    "connectFailed": "接続に失敗したか、有効期限が切れました。もう一度お試しください。",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

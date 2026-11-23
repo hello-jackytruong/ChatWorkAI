@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "הגדרה",
+    "connectionStatus": "מצב חיבור",
+    "active": "פעיל",
+    "disconnected": "מנותק",
+    "paused": "מושהה",
+    "connectSuccess": "חשבון Zalo חובר בהצלחה.",
+    "connectFailed": "החיבור נכשל או פג תוקפו. יש לנסות שוב.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

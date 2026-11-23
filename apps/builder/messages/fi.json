@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Määritä",
+    "connectionStatus": "Yhteyden tila",
+    "active": "Aktiivinen",
+    "disconnected": "Yhteys katkaistu",
+    "paused": "Keskeytetty",
+    "connectSuccess": "Zalo-tili yhdistetty onnistuneesti.",
+    "connectFailed": "Yhteys epäonnistui tai vanheni. Yritä uudelleen.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

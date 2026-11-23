@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "配置",
+    "connectionStatus": "连接状态",
+    "active": "运行中",
+    "disconnected": "已断开连接",
+    "paused": "已暂停",
+    "connectSuccess": "Zalo 账号连接成功。",
+    "connectFailed": "连接失败或已过期，请重试。",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

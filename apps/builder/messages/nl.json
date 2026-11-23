@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Configureren",
+    "connectionStatus": "Verbindingsstatus",
+    "active": "Actief",
+    "disconnected": "Verbinding verbroken",
+    "paused": "Gepauzeerd",
+    "connectSuccess": "Zalo-account succesvol verbonden.",
+    "connectFailed": "Verbinding mislukt of verlopen. Probeer het opnieuw.",
     "receive": "Receive",
     "send": "Send",
     "automation": "Automation",

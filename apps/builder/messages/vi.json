@@ -1,5 +1,12 @@
 {
   "zaloAccount": {
+    "configure": "Cấu hình",
+    "connectionStatus": "Trạng thái kết nối",
+    "active": "Đang hoạt động",
+    "disconnected": "Đã ngắt kết nối",
+    "paused": "Tạm dừng",
+    "connectSuccess": "Kết nối tài khoản Zalo thành công.",
+    "connectFailed": "Kết nối thất bại hoặc đã hết hạn. Vui lòng thử lại.",
     "receive": "Nhận tin",
     "send": "Gửi tin",
     "automation": "Tự động hóa",
