@@ -374,6 +374,8 @@ export type ChatActions = {
     messageId: string,
     newText: string,
     attachmentUpdate?: {
+      attachmentId?: string
+      newAttachmentSize?: number
       newAttachmentPath: string | null
       newAttachmentPublicUrl?: string | null
       newAttachmentMimeType?: string | null
@@ -1470,6 +1472,38 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
         set(
           (state) =>
             replaceMessageById(state.messages, messageId, (message) => {
+              if (attachmentUpdate?.attachmentId) {
+                if (message.deletedAt) {
+                  return message
+                }
+                return {
+                  ...message,
+                  attachments: (message.attachments ?? []).map((attachment) =>
+                    attachment.id === attachmentUpdate.attachmentId
+                      ? {
+                          ...attachment,
+                          originPath: "",
+                          url:
+                            attachmentUpdate.newAttachmentPublicUrl ??
+                            attachment.url,
+                          fallbackUrl: null,
+                          mimeType:
+                            attachmentUpdate.newAttachmentMimeType ??
+                            attachment.mimeType,
+                          size:
+                            attachmentUpdate.newAttachmentSize ??
+                            attachment.size,
+                          width:
+                            attachmentUpdate.newAttachmentWidth ??
+                            attachment.width,
+                          height:
+                            attachmentUpdate.newAttachmentHeight ??
+                            attachment.height,
+                        }
+                      : attachment,
+                  ),
+                }
+              }
               // A new text makes the old translation wrong: drop it here; the
               // worker also deletes its row, and the inbox asks again.
               const base = { ...message, text: newText, translation: undefined }
@@ -1521,6 +1555,9 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
               }
             }) ?? state,
         )
+        if (attachmentUpdate?.attachmentId) {
+          return
+        }
         set(
           (state) =>
             patchConversationPreviews(

@@ -1,3 +1,4 @@
+import { Readable } from "node:stream"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -37,6 +38,47 @@ describe("R2 upload compatibility", () => {
       ContentType: "image/jpeg",
       ContentLength: 5,
     })
+  })
+
+  test("forwards an optional abort signal for bounded archival reads and listing", async () => {
+    const storage = new Uploader()
+    vi.spyOn(storage.client, "send").mockImplementation(mocks.send)
+    const signal = new AbortController().signal
+    await storage.headObject("workspace/1/zalo-account/2/object", {
+      abortSignal: signal,
+    })
+    expect(mocks.send.mock.calls[0][1]).toEqual({ abortSignal: signal })
+    await storage.listObjects(
+      "workspace/1/zalo-account/2/",
+      { MaxKeys: 100 },
+      { abortSignal: signal },
+    )
+    expect(mocks.send.mock.calls[1][1]).toEqual({ abortSignal: signal })
+    expect(mocks.send.mock.calls[1][0].input.MaxKeys).toBe(100)
+  })
+
+  test("forwards a signal while opening a trusted uploaded-object stream", async () => {
+    const storage = new Uploader()
+    const body = Readable.from(["bytes"])
+    vi.spyOn(storage.client, "send").mockImplementation(mocks.send)
+    mocks.send.mockResolvedValueOnce({ Body: body, ContentLength: 5 })
+    const signal = new AbortController().signal
+    const result = await storage.getObjectStream("public/space/1/upload", {
+      abortSignal: signal,
+    })
+    expect(mocks.send.mock.calls[0][1]).toEqual({ abortSignal: signal })
+    expect(result.stream).toBe(body)
+    body.destroy()
+  })
+
+  test("forwards a deletion deadline without changing ordinary deletion calls", async () => {
+    const storage = new Uploader()
+    vi.spyOn(storage.client, "send").mockImplementation(mocks.send)
+    const signal = new AbortController().signal
+    await storage.deleteObject("workspace/1/zalo-account/2/object", {
+      abortSignal: signal,
+    })
+    expect(mocks.send.mock.calls[0][1]).toEqual({ abortSignal: signal })
   })
 
   test("preserves S3 and RustFS ACL behavior", async () => {

@@ -336,6 +336,22 @@ export class ZaloAccountRuntime {
     return { status: "sent", ...result }
   }
 
+  async getStickerResources(stickerIds: string[]) {
+    if (
+      !(
+        this.active &&
+        this.api?.getStickerResources &&
+        this.state === "connected" &&
+        !this.closeObserved
+      )
+    ) {
+      throw new Error(
+        "Zalo Account runtime is not connected or sticker reads are unavailable",
+      )
+    }
+    return await this.api.getStickerResources(stickerIds)
+  }
+
   async getLabels(): Promise<ZaloAccountLabelSnapshot> {
     if (
       !(

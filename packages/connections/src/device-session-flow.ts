@@ -316,6 +316,7 @@ export const completeTrustedDeviceAuthorization = async (input: {
   workspaceId: string
   provider: IntegrationType
   auth: AuthValue
+  trustedProfile?: { displayName: string; avatarUrl?: string }
 }): Promise<ConnectSessionModel> => {
   let session = await requireDeviceSession(input)
   const adapter = resolveAdapter(input.provider)
@@ -350,5 +351,7 @@ export const completeTrustedDeviceAuthorization = async (input: {
   if (session.status !== "authorized") {
     throw connectionStateMismatchException()
   }
-  return await continueAuthorization(session, input.auth)
+  return input.provider === "zaloAccount" && input.trustedProfile
+    ? await continueAuthorization(session, input.auth, input.trustedProfile)
+    : await continueAuthorization(session, input.auth)
 }

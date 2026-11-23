@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
+    "./zalo-account-media": "./src/zalo-account-media/index.ts",
     ".": "./src/index.ts",
     "./admin-workspace/constants": "./src/admin-workspace/constants.ts",
     "./ads-analytics/date-range": "./src/ads-analytics/date-range.ts",

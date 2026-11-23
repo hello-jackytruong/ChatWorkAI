@@ -13,6 +13,7 @@ import { SdkException, ZaloAccountPreDispatchError } from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import { dispatchAuditRecordSafely } from "../audit/dispatcher"
 import { notFoundException } from "../errors"
+import { captureZaloAccountResourceMedia } from "../zalo-account-media/resource-capture"
 import { scopedZaloCommandId } from "./command-identity"
 import { isAllowedGroupFlow } from "./group-policy"
 import { takeGroupSendCapacity } from "./group-rate-limit"
@@ -395,6 +396,16 @@ export const zaloAccountGroupService = {
             tx,
           )
         }
+        await captureZaloAccountResourceMedia({
+          workspaceId: input.workspaceId,
+          accountId: input.accountId,
+          tx,
+          resources: groups.map((group) => ({
+            ownerKind: "group",
+            ownerId: group.providerGroupId,
+            avatarUrl: group.avatarUrl,
+          })),
+        })
         if (complete) {
           await integrationZaloAccountGroupRepository.finishCompleteSync(
             {

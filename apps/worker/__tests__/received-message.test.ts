@@ -5,6 +5,14 @@ const AVATAR_STORAGE_PATH_PATTERN = /^public\/space\/ws-1\/avatars\//
 
 const mockContactInfoCaptureAdd = vi.hoisted(() => vi.fn())
 
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  captureZaloAccountMessage: vi.fn(),
+  redactZaloMediaLocators: (attributes: unknown) => attributes,
+}))
+vi.mock("@chatbotx.io/business/zalo-account-media", () => ({
+  getZaloAccountMediaPolicy: () => ({ enabled: false }),
+}))
+
 const mockLockContentionPolicy = vi.hoisted(() => ({
   lockWaitSeconds: 10,
   maxDeferrals: 8,

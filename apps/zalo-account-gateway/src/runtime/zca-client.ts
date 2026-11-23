@@ -27,6 +27,7 @@ import {
   normalizeProviderMessage,
 } from "./provider-message"
 import { normalizeProviderThreadEvent } from "./provider-thread-event"
+import { createStickerResourceReader } from "./sticker-resource"
 
 const normalizeQrImage = (image: string) =>
   image.startsWith("data:image/") ? image : `data:image/png;base64,${image}`
@@ -92,6 +93,9 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
   // Keep the close observer until the SDK confirms the network close.
   api.listener.on("closed", onClosed)
   return {
+    getStickerResources: createStickerResourceReader((ids) =>
+      api.getStickersDetail(ids),
+    ),
     sendTyping: async (threadId, threadType) => {
       await api.sendTypingEvent(
         threadId,

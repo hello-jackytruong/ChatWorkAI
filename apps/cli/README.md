@@ -1668,6 +1668,12 @@ sync, canonical messaging and lifecycle aggregates. Connection lifecycle uses th
 
 ```bash
 chatbotx zalo-accounts list
+chatbotx zalo-accounts media list <accountId> --conversationId <conversationId>
+chatbotx zalo-accounts media get <accountId> <referenceId> --conversationId <conversationId>
+chatbotx zalo-accounts download list <accountId> <referenceId> --conversationId <conversationId>
+chatbotx zalo-accounts retry add <accountId> <referenceId> --conversationId <conversationId> --expectedSourceRevision <revision>
+chatbotx zalo-accounts backfill add <accountId> --conversationId <conversationId> --from <ISO-date> --to <ISO-date> --dryRun true
+chatbotx zalo-accounts reconcile add <accountId> --conversationId <conversationId> --dryRun true
 chatbotx zalo-accounts get <id>
 chatbotx zalo-accounts status list <accountId>
 chatbotx zalo-accounts groups list <accountId>
@@ -1687,6 +1693,19 @@ chatbotx zalo-accounts tags update <accountId> <groupId> --commandId <stable-id>
 chatbotx zalo-account-set-group-messaging <accountId> --enabled <true|false>
 chatbotx zalo-account-update-group-policy <accountId> <groupId> --receiveEnabled <true|false> --sendEnabled <true|false> --automationMode <disabled|mentionOnly|all>
 ```
+
+Archived message-media reads require the `inbox` scope and current conversation
+access; `channels` alone cannot read message content. For account/group/contact
+or sticker resources, omit `--conversationId` and pass `--ownerKind` plus
+`--ownerId`; this requires `channels` management access. Contact owner IDs are
+the provider UID from a current ContactInbox, not a CRM contact ID. Downloads return a five-minute URL
+only while the parent message exists and is not deleted. Backfill and reconcile
+also require `channels`; backfill reads persisted messages in a window of at most
+31 days and returns a timestamp cursor, while reconcile is always dry-run with
+independent database/object cursors. Neither operation fetches provider history
+or deletes objects. Stored reads continue when capture is disabled. These six
+commands are generated from `zaloAccounts.listMedia`, `getMedia`,
+`authorizeMediaDownload`, `retryMedia`, `backfillMedia` and `reconcileMedia`.
 
 Both the account group switch and group receive/send default off. Enabling
 receive or send provisions one group conversation; send-only still rejects

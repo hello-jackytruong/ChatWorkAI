@@ -17,6 +17,7 @@ import type {
 import { zodBigintAsString } from "@chatbotx.io/utils"
 import { endOfHour } from "date-fns"
 import z from "zod"
+import { resolveZaloContactAvatarMap } from "@/features/contacts/queries/resolve-contact-avatars"
 import type { ListConversationsRequest } from "@/features/conversations/schema/query"
 import { decodeCursor, encodeCursor } from "@/lib/pagination"
 import type {
@@ -90,26 +91,31 @@ const mapCompactConversationContactInboxes = (
     },
   }))
 
-const resolveConversationContact = async <T extends { avatar: string | null }>(
+const resolveConversationContact = async <
+  T extends { id: string; avatar: string | null },
+>(
   contact: T | null,
   contactInboxes: readonly (ContactInboxOperationalModel & {
     inbox: InboxModel
   })[],
   workspaceId: string,
+  zaloAvatars: Map<string, string> = new Map(),
 ): Promise<T | null> => {
   if (!contact) {
     return null
   }
   return {
     ...contact,
-    avatar: await resolveContactAvatarUrl(
-      {
-        workspaceId,
-        contact,
-        contactInboxes,
-      },
-      (key) => key,
-    ),
+    avatar:
+      zaloAvatars.get(contact.id) ??
+      (await resolveContactAvatarUrl(
+        {
+          workspaceId,
+          contact,
+          contactInboxes,
+        },
+        (key) => key,
+      )),
   }
 }
 
@@ -176,6 +182,12 @@ export async function listConversations(
   const hasMore = conversations.length > limit
   const page = hasMore ? conversations.slice(0, limit) : conversations
 
+  const zaloAvatars = await resolveZaloContactAvatarMap(
+    page.flatMap((item) => (item.contact ? [item.contact] : [])),
+    page.flatMap((item) => item.contactInboxes),
+    workspaceId,
+  )
+
   // ── Shard-aware message lookups (parallelized) ──────────────────────────
   const messageRepository = await createMessageRepository()
   const lastMessagesResults = await Promise.all(
@@ -234,6 +246,7 @@ export async function listConversations(
               c.contact ?? null,
               c.contactInboxes,
               workspaceId,
+              zaloAvatars,
             ),
             contactInboxes: mapCompactConversationContactInboxes(
               c.contactInboxes,
@@ -258,6 +271,7 @@ export async function listConversations(
             c.contact ?? null,
             c.contactInboxes,
             workspaceId,
+            zaloAvatars,
           ),
           contactInboxes: mapConversationContactInboxes(c.contactInboxes),
           assignedUser: c.assignedUser ?? null,
@@ -302,6 +316,11 @@ export const findConversation = async (
     },
   )
 
+  const zaloAvatars = await resolveZaloContactAvatarMap(
+    conversation.contact ? [conversation.contact] : [],
+    conversation.contactInboxes,
+    input.workspaceId,
+  )
   return {
     data: {
       ...conversation,
@@ -309,6 +328,7 @@ export const findConversation = async (
         conversation.contact,
         conversation.contactInboxes,
         input.workspaceId,
+        zaloAvatars,
       ),
       contactInboxes: mapConversationContactInboxes(
         conversation.contactInboxes,

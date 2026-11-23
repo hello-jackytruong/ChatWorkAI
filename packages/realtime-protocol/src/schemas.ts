@@ -260,6 +260,8 @@ export type RealtimeEventMessageUpdated = {
   eventType: typeof RealtimeEventType.messageUpdated
   data: {
     messageId: string
+    attachmentId?: string
+    newAttachmentSize?: number
     newText: string
     newAttachmentPath?: string | null
     newAttachmentPublicUrl?: string | null

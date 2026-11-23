@@ -15,12 +15,16 @@ import {
   possibleIdempotencyErrors,
 } from "@/lib/orpc/orpc-error-helper"
 import { workspaceTokenAuthAPIForScope } from "@/orpc"
-import { toZaloAccountResource } from "../lib/to-resource"
+import {
+  toZaloAccountResources,
+  withZaloGroupResources,
+} from "../lib/to-resource"
 import { zaloAccountErrors } from "../schema/errors"
 import {
   zaloAccountGroupResource,
   zaloAccountResource,
 } from "../schema/resource"
+import { zaloAccountMediaOperations } from "./media"
 import { zaloAccountOperations } from "./operations"
 
 const workspaceTokenAuthAPI = workspaceTokenAuthAPIForScope("channels")
@@ -49,6 +53,7 @@ const writeErrors = {
 
 export const zaloAccountsPublicRouter = {
   ...zaloAccountOperations,
+  ...zaloAccountMediaOperations,
   list: workspaceTokenAuthAPI
     .route({
       method: "GET",
@@ -62,11 +67,11 @@ export const zaloAccountsPublicRouter = {
     .output(z.object({ data: z.array(zaloAccountResource) }))
     .errors(possibleErrorsOnListingResource)
     .handler(async ({ context }) => ({
-      data: (
+      data: await toZaloAccountResources(
         await zaloAccountService.listByWorkspace({
           workspaceId: context.workspace.id,
-        })
-      ).map(toZaloAccountResource),
+        }),
+      ),
     })),
 
   get: workspaceTokenAuthAPI
@@ -95,7 +100,9 @@ export const zaloAccountsPublicRouter = {
       if (!account) {
         throw notFoundException("Zalo Account not found")
       }
-      return toZaloAccountResource(account)
+      return (await toZaloAccountResources([account]))[0] as NonNullable<
+        Awaited<ReturnType<typeof toZaloAccountResources>>[number]
+      >
     }),
 
   listGroups: workspaceTokenAuthAPI
@@ -130,10 +137,13 @@ export const zaloAccountsPublicRouter = {
     .output(z.object({ data: z.array(zaloAccountGroupResource) }))
     .errors(possibleErrorsOnFindingResource)
     .handler(async ({ context, input }) => ({
-      data: await zaloAccountGroupService.list({
-        workspaceId: context.workspace.id,
-        ...input,
-      }),
+      data: await withZaloGroupResources(
+        context.workspace.id,
+        await zaloAccountGroupService.list({
+          workspaceId: context.workspace.id,
+          ...input,
+        }),
+      ),
     })),
 
   getGroup: workspaceTokenAuthAPI
@@ -150,11 +160,15 @@ export const zaloAccountsPublicRouter = {
     .errors(possibleErrorsOnFindingResource)
     .handler(
       async ({ context, input }) =>
-        await zaloAccountGroupService.get({
-          workspaceId: context.workspace.id,
-          accountId: input.accountId,
-          id: input.id,
-        }),
+        (
+          await withZaloGroupResources(context.workspace.id, [
+            await zaloAccountGroupService.get({
+              workspaceId: context.workspace.id,
+              accountId: input.accountId,
+              id: input.id,
+            }),
+          ])
+        )[0] as Awaited<ReturnType<typeof zaloAccountGroupService.get>>,
     ),
 
   syncGroups: workspaceTokenAuthAPI

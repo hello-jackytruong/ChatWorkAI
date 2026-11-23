@@ -119,6 +119,10 @@ const handleConnectSessionEvent = async (
   await connectionService.completeTrustedDeviceAuthorization({
     ...session,
     auth: authorization.auth,
+    trustedProfile: {
+      displayName: authorization.displayName,
+      avatarUrl: authorization.avatarUrl,
+    },
   })
 }
 

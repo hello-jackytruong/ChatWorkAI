@@ -54,6 +54,7 @@ export const queueGroupByName: Record<QueueName, QueueGroup> = {
   // Broadcast "left a phone/email" attribution: bounded, rate-limited, and the
   // statistic may be late, so it must never compete with chat/integration.
   contactInfoCapture: "bulk",
+  zaloAccountMedia: "bulk",
 }
 
 function resolveGroupUrl(group: QueueGroup): string {

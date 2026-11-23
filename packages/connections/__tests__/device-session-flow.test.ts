@@ -294,6 +294,32 @@ describe("device session events", () => {
     )
   })
 
+  it("carries only gateway-trusted Zalo profile metadata to candidate authorization", async () => {
+    const auth = {
+      authType: "custom" as const,
+      cookie: [],
+      imei: "imei",
+      userAgent: "agent",
+      zaloUid: "uid-1",
+    }
+    const trustedProfile = {
+      displayName: "Jacky",
+      avatarUrl: "https://a.zdn.vn/avatar",
+    }
+    await completeTrustedDeviceAuthorization({
+      sessionId: "session-1",
+      workspaceId: "ws-1",
+      provider: "zaloAccount",
+      auth,
+      trustedProfile,
+    })
+    expect(mocks.continueAuthorization).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "session-1" }),
+      auth,
+      trustedProfile,
+    )
+  })
+
   it("accepts authorization when the scanned event is still queued", async () => {
     await completeDeviceAuthorization({
       sessionId: "session-1",

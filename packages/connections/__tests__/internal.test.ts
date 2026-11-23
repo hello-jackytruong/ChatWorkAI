@@ -18,6 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   inboxCreate: vi.fn(),
+  lockWorkspaceForChildWrite: vi.fn(),
   dispatchAuditRecordSafely: vi.fn(),
   transition: vi.fn(),
   upsertConnectionRow: vi.fn(),
@@ -25,6 +26,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@chatbotx.io/business", () => ({
   inboxService: { create: mocks.inboxCreate },
+}))
+
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountService: { saveAuthorization: vi.fn() },
 }))
 
 vi.mock("@chatbotx.io/business/audit", () => ({
@@ -58,6 +63,9 @@ vi.mock("@chatbotx.io/database/client", () => ({
 
 vi.mock("@chatbotx.io/database/repositories", () => ({
   connectionRepository: { findByIdForWorkspace: vi.fn() },
+  workspaceRepository: {
+    lockWorkspaceForChildWrite: mocks.lockWorkspaceForChildWrite,
+  },
 }))
 
 vi.mock("../src/registry", () => ({ CONNECTION_REGISTRY: {} }))
@@ -76,6 +84,7 @@ const { connectAndPersist, subscribeWebhookBestEffort } = await import(
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.lockWorkspaceForChildWrite.mockResolvedValue(true)
 })
 
 describe("subscribeWebhookBestEffort", () => {
@@ -168,5 +177,47 @@ describe("connectAndPersist — audit on revive", () => {
     })
 
     expect(mocks.dispatchAuditRecordSafely).not.toHaveBeenCalled()
+  })
+})
+
+describe("Zalo Account connect workspace fence", () => {
+  const connect = () =>
+    connectAndPersist({
+      adapter: { provider: { kind: "channel" }, store: {} } as never,
+      provider: "zaloAccount",
+      workspaceId: "ws-1",
+      auth: {} as never,
+      descriptor: { sourceId: "uid-1", displayName: "Account" },
+      extraConfig: {},
+      ownerId: "owner-1",
+      missingOwnerError: new Error("no owner"),
+    })
+
+  it("locks the workspace before inbox and account writes", async () => {
+    mocks.inboxCreate.mockResolvedValue({ inbox: { id: "inbox-new" } })
+    mocks.upsertConnectionRow.mockResolvedValue({
+      id: "conn-1",
+      provider: "zaloAccount",
+    })
+    await connect()
+    expect(mocks.lockWorkspaceForChildWrite).toHaveBeenCalledWith(
+      { workspaceId: "ws-1" },
+      expect.anything(),
+    )
+    expect(
+      mocks.lockWorkspaceForChildWrite.mock.invocationCallOrder[0],
+    ).toBeLessThan(mocks.inboxCreate.mock.invocationCallOrder[0] as number)
+    expect(
+      mocks.lockWorkspaceForChildWrite.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      mocks.upsertConnectionRow.mock.invocationCallOrder[0] as number,
+    )
+  })
+
+  it("refuses a purging workspace before creating any inbox or account", async () => {
+    mocks.lockWorkspaceForChildWrite.mockResolvedValue(false)
+    await expect(connect()).rejects.toThrow("Workspace not found")
+    expect(mocks.inboxCreate).not.toHaveBeenCalled()
+    expect(mocks.upsertConnectionRow).not.toHaveBeenCalled()
   })
 })

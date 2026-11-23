@@ -95,6 +95,10 @@ export const zaloAccountGroupInboxRepository = {
     accountPolicyEpoch: number
     groupPolicyEpoch: number
     message: ZaloAccountGroupMessage
+    beforeMessageWrite?: (pointer: {
+      id: string
+      createdAt: Date
+    }) => Promise<void>
   }) {
     const scope = {
       ...input,
@@ -135,13 +139,39 @@ export const zaloAccountGroupInboxRepository = {
           messageCreatedAt: localMessage?.createdAt ?? new Date(),
           accountPolicyEpoch: input.accountPolicyEpoch,
           groupPolicyEpoch: input.groupPolicyEpoch,
-          payload: input.message,
+          payload:
+            input.beforeMessageWrite && input.message.mediaResources
+              ? {
+                  ...input.message,
+                  mediaResources: input.message.mediaResources.map(
+                    ({ url: _url, ...resource }) => ({
+                      ...resource,
+                      sourceMissing: "source_missing" as const,
+                    }),
+                  ),
+                }
+              : input.message,
         })
         .onConflictDoNothing()
       return true
     })
     if (!admitted) {
       return { isNew: false as const }
+    }
+    // Persist media intent/aliases in MAIN before shard reconciliation or payload clearing.
+    // This also repairs an interrupted capture when a provider event is replayed.
+    if (input.beforeMessageWrite) {
+      const [pointer] = await db
+        .select({
+          id: zaloAccountMessageIdentityModel.messageId,
+          createdAt: zaloAccountMessageIdentityModel.messageCreatedAt,
+        })
+        .from(zaloAccountMessageIdentityModel)
+        .where(identityWhere(scope))
+        .limit(1)
+      if (pointer) {
+        await input.beforeMessageWrite(pointer)
+      }
     }
     return await db.transaction(async (tx) => {
       await tx.execute(sql`SET LOCAL lock_timeout = '2s'`)
@@ -228,6 +258,7 @@ export const zaloAccountGroupInboxRepository = {
                 ? "image/jpeg"
                 : "application/octet-stream"),
             originPath: attachment.url,
+            ...(input.beforeMessageWrite ? { keepOriginal: true } : {}),
             name: attachment.name ?? null,
             size: attachment.size ?? 0,
             sourceId: `${identity.id}-${index}`,

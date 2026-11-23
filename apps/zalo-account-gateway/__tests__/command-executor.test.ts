@@ -28,6 +28,7 @@ const reconnectCommand: ZaloAccountCommandEnvelope = {
 
 const makeHarness = (admission?: ProviderAdmissionPort) => {
   const pool = {
+    getStickerResources: vi.fn(async () => []),
     getLabels: vi.fn(
       async (): Promise<ZaloAccountLabelSnapshot> => ({
         labelData: [],
@@ -392,4 +393,25 @@ describe("ZaloAccountCommandExecutor", () => {
       expect.objectContaining({ expectedVersion: 4, labelData: [label] }),
     )
   })
+})
+
+it("dispatches bounded sticker reads through the owned account runtime", async () => {
+  const { executor, pool } = makeHarness()
+  const command = {
+    ...reconnectCommand,
+    kind: "get_sticker_resources",
+    stickerIds: ["123"],
+    target: { ownerId: "owner-1", epoch: 1, fenceToken: "1" },
+  }
+  expect(await executor.execute(command)).toEqual({
+    status: "applied",
+    result: { status: "synced", stickerResources: [] },
+  })
+  expect(pool.getStickerResources).toHaveBeenCalledWith(
+    expect.objectContaining({
+      workspaceId: "workspace-1",
+      runtime: { kind: "account", id: "account-1" },
+      stickerIds: ["123"],
+    }),
+  )
 })

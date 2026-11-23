@@ -416,6 +416,38 @@ export class ZaloAccountCommandTransport {
     return { messageIds, sentCount }
   }
 
+  async getStickerResourcesAndWait(
+    input: AccountCommandInput & {
+      stickerIds: string[]
+      waitTimeoutMs: number
+    },
+  ) {
+    const lease = await this.requireLease(input)
+    const command = this.command({
+      commandId: input.commandId,
+      kind: "get_sticker_resources",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      ttlMs: input.ttlMs,
+      stickerIds: input.stickerIds.slice(0, 20),
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const result = await this.waitForResult(
+      input.commandId,
+      input.waitTimeoutMs,
+      "sticker detail",
+    )
+    return result.result.stickerResources ?? []
+  }
+
   async getLabelsAndWait(
     input: AccountCommandInput & { waitTimeoutMs: number },
   ): Promise<ZaloAccountLabelSnapshot> {
@@ -492,6 +524,7 @@ export class ZaloAccountCommandTransport {
 
   private command(input: {
     cursor?: number
+    stickerIds?: string[]
     threadType?: "user" | "group"
     threadId?: string
     operationToken?: string
@@ -517,6 +550,7 @@ export class ZaloAccountCommandTransport {
       expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
       ...(input.target ? { target: input.target } : {}),
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(input.stickerIds ? { stickerIds: input.stickerIds } : {}),
       ...(input.operationToken ? { operationToken: input.operationToken } : {}),
       ...(input.groupId ? { groupId: input.groupId } : {}),
       ...(input.threadId
@@ -628,6 +662,12 @@ const withTransport = async <T>(
 }
 
 export const zaloAccountCommandTransportService = {
+  getStickerResourcesAndWait: (
+    input: Parameters<
+      ZaloAccountCommandTransport["getStickerResourcesAndWait"]
+    >[0],
+  ) =>
+    withTransport((transport) => transport.getStickerResourcesAndWait(input)),
   sendTyping: (
     input: Parameters<ZaloAccountCommandTransport["sendTyping"]>[0],
   ) => withTransport((transport) => transport.sendTyping(input)),

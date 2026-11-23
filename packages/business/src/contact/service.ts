@@ -57,6 +57,7 @@ import { userQuotaService } from "../user-quota/service"
 import { resolveWorkingHoursTimezone } from "../working-hours/timezone"
 import { workspaceService } from "../workspace/service"
 import { workspaceUsageService } from "../workspace-usage/service"
+import { zaloContactMediaLifecycle } from "../zalo-account-media/contact-lifecycle"
 import { emitContactInfoChangeEvents } from "./contact-info-changes"
 import { createContactWithInbox } from "./create-with-inbox"
 import {
@@ -842,6 +843,18 @@ class ContactService extends BaseService {
           tx,
         )
         await messageCleanupService.record({ workspaceId, entries, tx })
+        await zaloContactMediaLifecycle.releaseReferences({
+          workspaceId,
+          entries: chunk.flatMap((contact) =>
+            contact.contactInboxes.map((inbox) => ({
+              channel: inbox.channel,
+              inboxId: inbox.inboxId,
+              sourceId: inbox.sourceId,
+              conversationIds: conversationIdsByContact.get(contact.id) ?? [],
+            })),
+          ),
+          tx,
+        })
         await tx
           .delete(contactModel)
           .where(inArray(contactModel.id, contactIds))

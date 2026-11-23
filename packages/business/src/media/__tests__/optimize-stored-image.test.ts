@@ -9,6 +9,10 @@ const repository = vi.hoisted(() => ({
   findAttachmentById: vi.fn(),
   updateAttachment: vi.fn(),
 }))
+const isProtectedAttachment = vi.hoisted(() => vi.fn())
+vi.mock("../../zalo-account-media/service", () => ({
+  zaloAccountMediaService: { isProtectedAttachment },
+}))
 const findContactById = vi.hoisted(() => vi.fn())
 const optimizeImageForStorage = vi.hoisted(() => vi.fn())
 const readImageDimensions = vi.hoisted(() => vi.fn())
@@ -72,6 +76,21 @@ describe("optimizeStoredImage", () => {
       width: 2048,
       height: 1024,
     })
+  })
+
+  it("preserves an already queued Zalo original once its archive reference exists", async () => {
+    vi.stubEnv("ZALO_ACCOUNT_MEDIA_STORAGE_ENABLED", "true")
+    vi.stubEnv("STORED_IMAGE_OPTIMIZATION", "on")
+    isProtectedAttachment.mockResolvedValue(true)
+    try {
+      expect(await optimizeStoredImage(attachmentJob)).toEqual({
+        outcome: "skipped-original",
+      })
+      expect(uploader.headObject).not.toHaveBeenCalled()
+      expect(uploader.putObject).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it("returns disabled without touching storage when the switch is off", async () => {

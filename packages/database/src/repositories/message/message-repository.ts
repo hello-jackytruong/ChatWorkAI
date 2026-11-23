@@ -296,7 +296,9 @@ export type AttachmentLookupRow = Pick<
 
 export interface UpdateAttachmentParams {
   createdAt: Date
+  expectedOriginPath?: string
   fields: {
+    thumbnailPath?: string
     height?: number
     mimeType: string
     originPath: string

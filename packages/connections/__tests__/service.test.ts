@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const SESSION_STATE_PATTERN = /^[^.]+\.nonce-abc$/
 
 const mocks = vi.hoisted(() => ({
+  lockWorkspaceForChildWrite: vi.fn(),
   toChannelTypeMock: (provider: string) =>
     provider === "instagramFacebook" ? "instagram" : provider,
   findByIdForWorkspace: vi.fn(),
@@ -85,6 +86,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("@chatbotx.io/database/repositories", () => ({
+  workspaceRepository: {
+    lockWorkspaceForChildWrite: mocks.lockWorkspaceForChildWrite,
+  },
   connectionRepository: {
     findByIdForWorkspace: mocks.findByIdForWorkspace,
     findById: mocks.findById,
@@ -569,6 +573,7 @@ vi.mock("../src/logger", () => ({
 }))
 
 const { connectionService } = await import("../src/service")
+const { continueAuthorization } = await import("../src/connect-session-flow")
 
 const baseConnection = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: "conn-1",
@@ -583,6 +588,7 @@ const baseConnection = (overrides: Partial<Record<string, unknown>> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.lockWorkspaceForChildWrite.mockResolvedValue(true)
   refreshAuthHandler = vi.fn()
   mockAdapter.provider.kind = "channel"
   mocks.findOwnerUserIdByWorkspaceId.mockResolvedValue("owner-1")
@@ -3541,5 +3547,51 @@ describe("connection authorization capture", () => {
         unavailableCandidateCount: 0,
       }),
     )
+  })
+})
+
+describe("Zalo Account reconnect workspace fence", () => {
+  const reconnect = () =>
+    continueAuthorization(
+      {
+        id: "session-1",
+        workspaceId: "ws-1",
+        provider: "zaloAccount",
+        purpose: "reconnect",
+        actorUserId: "user-1",
+        targetConnectionId: "conn-1",
+        status: "pending",
+      } as never,
+      { authType: "none" },
+    )
+
+  beforeEach(() => {
+    mocks.findByIdForWorkspace.mockResolvedValue(
+      baseConnection({ provider: "zaloAccount", sourceId: "page-1" }),
+    )
+    mockAdapter.provider.describe = () => ({
+      sourceId: "page-1",
+      displayName: "Account",
+    })
+  })
+
+  it("locks the workspace before updating account authorization", async () => {
+    await reconnect()
+    expect(mocks.lockWorkspaceForChildWrite).toHaveBeenCalledWith(
+      { workspaceId: "ws-1" },
+      "tx",
+    )
+    expect(
+      mocks.lockWorkspaceForChildWrite.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      mocks.saveAuthByForeignKey.mock.invocationCallOrder[0] as number,
+    )
+  })
+
+  it("refuses a purging workspace before updating account or connection", async () => {
+    mocks.lockWorkspaceForChildWrite.mockResolvedValue(false)
+    await expect(reconnect()).rejects.toThrow("Workspace not found")
+    expect(mocks.saveAuthByForeignKey).not.toHaveBeenCalled()
+    expect(mocks.update).not.toHaveBeenCalled()
   })
 })

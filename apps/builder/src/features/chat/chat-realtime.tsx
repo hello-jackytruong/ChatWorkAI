@@ -246,6 +246,12 @@ export function ChatRealtime() {
       flushPendingCreatedMessages()
       const { data } = event
       updateMessageText(data.messageId, data.newText, {
+        ...(data.attachmentId
+          ? {
+              attachmentId: data.attachmentId,
+              newAttachmentSize: data.newAttachmentSize,
+            }
+          : {}),
         newAttachmentPath: data.newAttachmentPath ?? null,
         newAttachmentPublicUrl: data.newAttachmentPublicUrl ?? null,
         newAttachmentMimeType: data.newAttachmentMimeType ?? null,

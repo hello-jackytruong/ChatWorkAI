@@ -7,7 +7,10 @@ import { getIdFromParams } from "@chatbotx.io/utils"
 import { notFound } from "next/navigation"
 import { toConnectionResource } from "@/features/connections/lib/resolve-provider"
 import { ZaloAccountManage } from "@/features/zalo-accounts/components/zalo-account-manage"
-import { toZaloAccountResource } from "@/features/zalo-accounts/lib/to-resource"
+import {
+  toZaloAccountResources,
+  withZaloGroupResources,
+} from "@/features/zalo-accounts/lib/to-resource"
 import { requireVisibleChannel } from "@/lib/workspace/require-visible-channel"
 import { resolveChannelCreatable } from "@/lib/workspace/resolve-channel-creatable"
 
@@ -31,6 +34,7 @@ export default async function SettingChannelZaloAccountPage(props: {
       connection.inboxId ? [[connection.inboxId, connection] as const] : [],
     ),
   )
+  const projectedAccounts = await toZaloAccountResources(accountRows)
   const accounts: Parameters<typeof ZaloAccountManage>[0]["accounts"] = []
   for (const account of accountRows) {
     const connection = connectionByInbox.get(account.inboxId)
@@ -42,9 +46,11 @@ export default async function SettingChannelZaloAccountPage(props: {
       accountId: account.id,
     })
     accounts.push({
-      ...toZaloAccountResource(account),
+      ...(projectedAccounts[
+        accountRows.indexOf(account)
+      ] as (typeof projectedAccounts)[number]),
       connection: toConnectionResource(connection),
-      groups,
+      groups: await withZaloGroupResources(workspaceId, groups),
     })
   }
   const canCreate = await resolveChannelCreatable(workspaceId, "zaloAccount")

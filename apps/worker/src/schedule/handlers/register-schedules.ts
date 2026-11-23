@@ -45,6 +45,7 @@ const EVERY_MINUTE_SECOND_OFFSETS = {
   // lets a fast step land first; no ordering is required or guaranteed.
   dispatchMarketingMessages: 8,
   recoverZaloGroupInbox: 12,
+  recoverZaloAccountMedia: 13,
   purgeZaloMessageState: 14,
   reconcileZaloLabels: 18,
   scanAbandonedCarts: 16,
@@ -97,6 +98,14 @@ export const registerSchedules = async () => {
     {
       name: ScheduleJobData.recoverZaloGroupInbox,
       data: { type: ScheduleJobData.recoverZaloGroupInbox, data: {} },
+    },
+  )
+  await scheduleQueue.upsertJobScheduler(
+    ScheduleJobData.recoverZaloAccountMedia,
+    { pattern: everyMinuteAtOffset(ScheduleJobData.recoverZaloAccountMedia) },
+    {
+      name: ScheduleJobData.recoverZaloAccountMedia,
+      data: { type: ScheduleJobData.recoverZaloAccountMedia, data: {} },
     },
   )
   if (!isCloud) {

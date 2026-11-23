@@ -2,9 +2,11 @@ import {
   type ZaloAccountAttachment,
   type ZaloAccountDirectMessage,
   type ZaloAccountGroupMessage,
+  type ZaloAccountMediaResource,
   type ZaloAccountQuote,
   zaloAccountDirectMessageSchema,
   zaloAccountGroupMessageSchema,
+  zaloAccountMediaResourceSchema,
 } from "@chatbotx.io/sdk"
 
 type ProviderMessageData = {
@@ -128,6 +130,127 @@ const attachmentOf = (
   return
 }
 
+const mediaResourcesOf = (
+  msgType: string,
+  content: Record<string, unknown>,
+): ZaloAccountMediaResource[] => {
+  const params = parseObject(content.params) ?? parseObject(content.param) ?? {}
+  const merged = { ...params, ...content }
+  const discriminator =
+    `${msgType} ${asNonEmptyString(content.action) ?? ""}`.toLowerCase()
+  let kind: ZaloAccountMediaResource["kind"] | undefined
+  if (discriminator.includes("sticker")) {
+    kind = "sticker"
+  } else if (discriminator.includes("gif")) {
+    kind = "gif"
+  } else if (discriminator.includes("video")) {
+    kind = "video"
+  } else if (
+    discriminator.includes("voice") ||
+    discriminator.includes("audio")
+  ) {
+    kind = "audio"
+  } else if (
+    discriminator.includes("photo") ||
+    discriminator.includes("image")
+  ) {
+    kind = "image"
+  } else if (discriminator.includes("file") || discriminator.includes("doc")) {
+    kind = "file"
+  }
+  const resources: ZaloAccountMediaResource[] = []
+  const add = (
+    source: Record<string, unknown>,
+    resourceKind: ZaloAccountMediaResource["kind"],
+    role: ZaloAccountMediaResource["role"],
+    slot: string,
+    keys: string[],
+  ) => {
+    const url = firstUrl(source, keys)
+    const candidate: Record<string, unknown> = {
+      kind: resourceKind,
+      role,
+      slot,
+      ...(url ? { url } : { sourceMissing: "source_missing" }),
+    }
+    for (const [key, value] of Object.entries({
+      providerResourceId: asNonEmptyString(
+        source.stickerId ?? source.fileId ?? source.id,
+      ),
+      providerVersion: asNonEmptyString(source.version),
+      name: asNonEmptyString(source.name ?? source.title),
+      mimeType: asNonEmptyString(source.mimeType ?? source.mime),
+      size: source.size ?? source.fileSize,
+      width: source.width,
+      height: source.height,
+      durationMs: source.durationMs ?? source.duration,
+      animated: source.animated,
+    })) {
+      if (value !== undefined) {
+        candidate[key] = value
+      }
+    }
+    const parsed = zaloAccountMediaResourceSchema.safeParse(candidate)
+    // Invalid optional hints do not discard the resource's source and identity.
+    if (parsed.success) {
+      resources.push(parsed.data)
+    } else {
+      for (const field of [
+        "size",
+        "width",
+        "height",
+        "durationMs",
+        "animated",
+        "name",
+        "mimeType",
+        "providerResourceId",
+        "providerVersion",
+      ]) {
+        delete candidate[field]
+      }
+      const minimal = zaloAccountMediaResourceSchema.safeParse(candidate)
+      if (minimal.success) {
+        resources.push(minimal.data)
+      }
+    }
+  }
+  if (kind) {
+    add(merged, kind, "original", "original", [
+      "oriUrl",
+      "hdUrl",
+      "fileUrl",
+      "videoUrl",
+      "audioUrl",
+      "url",
+      "href",
+    ])
+    for (const [role, keys] of [
+      ["thumbnail", ["thumbUrl", "thumb"]],
+      ["poster", ["posterUrl", "poster"]],
+      ["sprite", ["spriteUrl"]],
+    ] as const) {
+      if (firstUrl(merged, [...keys])) {
+        add(merged, kind === "sticker" ? "sticker" : "image", role, role, [
+          ...keys,
+        ])
+      }
+    }
+  }
+  // Only explicitly typed card assets are media; a link/bank page is never a source.
+  if (discriminator.includes("card") && Array.isArray(merged.media)) {
+    for (const [index, raw] of merged.media.slice(0, 12).entries()) {
+      const asset = asObject(raw)
+      if (asset?.type === "image") {
+        add(asset, "image", "card_image", `card_image:${index}`, [
+          "url",
+          "imageUrl",
+        ])
+      }
+    }
+  }
+  return resources.slice(0, 12)
+}
+
 const quoteOf = (value: unknown): ZaloAccountQuote | undefined => {
   const quote = asObject(value)
   if (!quote) {
@@ -165,6 +288,8 @@ const normalizeGroupMessage = (
   const msgType = asNonEmptyString(data?.msgType)
   const attachment =
     content && msgType ? attachmentOf(msgType, content) : undefined
+  const mediaResources =
+    content && msgType ? mediaResourcesOf(msgType, content) : []
   const extension = asObject(data?.propertyExt)
   const fallback = parseObject(extension?.ext)
   const mentions = data?.mentions ?? fallback?.mentions ?? []
@@ -180,6 +305,7 @@ const normalizeGroupMessage = (
     isSelf: input.isSelf === true,
     text: typeof rawContent === "string" ? rawContent : undefined,
     attachments: attachment ? [attachment] : [],
+    ...(mediaResources.length ? { mediaResources } : {}),
     quote: quoteOf(data?.quote),
     mentions: Array.isArray(mentions)
       ? mentions.slice(0, 101).map((value: unknown) => {
@@ -239,7 +365,10 @@ export const normalizeProviderMessage = (
   const attachment = contentObject
     ? attachmentOf(msgType, contentObject)
     : undefined
-  if (!(text || attachment)) {
+  const mediaResources = contentObject
+    ? mediaResourcesOf(msgType, contentObject)
+    : []
+  if (!(text || attachment || mediaResources.length)) {
     return { kind: "unsupported", reason: "unsupported_content" }
   }
 
@@ -261,6 +390,7 @@ export const normalizeProviderMessage = (
       isSelf: input.isSelf === true,
       ...(text ? { text } : {}),
       attachments: attachment ? [attachment] : [],
+      ...(mediaResources.length ? { mediaResources } : {}),
       ...(quote ? { quote } : {}),
     }),
   }

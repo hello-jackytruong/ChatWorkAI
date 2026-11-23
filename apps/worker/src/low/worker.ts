@@ -9,6 +9,8 @@ import {
   type LowJobData,
   type ProfileSnapshotJobData,
   queueNames,
+  type ZaloAccountMediaJobData,
+  zaloAccountMediaQueue,
 } from "@chatbotx.io/worker-config"
 import type { Job } from "bullmq"
 import { env } from "../env"
@@ -28,7 +30,11 @@ import { deferOnLockContention } from "../lib/lock-contention-deferral"
 import { logger } from "../lib/logger"
 import { resolveWorkspaceId } from "../lib/resolve-workspace-id"
 import { runJobWithAuditContext } from "../lib/run-job-with-audit-context"
-import { runWorker } from "../lib/shutdown"
+import { onShutdown, runWorker } from "../lib/shutdown"
+import {
+  abortZaloAccountMediaTransfers,
+  transferZaloAccountMedia,
+} from "../zalo-account-media/handler"
 
 /**
  * The workspace a `low` job belongs to. Jobs routed here from the integration
@@ -152,7 +158,7 @@ async function settleMissedCommentReplay(job: Job<LowJobData>): Promise<void> {
  * not occupy the integration process — and the small, rate-limited
  * `contactInfoCapture` consumer.
  */
-function startLowWorker() {
+async function startLowWorker() {
   createQueueWorker(
     queueNames.enum.low,
     async (job: Job<LowJobData>, token) => {
@@ -229,6 +235,21 @@ function startLowWorker() {
         duration: 1000,
       },
     },
+  )
+  // Global admission is configured at boot, never during imports/builds.
+  await zaloAccountMediaQueue.setGlobalConcurrency(1)
+  onShutdown("zalo-account-media-abort", abortZaloAccountMediaTransfers)
+  createQueueWorker(
+    queueNames.enum.zaloAccountMedia,
+    async (job: Job<ZaloAccountMediaJobData>) => {
+      if (job.data.type !== "transfer") {
+        return
+      }
+      await withBlockedOwnerGuard(job.data.data.workspaceId, async () => {
+        await transferZaloAccountMedia(job.data.data)
+      })
+    },
+    { concurrency: 1 },
   )
 }
 

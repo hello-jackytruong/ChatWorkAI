@@ -13,6 +13,8 @@ import {
   type StoredImageOptimization,
 } from "@chatbotx.io/worker-config"
 import { contactService } from "../contact/service"
+import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
+import { zaloAccountMediaService } from "../zalo-account-media/service"
 import { updateAttachmentOrThrow } from "./attachment-row"
 
 /**
@@ -101,6 +103,16 @@ export async function optimizeStoredImage(
   // object, or a non-avatar object of its own workspace.
   if (!isStoredImageOptimizationTarget(job)) {
     return { outcome: "skipped-foreign" }
+  }
+  if (
+    job.kind === "attachment" &&
+    getZaloAccountMediaPolicy().enabled &&
+    (await zaloAccountMediaService.isProtectedAttachment({
+      workspaceId: job.workspaceId,
+      attachmentId: job.attachmentId,
+    }))
+  ) {
+    return { outcome: "skipped-original" }
   }
   const referenced = await findReferencedRow(job)
   if (!referenced) {

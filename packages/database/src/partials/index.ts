@@ -72,3 +72,5 @@ export * from "./woocommerce"
 export * from "./working-hours"
 export * from "./workspace"
 export * from "./workspace-api-token"
+
+export * from "./zalo-account-media"

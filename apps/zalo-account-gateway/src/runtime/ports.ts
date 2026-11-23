@@ -15,6 +15,7 @@ import type {
   ZaloAccountOutboundMessage,
   ZaloAccountRuntimeDiagnostics,
   ZaloAccountRuntimeRef,
+  ZaloAccountStickerResource,
   ZaloAccountThreadEvent,
 } from "@chatbotx.io/sdk"
 
@@ -122,6 +123,9 @@ export type ZcaApiPort = {
   closeConnection?: () => Promise<void>
   getAuthorization?: (previous: ZaloAccountAuth) => ZaloAccountAuth
 
+  getStickerResources?: (
+    stickerIds: string[],
+  ) => Promise<ZaloAccountStickerResource[]>
   listFriends?: (cursor: number) => Promise<ZaloAccountFriendSync>
   sendTyping?: (threadId: string, threadType: "user" | "group") => Promise<void>
   getOwnId: () => Promise<string>

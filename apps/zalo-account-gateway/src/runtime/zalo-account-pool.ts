@@ -245,6 +245,14 @@ export class ZaloAccountPool {
     })
   }
 
+  async getStickerResources(
+    command: RuntimeCommand & { stickerIds: string[] },
+  ) {
+    return await this.withAccountRuntime(command, (runtime) =>
+      runtime.getStickerResources(command.stickerIds),
+    )
+  }
+
   async getLabels(command: RuntimeCommand): Promise<ZaloAccountLabelSnapshot> {
     return await this.withAccountRuntime(command, (runtime) =>
       runtime.getLabels(),

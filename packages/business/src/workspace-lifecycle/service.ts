@@ -79,6 +79,7 @@ import { userQuotaService } from "../user-quota/service"
 import { wooCommerceIntegrationService } from "../woocommerce/integration.service"
 import { zaloAccountService } from "../zalo-account/service"
 import { zaloAccountCommandTransportService } from "../zalo-account/transport.service"
+import { purgeZaloAccountMediaForWorkspace } from "../zalo-account-media/purge"
 import {
   cancelInFlightBroadcastsForWorkspace,
   completeActiveSequenceEnrollmentBatch,
@@ -313,7 +314,10 @@ class WorkspaceLifecycleService extends BaseService {
     workspaceId: string
   }): Promise<number> {
     const defaultBatchSize = props.batchSize ?? HEAVY_PURGE_BATCH_SIZE
-    let totalDeleted = 0
+    let totalDeleted = await purgeZaloAccountMediaForWorkspace(
+      props.workspaceId,
+      { batchSize: defaultBatchSize, deadlineAt: props.deadlineAt },
+    )
 
     totalDeleted += await this.deleteWorkspaceAnalyticsRows(
       props.workspaceId,
@@ -391,6 +395,7 @@ class WorkspaceLifecycleService extends BaseService {
         case "retainedBilling":
           // Billing evidence and deletion records intentionally outlive Workspace.
           continue
+        case "zaloAccountMedia":
         case "contactActivity":
         case "partitioned":
         case "contactInboxPost":

@@ -1,0 +1,9 @@
+# Contact avatar reads and deletion references
+
+2026-11-23. Same isolated media worktree. No live calls, migrations, commits, or heavy typechecks.
+
+- Contacts list/get and both compact/full conversation list/get now batch current Zalo ContactInbox/account bindings once, then read profile resources in <=50-owner pages. Owner identity is the provider UID (group provider ID for group inboxes). Other channels retain the existing avatar resolver. CRM storage-key avatars remain unchanged; HTTP avatar replacements require the same source-path hash/revision, so a changed CRM URL does not select stale captured bytes.
+- Contact deletion snapshots existing channel/inbox/provider UID/conversation pointers and releases <=100 references atomically in the existing MessageCleanup-tombstone/contact-delete transaction. It performs no object deletion or network request. Remaining work is recoverable from those durable tombstones through the controller's Zalo-only bounded recovery query. Group profile references remain account-owned when only a contact is deleted.
+- Initial contact projection RED returned null instead of the archived signed avatar. Initial deletion helper RED failed because the module did not exist. Both passed after implementation. The contact deletion regression explicitly verifies release runs after the tombstone and before the parent delete, using the same transaction.
+- Business deletion/read/projection suite: 4 files / 48 tests passed. Builder contact/conversation/resource-scope tests: 3 files / 17 tests passed. Additional budget/continuation tests cover multiple accounts, pointer caps, non-Zalo no-op and group-profile retention.
+- The resource API now accepts explicit current non-message owners with channels management authority; conversation content remains inbox/member-scoped. Root handles final integrated type/lint gates and the tombstone continuation producer.

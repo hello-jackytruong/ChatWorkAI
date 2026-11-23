@@ -51,6 +51,8 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P0 · 2. Lưu ảnh/file và media trên R2/S3
 
+**Cập nhật 2026-11-23:** phần code P0 · 2 đã triển khai và qua lint, typecheck, regression local trên nhánh `feat/zalo-account-media-r2`; xem [báo cáo kiểm chứng](../plans/261123-0500-zalo-account-media-r2-tdd/reports/implementation-and-verification.md). Cờ lưu trữ mặc định tắt, migration chưa áp dụng và các gate staging/R2 thật còn chờ. Checkbox vận hành dưới đây được giữ cho đến khi có bằng chứng chạy thực tế.
+
 - [x] File gửi từ ChatbotX có đường upload/lưu storage; API gửi bằng URL có bước tải về storage.
 - [ ] Tự tải **ảnh/file nhận từ Zalo** về R2/S3.
 - [ ] Tự lưu media từ **own-echo**: tài khoản gửi bằng điện thoại/Zalo PC/Web.

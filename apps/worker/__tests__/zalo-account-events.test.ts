@@ -397,6 +397,7 @@ describe("handleZaloAccountEvents", () => {
       workspaceId: "workspace-1",
       provider: "zaloAccount",
       auth,
+      trustedProfile: { displayName: "Jacky", avatarUrl: undefined },
     })
   })
 

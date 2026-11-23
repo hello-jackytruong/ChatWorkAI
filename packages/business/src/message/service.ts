@@ -19,6 +19,8 @@ import { BaseService } from "../base.service"
 import { ChatbotXException } from "../errors"
 import { logger } from "../logger"
 import { inboxTranslationSettingsService } from "../translation/settings-service"
+import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
+import { zaloAccountMediaService } from "../zalo-account-media/service"
 import { createOutgoing } from "./create-outgoing"
 import {
   findByIdWithUrls,
@@ -369,6 +371,23 @@ class MessageService extends BaseService {
     props: ReconcileOutgoingSourceIdParams & { tx?: DatabaseClient },
   ): Promise<ReconcileOutgoingSourceIdResult> {
     const { tx = db, ...params } = props
+    // Commit cross-store aliases before shard reconciliation can remove echo rows.
+    if (
+      params.sourceId.startsWith("za:") &&
+      getZaloAccountMediaPolicy().enabled
+    ) {
+      const [, account, , , provider] = params.sourceId.split(":")
+      if (account && provider) {
+        await zaloAccountMediaService.bindMessageAliases({
+          workspaceId: params.workspaceId,
+          accountId: decodeURIComponent(account),
+          messageId: params.id,
+          conversationId: params.conversationId,
+          messageCreatedAt: params.createdAt,
+          aliases: [decodeURIComponent(provider)],
+        })
+      }
+    }
     const repo = await createMessageRepository(tx)
     return await repo.reconcileOutgoingSourceId(params)
   }

@@ -1,3 +1,4 @@
+import type { DatabaseClient } from "@chatbotx.io/database/client"
 import {
   connectionRepository,
   integrationZaloAccountRepository,
@@ -19,6 +20,7 @@ import {
   connectionIdentityMismatchException,
   notFoundException,
 } from "../errors"
+import { captureZaloAccountResourceMedia } from "../zalo-account-media/resource-capture"
 import {
   decryptZaloAccountAuth,
   encryptZaloAccountAuth,
@@ -335,12 +337,16 @@ export const zaloAccountService = {
     name: string
     avatarUrl: string | null
     sessionVerifiedAt: Date
+    tx?: DatabaseClient
   }): Promise<IntegrationZaloAccountPublicModel> {
     const existing =
-      await integrationZaloAccountRepository.findByInboxIdForWorkspace({
-        workspaceId: input.workspaceId,
-        inboxId: input.inboxId,
-      })
+      await integrationZaloAccountRepository.findByInboxIdForWorkspace(
+        {
+          workspaceId: input.workspaceId,
+          inboxId: input.inboxId,
+        },
+        input.tx,
+      )
     if (!existing) {
       throw notFoundException("Zalo Account connection not found")
     }
@@ -353,14 +359,29 @@ export const zaloAccountService = {
       input.auth,
     )
     const row =
-      await integrationZaloAccountRepository.updateAuthorizationAndProfile({
-        workspaceId: input.workspaceId,
-        inboxId: input.inboxId,
-        encryptedAuth,
-        name: input.name,
-        avatarUrl: input.avatarUrl,
-        sessionVerifiedAt: input.sessionVerifiedAt,
-      })
+      await integrationZaloAccountRepository.updateAuthorizationAndProfile(
+        {
+          workspaceId: input.workspaceId,
+          inboxId: input.inboxId,
+          encryptedAuth,
+          name: input.name,
+          avatarUrl: input.avatarUrl,
+          sessionVerifiedAt: input.sessionVerifiedAt,
+        },
+        input.tx,
+      )
+    await captureZaloAccountResourceMedia({
+      workspaceId: input.workspaceId,
+      accountId: existing.id,
+      tx: input.tx,
+      resources: [
+        {
+          ownerKind: "account",
+          ownerId: existing.id,
+          avatarUrl: input.avatarUrl,
+        },
+      ],
+    })
     const metadata = toPublic(row)
     if (!metadata) {
       throw notFoundException("Zalo Account connection not found")

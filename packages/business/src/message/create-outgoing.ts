@@ -55,6 +55,7 @@ import {
   validationException,
 } from "../errors"
 import { logger } from "../logger"
+import { captureZaloAccountMessage } from "../media/zalo-account-ingress"
 import {
   queueMessageCreatedEvent,
   queueWorkspaceRealtimeEvent,
@@ -65,6 +66,7 @@ import { getPublicFileUrl } from "../utils"
 import { recordAgentReply } from "../working-hours/agent-reply-metric"
 import { zaloAccountGroupService } from "../zalo-account/group.service"
 import { zaloAccountService } from "../zalo-account/service"
+import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
 
 type CreateOutgoingInput = (
   | { flowId: string; nodeId?: string }
@@ -731,6 +733,10 @@ export const createOutgoing = async (props: {
     workspaceId: conversation.workspaceId,
     conversationId: targetConversation.id,
     ...file,
+    ...(contactInbox.channel === "zaloAccount" &&
+    getZaloAccountMediaPolicy().enabled
+      ? { keepOriginal: true }
+      : {}),
   }))
 
   const prepared = props.deliveryIdentity
@@ -773,6 +779,22 @@ export const createOutgoing = async (props: {
       ...attachment,
       url: getPublicFileUrl(attachment.originPath, storageUrl),
     })),
+  }
+
+  if (contactInbox.channel === "zaloAccount") {
+    await captureZaloAccountMessage({
+      workspaceId: conversation.workspaceId,
+      inboxId: contactInbox.inboxId,
+      channel: contactInbox.channel,
+      conversationId: targetConversation.id,
+      messageId: message.id,
+      messageCreatedAt: message.createdAt,
+      threadType: isGroup ? "group" : "user",
+      threadId: groupAudience?.providerGroupId ?? contactInbox.sourceId,
+      accountId: groupAudience?.accountId,
+      outgoing: true,
+      attachments,
+    })
   }
 
   if (prepared?.isNew !== false) {

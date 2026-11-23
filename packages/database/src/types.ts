@@ -429,3 +429,8 @@ export type TemplateStoreListingModel =
   typeof schema.templateStoreListingModel.$inferSelect
 export type TemplateStoreListingCategoryModel =
   typeof schema.templateStoreListingCategoryModel.$inferSelect
+
+export type ZaloAccountMediaAsset =
+  typeof schema.zaloAccountMediaAssetModel.$inferSelect
+export type ZaloAccountMediaReference =
+  typeof schema.zaloAccountMediaReferenceModel.$inferSelect

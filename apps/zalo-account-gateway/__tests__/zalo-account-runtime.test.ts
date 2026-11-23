@@ -41,6 +41,7 @@ class FakeApi implements ZcaApiPort {
     lastUpdateTime: 0,
   }))
   listGroups = vi.fn(async () => [])
+  getStickerResources = vi.fn(async () => [])
 
   listen(handlers: Parameters<ZcaApiPort["listen"]>[0]) {
     this.handlers = handlers
@@ -486,6 +487,23 @@ describe("ZaloAccountRuntime", () => {
     expect(
       events.filter((event) => (event as { type: string }).type === "closed"),
     ).toHaveLength(1)
+    await runtime.stop()
+  })
+
+  it("rejects sticker reads before socket open and immediately after close", async () => {
+    const { client, runtime } = makeHarness()
+    const api = new FakeApi(auth.zaloUid)
+    api.autoOpen = false
+    vi.spyOn(client, "login").mockResolvedValue(api)
+    await runtime.reconnect(auth, auth.zaloUid)
+    await expect(runtime.getStickerResources(["123"])).rejects.toThrow()
+    api.handlers?.onConnected?.()
+    await vi.waitFor(() => expect(runtime.snapshot().state).toBe("connected"))
+    await expect(runtime.getStickerResources(["123"])).resolves.toEqual([])
+    expect(api.getStickerResources).toHaveBeenCalledOnce()
+    api.handlers?.onDisconnected?.(1006, "network")
+    await expect(runtime.getStickerResources(["123"])).rejects.toThrow()
+    expect(api.getStickerResources).toHaveBeenCalledOnce()
     await runtime.stop()
   })
 

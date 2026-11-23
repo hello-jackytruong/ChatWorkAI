@@ -1,5 +1,9 @@
 import { qrImageDataUrlSchema } from "@chatbotx.io/utils/connection"
 import { z } from "zod"
+import {
+  zaloAccountMediaResourcesSchema,
+  zaloAccountStickerResourceSchema,
+} from "./zalo-account-media"
 
 const providerTimestampMsSchema = z
   .number()
@@ -378,11 +382,17 @@ export const zaloAccountDirectMessageSchema = z
     isSelf: z.boolean(),
     text: z.string().max(20_000).optional(),
     attachments: z.array(zaloAccountAttachmentSchema).max(10).default([]),
+    mediaResources: zaloAccountMediaResourcesSchema.optional(),
     quote: zaloAccountQuoteSchema.optional(),
   })
   .strict()
   .refine(
-    (message) => Boolean(message.text?.trim() || message.attachments.length),
+    (message) =>
+      Boolean(
+        message.text?.trim() ||
+          message.attachments.length ||
+          message.mediaResources?.length,
+      ),
     { message: "Zalo Account message has no supported content" },
   )
 export type ZaloAccountDirectMessage = z.infer<
@@ -402,6 +412,7 @@ export const zaloAccountGroupMessageSchema = z
     isSelf: z.boolean(),
     text: z.string().max(20_000).optional(),
     attachments: z.array(zaloAccountAttachmentSchema).max(10).default([]),
+    mediaResources: zaloAccountMediaResourcesSchema.optional(),
     quote: zaloAccountQuoteSchema.optional(),
     mentions: z
       .array(
@@ -419,7 +430,13 @@ export const zaloAccountGroupMessageSchema = z
   })
   .strict()
   .superRefine((message, context) => {
-    if (!(message.text?.trim() || message.attachments.length)) {
+    if (
+      !(
+        message.text?.trim() ||
+        message.attachments.length ||
+        message.mediaResources?.length
+      )
+    ) {
       context.addIssue({
         code: "custom",
         message: "Zalo Account group message has no supported content",
@@ -626,6 +643,22 @@ export const zaloAccountCommandEnvelopeSchema = z.discriminatedUnion("kind", [
   z
     .object({
       ...commandBaseShape,
+      kind: z.literal("get_sticker_resources"),
+      route: z
+        .object({
+          kind: z.literal("account"),
+          workspaceId: z.string().min(1),
+          accountId: z.string().min(1),
+          inboxId: z.string().min(1),
+        })
+        .strict(),
+      target: commandTargetSchema,
+      stickerIds: z.array(z.string().min(1).max(200)).min(1).max(20),
+    })
+    .strict(),
+  z
+    .object({
+      ...commandBaseShape,
       kind: z.literal("sync_friends"),
       route: z
         .object({
@@ -809,6 +842,10 @@ export const zaloAccountCommandResultSchema = z.discriminatedUnion("status", [
           groupSync: zaloAccountGroupSyncSchema.optional(),
           friendSync: zaloAccountFriendSyncSchema.optional(),
           labels: zaloAccountLabelSnapshotSchema.optional(),
+          stickerResources: z
+            .array(zaloAccountStickerResourceSchema)
+            .max(20)
+            .optional(),
         })
         .strict(),
     })

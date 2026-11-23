@@ -197,8 +197,10 @@ import { workspaceApiTokenRelations } from "./workspace-api-token"
 import { workspaceBotMessageUsageRelations } from "./workspace-bot-message-usage"
 import { workspaceDeletionRecordRelations } from "./workspace-deletion-record"
 import { workspaceMemberRelations } from "./workspace-member"
+import { zaloAccountMediaRelations } from "./zalo-account-media"
 
 export const relations = {
+  ...zaloAccountMediaRelations,
   ...integrationApiRelations,
   ...contactSyncRelations,
   ...connectionRelations,

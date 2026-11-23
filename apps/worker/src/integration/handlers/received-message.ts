@@ -36,6 +36,11 @@ import {
 import { isInboundConversationMessage } from "@chatbotx.io/business/contact-profile-rules"
 import { toContactInfoCaptureTypes } from "@chatbotx.io/business/detect-contact-info"
 import {
+  captureZaloAccountMessage,
+  redactZaloMediaLocators,
+} from "@chatbotx.io/business/zalo-account"
+import { getZaloAccountMediaPolicy } from "@chatbotx.io/business/zalo-account-media"
+import {
   type ChannelType,
   type CommentAutomationType,
   type ContactSource,
@@ -1507,18 +1512,54 @@ const persistMessage = async (
   // interaction after persistNewMessageSideEffects updates tracking.
   const isFirstIncomingMessage =
     inbound && contactInbox.lastIncomingMessageAt === null
+  const archiveZalo =
+    inbox.channel === "zaloAccount" && getZaloAccountMediaPolicy().enabled
   const messageInput = buildMessageInput({ ...props, inbound })
+  if (archiveZalo && messageInput.contentAttributes) {
+    messageInput.contentAttributes = redactZaloMediaLocators(
+      messageInput.contentAttributes,
+    )
+  }
   const attachmentInputs = buildAttachmentInputs({
     incomingMessage,
     workspaceId: inbox.workspaceId,
     conversationId: conversation.id,
   })
+  if (archiveZalo) {
+    for (const attachment of attachmentInputs) {
+      attachment.keepOriginal = true
+    }
+  }
   const { message, isNew } = await upsertMessage({
     repository,
     messageInput,
     attachmentInputs,
   })
-  if (isNew) {
+  if (archiveZalo) {
+    const attributes = incomingMessage.contentAttributes as
+      | Record<string, unknown>
+      | undefined
+    const metadata = attributes?.zaloAccount as
+      | Record<string, unknown>
+      | undefined
+    await captureZaloAccountMessage({
+      workspaceId: inbox.workspaceId,
+      inboxId: inbox.id,
+      channel: inbox.channel,
+      conversationId: conversation.id,
+      messageId: message.id,
+      messageCreatedAt: message.createdAt,
+      threadId: String(metadata?.threadId ?? contactInbox.sourceId),
+      threadType: "user",
+      providerMessageId:
+        typeof metadata?.providerMessageId === "string"
+          ? metadata.providerMessageId
+          : undefined,
+      attributes,
+      attachments: message.attachments,
+    })
+  }
+  if (isNew && !archiveZalo) {
     await enqueuePhotoOptimizations({
       incomingMessage,
       message,

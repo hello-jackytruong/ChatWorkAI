@@ -149,13 +149,16 @@ export class Uploader {
     ).url.toString()
   }
 
-  async headObject(path: string) {
+  async headObject(
+    path: string,
+    requestOptions?: { abortSignal?: AbortSignal },
+  ) {
     const command = new HeadObjectCommand({
       Bucket: env.S3_BUCKET,
       Key: path,
     })
 
-    return await this.#client.send(command)
+    return await this.#client.send(command, requestOptions)
   }
 
   async getObject(path: string): Promise<Buffer> {
@@ -183,13 +186,14 @@ export class Uploader {
 
   async getObjectStream(
     path: string,
+    requestOptions?: { abortSignal?: AbortSignal },
   ): Promise<{ stream: Readable; contentLength?: number }> {
     const command = new GetObjectCommand({
       Bucket: env.S3_BUCKET,
       Key: path,
     })
 
-    const response = await this.#client.send(command)
+    const response = await this.#client.send(command, requestOptions)
     if (!response.Body) {
       throw new Error(`No body found for object: ${path}`)
     }
@@ -209,24 +213,28 @@ export class Uploader {
     return await this.#client.send(command)
   }
 
-  async deleteObject(path: string) {
+  async deleteObject(
+    path: string,
+    requestOptions?: { abortSignal?: AbortSignal },
+  ) {
     const command = new DeleteObjectCommand({
       Bucket: env.S3_BUCKET,
       Key: path,
     })
-    return await this.#client.send(command)
+    return await this.#client.send(command, requestOptions)
   }
 
   async listObjects(
     prefix: string,
     options: Partial<ListObjectsV2CommandInput> = {},
+    requestOptions?: { abortSignal?: AbortSignal },
   ) {
     const command = new ListObjectsV2Command({
       ...options,
       Bucket: env.S3_BUCKET,
       Prefix: prefix,
     })
-    return await this.#client.send(command)
+    return await this.#client.send(command, requestOptions)
   }
 }
 

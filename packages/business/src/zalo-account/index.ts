@@ -1,3 +1,5 @@
+export { redactZaloMediaLocators } from "../media/zalo-account-capture"
+export { captureZaloAccountMessage } from "../media/zalo-account-ingress"
 export * from "./auth"
 export * from "./friend-sync.service"
 export * from "./group.service"

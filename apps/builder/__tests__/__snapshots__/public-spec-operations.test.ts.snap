@@ -4199,6 +4199,16 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "GET",
+    "operationId": "zaloAccounts.authorizeMediaDownload",
+    "path": "/v1/zalo-accounts/{accountId}/media/{referenceId}/download",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.backfillMedia",
+    "path": "/v1/zalo-accounts/{accountId}/media/backfill",
+  },
+  {
+    "method": "GET",
     "operationId": "zaloAccounts.get",
     "path": "/v1/zalo-accounts/{id}",
   },
@@ -4206,6 +4216,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "GET",
     "operationId": "zaloAccounts.getGroup",
     "path": "/v1/zalo-accounts/{accountId}/groups/{id}",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getMedia",
+    "path": "/v1/zalo-accounts/{accountId}/media/{referenceId}",
   },
   {
     "method": "GET",
@@ -4236,6 +4251,21 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "GET",
     "operationId": "zaloAccounts.listGroupTags",
     "path": "/v1/zalo-accounts/{accountId}/groups/{groupId}/tags",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.listMedia",
+    "path": "/v1/zalo-accounts/{accountId}/media",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.reconcileMedia",
+    "path": "/v1/zalo-accounts/{accountId}/media/reconcile",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.retryMedia",
+    "path": "/v1/zalo-accounts/{accountId}/media/{referenceId}/retry",
   },
   {
     "method": "POST",

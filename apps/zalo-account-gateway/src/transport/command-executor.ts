@@ -6,6 +6,7 @@ import {
   type ZaloAccountGroupSync,
   type ZaloAccountLabelSnapshot,
   ZaloAccountPreDispatchError,
+  type ZaloAccountStickerResource,
 } from "@chatbotx.io/sdk"
 import type { ZaloAccountPool } from "../runtime/zalo-account-pool"
 import type { ProviderAdmissionPort } from "./provider-admission"
@@ -13,6 +14,7 @@ import type { ProviderAdmissionPort } from "./provider-admission"
 type PoolPort = Pick<
   ZaloAccountPool,
   | "getLabels"
+  | "getStickerResources"
   | "listGroups"
   | "listFriends"
   | "reconnect"
@@ -35,6 +37,7 @@ export type CommandExecutionOutcome =
         groupSync?: ZaloAccountGroupSync
         friendSync?: ZaloAccountFriendSync
         labels?: ZaloAccountLabelSnapshot
+        stickerResources?: ZaloAccountStickerResource[]
       }
     }
   | { status: "rejected_stale" }
@@ -201,6 +204,7 @@ export class ZaloAccountCommandExecutor {
     groupSync?: ZaloAccountGroupSync
     friendSync?: ZaloAccountFriendSync
     labels?: ZaloAccountLabelSnapshot
+    stickerResources?: ZaloAccountStickerResource[]
   }> {
     if (command.kind === "start_qr") {
       return await this.options.pool.startQr({
@@ -278,6 +282,15 @@ export class ZaloAccountCommandExecutor {
         groupId: command.groupId,
         message: command.message,
       })
+    }
+    if (command.kind === "get_sticker_resources") {
+      return {
+        status: "synced",
+        stickerResources: await this.options.pool.getStickerResources({
+          ...poolCommand,
+          stickerIds: command.stickerIds,
+        }),
+      }
     }
     if (command.kind === "get_labels") {
       return {

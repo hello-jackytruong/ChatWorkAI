@@ -164,6 +164,9 @@ export const receiveMessage: MessageHandlers<ZaloAccountAuthValue>["receiveMessa
             msgType: payload.msgType,
             timestampMs: payload.timestampMs,
             quote: payload.quote,
+            ...(payload.mediaResources?.length
+              ? { mediaResources: payload.mediaResources }
+              : {}),
           },
         },
       },

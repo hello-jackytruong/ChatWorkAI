@@ -87,6 +87,10 @@ export const WORKSPACE_ANALYTICS_HYPERTABLES = [
   "AnalyticsMessageEvent",
 ] as const
 export const NO_FK_WORKSPACE_TABLES = [
+  // Media storage manifests are drained explicitly after remote quiescence;
+  // retain them if object cleanup cannot be proven complete.
+  { stage: "zaloAccountMedia", table: "ZaloAccountMediaReference" },
+  { stage: "zaloAccountMedia", table: "ZaloAccountMediaAsset" },
   {
     stage: "ctid",
     table: "CoexistSyncRun",

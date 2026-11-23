@@ -2639,6 +2639,7 @@ export class ShardedMessageRepository implements IMessageRepository {
   }
 
   async updateAttachment({
+    expectedOriginPath,
     id,
     workspaceId,
     createdAt,
@@ -2665,6 +2666,9 @@ export class ShardedMessageRepository implements IMessageRepository {
               and(
                 eq(attachmentModel.id, id),
                 eq(attachmentModel.workspaceId, workspaceId),
+                expectedOriginPath === undefined
+                  ? undefined
+                  : eq(attachmentModel.originPath, expectedOriginPath),
                 matchesCreatedAt(attachmentModel.createdAt, createdAt),
               ),
             )
