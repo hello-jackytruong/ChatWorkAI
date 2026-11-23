@@ -375,6 +375,13 @@ export function MessageList() {
                     activeChannel === "zaloAccount"
                       ? (target) => (
                           <ZaloAccountMessageActions
+                            inspect={{
+                              accountId:
+                                getZaloAccountId(target.contentAttributes) ??
+                                groupAudience?.accountId ??
+                                "",
+                              canInspect: canInspectZalo,
+                            }}
                             key={`${workspaceId}:${target.conversationId}:${target.id}:${new Date(target.createdAt).toISOString()}`}
                             message={target}
                             workspaceId={workspaceId}
@@ -384,22 +391,6 @@ export function MessageList() {
                   }
                   translation={translation}
                   zaloGroup={!!groupAudience}
-                  zaloInspect={
-                    activeChannel === "zaloAccount"
-                      ? {
-                          accountId:
-                            getZaloAccountId(message.contentAttributes) ??
-                            groupAudience?.accountId ??
-                            "",
-                          canInspect:
-                            canInspectZalo &&
-                            Boolean(
-                              getZaloAccountId(message.contentAttributes) ??
-                                groupAudience?.accountId,
-                            ),
-                        }
-                      : undefined
-                  }
                   zaloState={
                     groupAudience
                       ? {

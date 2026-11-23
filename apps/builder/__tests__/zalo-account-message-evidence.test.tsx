@@ -50,38 +50,17 @@ it.each([
     result.unmount()
   }
 })
-it("does not inspect automatically, hides inspection without permission and never renders raw error", async () => {
-  const attributes = { zaloAccount: { sendAttempt: { status: "unknown" } } }
-  const message = {
-    id: "12",
-    workspaceId: "1",
-    createdAt: new Date("2026-11-23T00:00:00Z"),
-  }
-  const first = show({
-    attributes,
-    message,
-    inspect: { accountId: "2", canInspect: false },
+it("renders status without inline inspection controls or automatic requests", () => {
+  const result = show({
+    attributes: { zaloAccount: { sendAttempt: { status: "unknown" } } },
+    message: { id: "12", workspaceId: "1", createdAt: new Date() },
   })
-  expect(first.container.querySelector("button")).toBeNull()
-  first.unmount()
-  mocks.inspect.mockResolvedValue({
-    data: { status: "applied", reconciliation: { state: "pending" } },
-  })
-  const second = show({
-    attributes,
-    message,
-    inspect: { accountId: "2", canInspect: true },
-  })
+  expect(result.container.querySelector("button")).toBeNull()
+  expect(result.container.textContent).toContain(
+    en.zaloAccount.evidence.unknown,
+  )
   expect(mocks.inspect).not.toHaveBeenCalled()
-  await act(async () => second.container.querySelector("button")?.click())
-  expect(mocks.inspect).toHaveBeenCalledWith("1", "2", {
-    messageId: "12",
-    messageCreatedAt: message.createdAt,
-  })
-  expect(
-    second.container.querySelector('[role="status"]')?.textContent,
-  ).toContain(en.zaloAccount.evidence.appliedPending)
-  second.unmount()
+  result.unmount()
 })
 
 it("permits only proven predispatch Zalo failures to offer resend and preserves other channels", () => {

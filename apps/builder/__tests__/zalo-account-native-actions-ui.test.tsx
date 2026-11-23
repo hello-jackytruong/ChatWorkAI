@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { MessageResourceWithRelations } from "../src/features/messages/schema/resource"
 
 const actions = vi.hoisted(() => ({
+  inspectMessage: vi.fn(),
   capabilities: vi.fn(),
   mutate: vi.fn(),
   inspect: vi.fn(),
@@ -17,6 +18,9 @@ vi.mock("@/features/zalo-accounts/actions/message-operations.action", () => ({
   getZaloMessageOperationAction: actions.inspect,
   getZaloSavedContentAction: actions.content,
   getZaloSavedAttachmentAction: actions.attachment,
+}))
+vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
+  inspectZaloAccountMessageAction: actions.inspectMessage,
 }))
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }))
 vi.mock("@chatbotx.io/ui/components/ui/dialog", () => ({
@@ -46,11 +50,18 @@ const settle = () =>
   act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
   })
-const render = async () => {
+const render = async (
+  inspect?: { accountId: string; canInspect: boolean },
+  target = message,
+) => {
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        <ZaloAccountMessageActions message={message} workspaceId="1" />
+        <ZaloAccountMessageActions
+          inspect={inspect}
+          message={target}
+          workspaceId="1"
+        />
       </QueryClientProvider>,
     ),
   )
@@ -258,5 +269,65 @@ it("keeps deleteChat disabled when its boundary lacks native capability", async 
     .filter((item) => item.textContent === "deleteChatOnZalo")
     .at(-1)
   expect(select?.disabled).toBe(true)
+  expect(actions.mutate).not.toHaveBeenCalled()
+})
+
+it("puts status inspection behind the same ellipsis without automatic requests", async () => {
+  actions.inspectMessage.mockResolvedValue({ data: { status: "applied" } })
+  await render(
+    { accountId: "2", canInspect: true },
+    { ...message, messageType: "outgoing" },
+  )
+  expect(button("messageActions")?.textContent).toBe("")
+  expect(button("evidence.inspect")).toBeUndefined()
+  expect(actions.inspectMessage).not.toHaveBeenCalled()
+  await click("messageActions")
+  expect(actions.inspectMessage).not.toHaveBeenCalled()
+  await click("evidence.inspect")
+  expect(actions.inspectMessage).toHaveBeenCalledWith("1", "2", {
+    messageId: "4",
+    messageCreatedAt: message.createdAt,
+  })
+  expect(document.body.querySelector('[role="menu"]')).toBeNull()
+  expect(container.querySelector('[role="status"]')?.textContent).toBe(
+    "applied",
+  )
+})
+it("does not offer inspection without permission", async () => {
+  await render(
+    { accountId: "2", canInspect: false },
+    { ...message, messageType: "outgoing" },
+  )
+  await click("messageActions")
+  expect(button("evidence.inspect")).toBeUndefined()
+  expect(actions.inspectMessage).not.toHaveBeenCalled()
+})
+it("can inspect a pending send without a provider source ID", async () => {
+  actions.inspectMessage.mockResolvedValue({ data: { status: "unknown" } })
+  await render(
+    { accountId: "2", canInspect: true },
+    { ...message, messageType: "outgoing", sourceId: null },
+  )
+  await click("messageActions")
+  expect(actions.capabilities).not.toHaveBeenCalled()
+  await click("evidence.inspect")
+  expect(actions.inspectMessage).toHaveBeenCalledTimes(1)
+  expect(actions.mutate).not.toHaveBeenCalled()
+})
+
+it("shows a safe inspection failure without exposing the server error or sending again", async () => {
+  actions.inspectMessage.mockResolvedValue({
+    serverError: "SECRET cookie data",
+  })
+  await render(
+    { accountId: "2", canInspect: true },
+    { ...message, messageType: "outgoing" },
+  )
+  await click("messageActions")
+  await click("evidence.inspect")
+  expect(container.querySelector('[role="status"]')?.textContent).toBe(
+    "evidence.unavailable",
+  )
+  expect(container.textContent).not.toContain("SECRET")
   expect(actions.mutate).not.toHaveBeenCalled()
 })

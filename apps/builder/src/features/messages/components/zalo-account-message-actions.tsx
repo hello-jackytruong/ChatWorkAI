@@ -15,35 +15,60 @@ import {
 } from "@chatbotx.io/ui/components/ui/dropdown-menu"
 import { cn } from "@chatbotx.io/ui/lib/utils"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { EllipsisVerticalIcon } from "lucide-react"
+import { EllipsisVerticalIcon, LoaderCircleIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { inspectZaloAccountMessageAction } from "@/features/zalo-accounts/actions/account-operations.action"
 import {
   getZaloMessageCapabilitiesAction,
   getZaloMessageOperationAction,
   mutateZaloMessageAction,
 } from "@/features/zalo-accounts/actions/message-operations.action"
+import { zaloSendAttemptResource } from "@/features/zalo-accounts/schema/send-attempt"
 import type { MessageResourceWithRelations } from "../schema/resource"
 import { ZaloAccountSavedContentDialog } from "./zalo-account-saved-content-dialog"
+import {
+  ZaloMessageEvidence,
+  type ZaloMessageInspect,
+} from "./zalo-message-evidence"
+
+const inspectionSchema = zaloSendAttemptResource.pick({
+  status: true,
+  reconciliation: true,
+  errorInfo: true,
+})
 
 type Operation = "hide" | "recall" | "deleteOnZalo" | "deleteChatOnZalo"
 export function ZaloAccountMessageActions({
   workspaceId,
   message,
   deleteChatOnly = false,
+  inspect,
 }: {
   workspaceId: string
   message: MessageResourceWithRelations
   deleteChatOnly?: boolean
+  inspect?: ZaloMessageInspect
 }) {
   const ref = parseZaloAccountSourceId(message.sourceId)
-  if (!ref) {
+  const accountId = ref?.accountId ?? inspect?.accountId
+  const canInspect = Boolean(
+    inspect?.canInspect &&
+      inspect.accountId === accountId &&
+      message.messageType === "outgoing",
+  )
+  if (!accountId) {
+    return null
+  }
+  if (!(ref || canInspect)) {
     return null
   }
   return (
     <Actions
-      accountId={ref.accountId}
+      accountId={accountId}
+      canInspect={canInspect}
       deleteChatOnly={deleteChatOnly}
+      hasProviderIdentity={Boolean(ref)}
       message={message}
       workspaceId={workspaceId}
     />
@@ -54,15 +79,26 @@ function Actions({
   message,
   accountId,
   deleteChatOnly,
+  canInspect,
+  hasProviderIdentity,
 }: {
   workspaceId: string
   message: MessageResourceWithRelations
   accountId: string
   deleteChatOnly: boolean
+  canInspect: boolean
+  hasProviderIdentity: boolean
 }) {
   const t = useTranslations("zaloAccount")
   const client = useQueryClient()
   const [expanded, setExpanded] = useState(false)
+  const [inspectionOpen, setInspectionOpen] = useState(false)
+  const [inspectionPending, setInspectionPending] = useState(false)
+  const [inspection, setInspection] = useState<ReturnType<
+    typeof inspectionSchema.parse
+  > | null>(null)
+  const [inspectionUnavailable, setInspectionUnavailable] = useState(false)
+  const inspecting = useRef(false)
   const [review, setReview] = useState(false)
   const [operation, setOperation] = useState<Operation | null>(null)
   const [busy, setBusy] = useState(false)
@@ -85,7 +121,7 @@ function Actions({
       message.id,
       new Date(message.createdAt).toISOString(),
     ],
-    enabled: expanded,
+    enabled: expanded && hasProviderIdentity,
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -158,6 +194,37 @@ function Actions({
       setBusy(false)
     }
   }
+  const inspectMessage = async () => {
+    if (!canInspect || inspecting.current) {
+      return
+    }
+    inspecting.current = true
+    setInspectionOpen(true)
+    setInspectionPending(true)
+    setInspection(null)
+    setInspectionUnavailable(false)
+    try {
+      const result = await inspectZaloAccountMessageAction(
+        workspaceId,
+        accountId,
+        {
+          messageId: message.id,
+          messageCreatedAt: new Date(message.createdAt),
+        },
+      )
+      const parsed = inspectionSchema.safeParse(result?.data)
+      if (parsed.success) {
+        setInspection(parsed.data)
+      } else {
+        setInspectionUnavailable(true)
+      }
+    } catch {
+      setInspectionUnavailable(true)
+    } finally {
+      inspecting.current = false
+      setInspectionPending(false)
+    }
+  }
   const inspectOperation = async (id: string) => {
     setBusy(true)
     try {
@@ -224,10 +291,24 @@ function Actions({
             }
           />
           <DropdownMenuContent align="start" className="w-60">
-            <DropdownMenuItem onClick={() => setReview(true)}>
+            {canInspect && (
+              <DropdownMenuItem
+                disabled={inspectionPending}
+                onClick={inspectMessage}
+              >
+                {t("evidence.inspect")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              disabled={!hasProviderIdentity}
+              onClick={() => setReview(true)}
+            >
               {t("viewSavedContent")}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => select("hide")}>
+            <DropdownMenuItem
+              disabled={!hasProviderIdentity}
+              onClick={() => select("hide")}
+            >
               {t("hideLocally")}
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -250,6 +331,26 @@ function Actions({
           </DropdownMenuContent>
         </DropdownMenu>
       )}
+      <Dialog onOpenChange={setInspectionOpen} open={inspectionOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("evidence.inspect")}</DialogTitle>
+          </DialogHeader>
+          <div aria-busy={inspectionPending}>
+            {inspectionPending && (
+              <LoaderCircleIcon aria-hidden className="size-4 animate-spin" />
+            )}
+            {inspectionUnavailable && (
+              <p role="status">{t("evidence.unavailable")}</p>
+            )}
+            {inspection && (
+              <ZaloMessageEvidence
+                attributes={{ zaloAccount: { sendAttempt: inspection } }}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <ZaloAccountSavedContentDialog
         onOpenChange={setReview}
         open={review}

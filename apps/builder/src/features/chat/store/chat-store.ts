@@ -779,6 +779,60 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
   let conversationHeadRefreshTimer: number | null = null
   let pendingConversationHeadRefreshWorkspaceId: string | null = null
   const { messagesSeed, ...restInitialState } = initialState
+  // Archive completion can overtake the original messageCreated snapshot.
+  // Keep only a short, bounded window of exact attachment updates; retention
+  // is applied afterwards so a late completion cannot reveal recalled content.
+  const readyAttachments = new Map<
+    string,
+    {
+      receivedAt: number
+      update: NonNullable<Parameters<ChatActions["updateMessageText"]>[2]>
+    }
+  >()
+  const applyReadyAttachments = (message: MessageResourceWithRelations) => {
+    const attributes = message.contentAttributes
+    const hasZaloAttributes =
+      attributes !== null &&
+      typeof attributes === "object" &&
+      !Array.isArray(attributes) &&
+      Boolean(attributes.zaloAccount)
+    if (
+      message.deletedAt ||
+      !(message.sourceId?.startsWith("za:") || hasZaloAttributes)
+    ) {
+      return message
+    }
+    let changed = false
+    const attachments = message.attachments?.map((attachment) => {
+      const ready = readyAttachments.get(
+        JSON.stringify([message.id, attachment.id]),
+      )
+      if (!ready) {
+        return attachment
+      }
+      const update = ready.update
+      const fields = {
+        originPath: "",
+        url: update.newAttachmentPublicUrl ?? attachment.url,
+        fallbackUrl: null,
+        mimeType: update.newAttachmentMimeType ?? attachment.mimeType,
+        size: update.newAttachmentSize ?? attachment.size,
+        width: update.newAttachmentWidth ?? attachment.width,
+        height: update.newAttachmentHeight ?? attachment.height,
+      }
+      if (
+        Object.entries(fields).every(
+          ([key, value]) =>
+            attachment[key as keyof typeof attachment] === value,
+        )
+      ) {
+        return attachment
+      }
+      changed = true
+      return { ...attachment, ...fields }
+    })
+    return changed ? { ...message, attachments } : message
+  }
 
   return createStore<ChatStore>((commit, get, store) => {
     const set: typeof commit = (partial) =>
@@ -787,7 +841,44 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
         if (patch === state) {
           return state
         }
-        return retainChatState({ ...state, ...patch }, state)
+        const next = { ...state, ...patch }
+        const messagesChanged = next.messages !== state.messages
+        const conversationsChanged = next.conversations !== state.conversations
+        if (
+          readyAttachments.size &&
+          (messagesChanged || conversationsChanged)
+        ) {
+          const now = Date.now()
+          for (const [key, ready] of readyAttachments) {
+            if (now - ready.receivedAt >= 60_000) {
+              readyAttachments.delete(key)
+            }
+          }
+          if (messagesChanged) {
+            const messages = next.messages.map(applyReadyAttachments)
+            if (messages.some((message, i) => message !== next.messages[i])) {
+              next.messages = messages
+            }
+          }
+          if (conversationsChanged) {
+            const conversations = next.conversations.map((conversation) => {
+              const previews = conversation.messages.map(applyReadyAttachments)
+              return previews.some(
+                (message, i) => message !== conversation.messages[i],
+              )
+                ? { ...conversation, messages: previews }
+                : conversation
+            })
+            if (
+              conversations.some(
+                (conversation, i) => conversation !== next.conversations[i],
+              )
+            ) {
+              next.conversations = conversations
+            }
+          }
+        }
+        return retainChatState(next, state)
       })
     const waitUntilState = (
       predicate: (state: ChatStore) => boolean,
@@ -1209,6 +1300,7 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
       },
 
       resetState: () => {
+        readyAttachments.clear()
         set({
           ...conversationListDefaults(),
           ...messageThreadDefaults(),
@@ -1589,6 +1681,23 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
       },
 
       updateMessageText: (messageId, newText, attachmentUpdate) => {
+        if (
+          attachmentUpdate?.attachmentId &&
+          attachmentUpdate.newAttachmentPublicUrl
+        ) {
+          const key = JSON.stringify([messageId, attachmentUpdate.attachmentId])
+          readyAttachments.delete(key)
+          readyAttachments.set(key, {
+            receivedAt: Date.now(),
+            update: attachmentUpdate,
+          })
+          if (readyAttachments.size > 100) {
+            const oldest = readyAttachments.keys().next().value
+            if (oldest) {
+              readyAttachments.delete(oldest)
+            }
+          }
+        }
         set(
           (state) =>
             replaceMessageById(state.messages, messageId, (message) => {

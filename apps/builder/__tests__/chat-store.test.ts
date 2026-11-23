@@ -2635,3 +2635,130 @@ test("late Zalo send evidence cannot replace a newer conflict revision", () => {
     evidence(6, "completed"),
   )
 })
+
+test("an early attachment readiness event survives a later stale messageCreated snapshot", () => {
+  const store = createChatStore()
+  store.setState({
+    activeConversationId: "c",
+    conversations: [makeConversation("c", new Date())],
+  } as never)
+  store.getState().updateMessageText("m", "", {
+    attachmentId: "a",
+    newAttachmentPath: null,
+    newAttachmentPublicUrl: "https://signed.test/image.jpg",
+    newAttachmentMimeType: "image/jpeg",
+    removedAttachment: false,
+  })
+  const pending = {
+    ...makeMessage("c", new Date(), "m"),
+    sourceId: "za:a:user:p:m",
+    attachments: [{ id: "a", fileType: "image", url: null }],
+  }
+  store.getState().handleNewMessages([pending] as never)
+  expect(store.getState().messages[0]?.attachments?.[0]?.url).toBe(
+    "https://signed.test/image.jpg",
+  )
+  store.getState().handleNewMessages([pending] as never)
+  expect(store.getState().messages[0]?.attachments?.[0]?.url).toBe(
+    "https://signed.test/image.jpg",
+  )
+})
+
+describe("bounded early Zalo attachment readiness", () => {
+  const pending = (id: string, zalo = true) => ({
+    ...makeMessage("c", new Date(), id),
+    sourceId: zalo ? `za:a:user:p:${id}` : "other-channel",
+    text: "newer text",
+    attachments: [{ id: "a", fileType: "image", url: null }],
+  })
+  const ready = (store: ReturnType<typeof createChatStore>, id: string) =>
+    store.getState().updateMessageText(id, "stale text", {
+      attachmentId: "a",
+      newAttachmentPath: null,
+      newAttachmentPublicUrl: "https://signed.test/image.jpg",
+      newAttachmentMimeType: "image/jpeg",
+      removedAttachment: false,
+    })
+  test("does not carry early readiness into a non-Zalo message", () => {
+    const store = createChatStore()
+    ready(store, "m")
+    store.getState().appendMessage(pending("m", false) as never)
+    expect(store.getState().messages[0]?.attachments?.[0]?.url).toBeNull()
+  })
+  test("keeps only the newest 100 early attachment completions", () => {
+    const store = createChatStore()
+    for (let i = 0; i <= 100; i++) {
+      ready(store, `m${i}`)
+    }
+    store.getState().appendMessage(pending("m0") as never)
+    store.getState().appendMessage(pending("m100") as never)
+    expect(
+      store.getState().messages.find((m) => m.id === "m0")?.attachments?.[0]
+        ?.url,
+    ).toBeNull()
+    expect(
+      store.getState().messages.find((m) => m.id === "m100")?.attachments?.[0]
+        ?.url,
+    ).toBe("https://signed.test/image.jpg")
+  })
+  test("expires early readiness after a minute without timers or refetching", () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1000)
+    try {
+      const store = createChatStore()
+      ready(store, "m")
+      now.mockReturnValue(61_000)
+      store.getState().appendMessage(pending("m") as never)
+      expect(store.getState().messages[0]?.attachments?.[0]?.url).toBeNull()
+    } finally {
+      now.mockRestore()
+    }
+  })
+  test("never reveals a recalled parent and preserves row identity after completion", () => {
+    const store = createChatStore()
+    ready(store, "m")
+    store.getState().appendMessage(pending("m") as never)
+    const first = store.getState().messages[0]
+    expect(first?.text).toBe("newer text")
+    store.getState().setFilters({})
+    expect(store.getState().messages[0]).toBe(first)
+    store.getState().markMessagesDeleted(["m"])
+    const hidden = store.getState().messages[0]
+    expect(hidden?.deletedAt).toBeTruthy()
+    ready(store, "m")
+    expect(store.getState().messages[0]?.deletedAt).toBeTruthy()
+    expect(store.getState().messages[0]?.attachments).toEqual(
+      hidden?.attachments,
+    )
+  })
+})
+
+test("early media readiness survives a delayed initial message-list response", async () => {
+  const store = createChatStore()
+  store.setState({
+    activeConversationId: "c",
+    conversations: [makeConversation("c", new Date())],
+    hasNextMessagePage: true,
+  } as never)
+  store.getState().updateMessageText("m", "stale", {
+    attachmentId: "a",
+    newAttachmentPath: null,
+    newAttachmentPublicUrl: "https://signed.test/image.jpg",
+    removedAttachment: false,
+  })
+  mockListMessagesAuthenticatedAPI.mockResolvedValueOnce({
+    data: [
+      {
+        ...makeMessage("c", new Date(), "m"),
+        sourceId: "za:a:user:p:m",
+        text: "current",
+        attachments: [{ id: "a", fileType: "image", url: null }],
+      },
+    ],
+    nextCursor: null,
+  })
+  await store.getState().loadMoreMessages("ws-1", 20)
+  expect(store.getState().messages[0]?.attachments?.[0]?.url).toBe(
+    "https://signed.test/image.jpg",
+  )
+  expect(store.getState().messages[0]?.text).toBe("current")
+})
