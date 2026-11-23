@@ -256,7 +256,6 @@ function sortConnectableFirst(
 const FACEBOOK_OAUTH_BASE = "https://www.facebook.com"
 
 export const MESSENGER_SCOPES = [
-  "email",
   "public_profile",
   "pages_manage_ads",
   "pages_manage_metadata",
