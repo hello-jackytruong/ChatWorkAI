@@ -353,7 +353,7 @@ describe("WebchatPage", () => {
     ).props.config
     expect(config.persistentMenus).toHaveLength(2)
     expect(config.persistentMenus.at(-1)).toEqual({
-      label: "⚡ Built with chatbotx.io",
+      label: "⚡ Built with ChatWorkAI",
       type: "url",
       url: "https://app.chatbotx.io/?ref=selfhosted&channel=webchat",
     })

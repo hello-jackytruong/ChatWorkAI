@@ -2817,7 +2817,7 @@
     },
     "fromName": {
       "label": "Gönderen adı",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "messageTemplate": {
       "label": "Mesaj Şablonu"
@@ -3804,7 +3804,7 @@
     "title": "Genel"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "Bu işlem Meta mesaj kampanyasını siler ve kampanyayı ChatbotX'ten kaldırır. Meta silmeyi reddederse kampanya korunur.",
+    "deleteWarning": "Bu işlem Meta mesaj kampanyasını siler ve kampanyayı ChatWorkAI'ten kaldırır. Meta silmeyi reddederse kampanya korunur.",
     "title": "Facebook Pazarlama Mesajları",
     "description": "Messenger'da kişiselleştirilmiş tanıtım mesajlarıyla etkileşimi ve satışları artırın.",
     "create": "Yeni Oluştur",
@@ -3845,7 +3845,7 @@
       "tosNotAccepted": "Bu özelliği kullanmak için {url} adresinde özel nesne koşullarını kabul edin",
       "notFound": "Pazarlama mesajı bulunamadı.",
       "audienceNotTargetable": "Seçilen özel hedef kitle hazır değil veya bu Sayfa ve reklam hesabına ait değil.",
-      "connectFirst": "Önce ChatbotX uygulamasında Marketing Messages'ı bağlayın.",
+      "connectFirst": "Önce ChatWorkAI uygulamasında Marketing Messages'ı bağlayın.",
       "mmInvalidState": "Bu işlem kampanyanın mevcut durumunda kullanılamaz.",
       "mmCampaignEnded": "Meta mesaj kampanyası sona erdi, bu nedenle gönderilemez veya devam ettirilemez.",
       "mmPageNotConnected": "Bu kampanyanın Sayfası bu çalışma alanına bağlı değil.",
@@ -3865,7 +3865,7 @@
       "uploadMore": "Daha fazla satır yükle",
       "empty": "Henüz özel hedef kitle yok.",
       "deleteTitle": "Özel hedef kitleyi sil",
-      "deleteWarning": "Bu işlem \"{name}\" özel hedef kitlesini Meta'dan ve ChatbotX'ten siler. Geri alınamaz.",
+      "deleteWarning": "Bu işlem \"{name}\" özel hedef kitlesini Meta'dan ve ChatWorkAI'ten siler. Geri alınamaz.",
       "deleted": "Özel hedef kitle silindi.",
       "pageDisconnected": "Sayfa bağlantısı kesildi",
       "status": {
@@ -5723,7 +5723,7 @@
         "title": "Arama uygunluğu",
         "appSubscriptionMissing": "Önce Meta Uygulama Panosunda bu uygulama için WhatsApp webhook'unu yapılandırın, ardından tekrar deneyin.",
         "appSubscriptionFailed": "Uygulamanın 'calls' webhook aboneliği doğrulanamadı. Kısa süre sonra tekrar deneyin.",
-        "callsNotSubscribed": "Bu uygulama 'calls' webhook alanına abone değil, bu nedenle arama olayları ChatbotX'e ulaşamıyor (Meta hatası 138018: teknik ön koşullar karşılanmıyor — WABA'ya abone olan en az bir uygulamanın arama webhook alanına da sahip olduğundan emin olun).",
+        "callsNotSubscribed": "Bu uygulama 'calls' webhook alanına abone değil, bu nedenle arama olayları ChatWorkAI'e ulaşamıyor (Meta hatası 138018: teknik ön koşullar karşılanmıyor — WABA'ya abone olan en az bir uygulamanın arama webhook alanına da sahip olduğundan emin olun).",
         "fixButton": "Düzelt",
         "fixSuccess": "Uygulama artık WhatsApp arama webhook'larına abone.",
         "manualIntegrationNotice": "Bu numara manuel olarak bağlandı ve burada uygulama kimlik bilgisi yok. Meta Uygulama Panosunda uygulamanız için 'calls' webhook alanına abone olun.",
@@ -9151,7 +9151,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "Eylem kaynağı",
@@ -9646,8 +9646,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11169,7 +11169,7 @@
         "label": "Mağaza kaynağı",
         "description": "Ürünlerinizi, stokunuzu ve siparişlerinizi yönetmek için kullanılan mağaza kaynağını seçin. Shopify / WooCommerce seçildiğinde tüm ürünler ve siparişler doğrudan Shopify / WooCommerce mağazanızdan yönetilir.",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11338,7 +11338,7 @@
       },
       "authKind": {
         "label": "Kimlik doğrulama",
-        "description": "ChatbotX'in mağazanıza nasıl giriş yaptığı: özel bir uygulamanın Admin API erişim belirteci ile ya da Shopify Dev Dashboard'da oluşturulan bir uygulamanın Client ID ve secret bilgisiyle.",
+        "description": "ChatWorkAI'in mağazanıza nasıl giriş yaptığı: özel bir uygulamanın Admin API erişim belirteci ile ya da Shopify Dev Dashboard'da oluşturulan bir uygulamanın Client ID ve secret bilgisiyle.",
         "options": {
           "token": "Admin API erişim belirteci",
           "clientCredentials": "Client ID ve secret (Dev Dashboard uygulaması)"
@@ -12250,7 +12250,7 @@
     "noWorkspaces": "Hiçbir çalışma alanında yönetici değilsiniz, bu nedenle bu uygulamayı yetkilendiremezsiniz."
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12440,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12557,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "ChatbotX hesabınızı silin",
+    "title": "ChatWorkAI hesabınızı silin",
     "intro": "Hesabınızı ve verilerini aşağıdaki yollardan biriyle silebilirsiniz.",
     "waysTitle": "Hesabınızı nasıl silersiniz",
     "wayMobile": "Mobil uygulamada: Ayarlar → Hesabı sil.",

@@ -1,7 +1,7 @@
 {
   "name": "chatbotx-mcp",
   "version": "0.0.0-dev",
-  "description": "MCP Server for ChatbotX — gives AI agents access to your ChatbotX workspace via the Model Context Protocol",
+  "description": "MCP Server for ChatWorkAI — gives AI agents access to your ChatWorkAI workspace via the Model Context Protocol",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ChatbotXIO/ChatbotX.git",

@@ -1233,7 +1233,7 @@
     "title": "כללי"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "פעולה זו מוחקת את קמפיין ההודעות ב-Meta ומסירה את הקמפיין מ-ChatbotX. אם Meta תסרב למחיקה, הקמפיין יישמר.",
+    "deleteWarning": "פעולה זו מוחקת את קמפיין ההודעות ב-Meta ומסירה את הקמפיין מ-ChatWorkAI. אם Meta תסרב למחיקה, הקמפיין יישמר.",
     "title": "Facebook Marketing Messages",
     "description": "הגדל מעורבות ומכירות בעזרת הודעות קידום מותאמות אישית ב-Messenger.",
     "create": "צור חדש",
@@ -1274,7 +1274,7 @@
       "tosNotAccepted": "כדי להשתמש בתכונה זו, יש לאשר את תנאי האובייקט המותאם בכתובת {url}",
       "notFound": "ההודעה השיווקית לא נמצאה.",
       "audienceNotTargetable": "הקהל המותאם אישית שנבחר אינו מוכן או אינו שייך לדף ולחשבון המודעות הזה.",
-      "connectFirst": "יש לחבר תחילה את Marketing Messages באפליקציית ChatbotX.",
+      "connectFirst": "יש לחבר תחילה את Marketing Messages באפליקציית ChatWorkAI.",
       "mmInvalidState": "פעולה זו אינה זמינה במצב הנוכחי של הקמפיין.",
       "mmCampaignEnded": "קמפיין ההודעות ב-Meta הסתיים, ולכן לא ניתן לשלוח או לחדש אותו.",
       "mmPageNotConnected": "הדף של קמפיין זה אינו מחובר לסביבת העבודה הזו.",
@@ -1294,7 +1294,7 @@
       "uploadMore": "העלאת שורות נוספות",
       "empty": "עדיין אין קהלים מותאמים אישית.",
       "deleteTitle": "מחיקת קהל מותאם אישית",
-      "deleteWarning": "פעולה זו מוחקת את הקהל המותאם אישית \"{name}\" ב-Meta וב-ChatbotX. לא ניתן לבטל אותה.",
+      "deleteWarning": "פעולה זו מוחקת את הקהל המותאם אישית \"{name}\" ב-Meta וב-ChatWorkAI. לא ניתן לבטל אותה.",
       "deleted": "הקהל המותאם אישית נמחק.",
       "pageDisconnected": "הדף נותק",
       "status": {
@@ -3309,7 +3309,7 @@
         "title": "זכאות לשיחות",
         "appSubscriptionMissing": "הגדר תחילה את ה-webhook של WhatsApp לאפליקציה זו בלוח הבקרה של אפליקציות Meta, ולאחר מכן נסה שוב.",
         "appSubscriptionFailed": "לא ניתן היה לאמת את הרשמת ה-webhook של 'calls' עבור האפליקציה. נסה שוב בקרוב.",
-        "callsNotSubscribed": "אפליקציה זו לא רשומה לשדה ה-webhook 'calls', כך שאירועי שיחה לא יכולים להגיע ל-ChatbotX (שגיאת Meta 138018: הדרישות המקדימות הטכניות לא מתקיימות — יש לוודא שלפחות אפליקציה אחת הרשומה ל-WABA כוללת גם את שדה ה-webhook של שיחות).",
+        "callsNotSubscribed": "אפליקציה זו לא רשומה לשדה ה-webhook 'calls', כך שאירועי שיחה לא יכולים להגיע ל-ChatWorkAI (שגיאת Meta 138018: הדרישות המקדימות הטכניות לא מתקיימות — יש לוודא שלפחות אפליקציה אחת הרשומה ל-WABA כוללת גם את שדה ה-webhook של שיחות).",
         "fixButton": "תיקון",
         "fixSuccess": "האפליקציה רשומה כעת ל-webhooks של שיחות WhatsApp.",
         "manualIntegrationNotice": "מספר זה חובר באופן ידני ואין לו כאן פרטי אפליקציה. יש להירשם לשדה ה-webhook 'calls' עבור האפליקציה שלך בלוח הבקרה של אפליקציות Meta.",
@@ -7571,7 +7571,7 @@
     },
     "fromName": {
       "label": "שם השולח",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "messageTemplate": {
       "label": "תבנית הודעה"
@@ -9151,7 +9151,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "מקור הפעולה",
@@ -9646,8 +9646,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11169,7 +11169,7 @@
         "label": "מקור החנות",
         "description": "בחר את מקור החנות המשמש לניהול המוצרים, המלאי וההזמנות שלך. כשהמקור מוגדר ל-Shopify / WooCommerce, כל המוצרים וההזמנות מנוהלים ישירות מחנות ה-Shopify / WooCommerce שלך.",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11338,7 +11338,7 @@
       },
       "authKind": {
         "label": "אימות",
-        "description": "כיצד ChatbotX מתחבר לחנות שלך: באמצעות אסימון גישה של Admin API מאפליקציה מותאמת אישית, או באמצעות Client ID וסוד של אפליקציה שנוצרה ב-Shopify Dev Dashboard.",
+        "description": "כיצד ChatWorkAI מתחבר לחנות שלך: באמצעות אסימון גישה של Admin API מאפליקציה מותאמת אישית, או באמצעות Client ID וסוד של אפליקציה שנוצרה ב-Shopify Dev Dashboard.",
         "options": {
           "token": "אסימון גישה של Admin API",
           "clientCredentials": "Client ID וסוד (אפליקציית Dev Dashboard)"
@@ -12250,7 +12250,7 @@
     "noWorkspaces": "אינך מנהל באף סביבת עבודה, ולכן אינך יכול לאשר את האפליקציה הזו."
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12440,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12557,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "מחיקת חשבון ChatbotX שלך",
+    "title": "מחיקת חשבון ChatWorkAI שלך",
     "intro": "אפשר למחוק את החשבון ואת הנתונים שלו באחת מהדרכים הבאות.",
     "waysTitle": "איך למחוק את החשבון",
     "wayMobile": "באפליקציה לנייד: הגדרות ← מחיקת חשבון.",

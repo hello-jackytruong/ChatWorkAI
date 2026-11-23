@@ -21,11 +21,11 @@ const registerConfigCommand = (cli: ReturnType<typeof yargs>): void => {
           (setCli: Argv<ConfigOptions>) =>
             setCli
               .option("apiKey", {
-                describe: "ChatbotX API key",
+                describe: "ChatWorkAI API key",
                 type: "string",
               })
               .option("apiUrl", {
-                describe: "ChatbotX API URL",
+                describe: "ChatWorkAI API URL",
                 type: "string",
               })
               .option("allowSelfSignedCert", {
@@ -45,12 +45,12 @@ const main = async (): Promise<void> => {
     .scriptName("chatbotx")
     .usage("$0 <group> <action> [options]")
     .option("apiKey", {
-      describe: "ChatbotX API key (global)",
+      describe: "ChatWorkAI API key (global)",
       type: "string",
       global: true,
     })
     .option("apiUrl", {
-      describe: "ChatbotX API URL (global)",
+      describe: "ChatWorkAI API URL (global)",
       type: "string",
       global: true,
     })

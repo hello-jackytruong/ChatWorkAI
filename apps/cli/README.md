@@ -1,8 +1,8 @@
-# ChatbotX CLI
+# ChatWorkAI CLI
 
-CLI for interacting with the ChatbotX API.
+CLI for interacting with the ChatWorkAI API.
 
-Commands are automatically generated from the ChatbotX public API spec — no manual update needed when new APIs are added.
+Commands are automatically generated from the ChatWorkAI public API spec — no manual update needed when new APIs are added.
 
 CLI writes execute directly; MCP-only human approval (`x-mcp.hitlPolicy` and `_confirm`) does not gate CLI commands.
 
@@ -28,7 +28,7 @@ Before running any command, save your API key and URL:
 chatbotx config set --apiKey <yourApiKey> --apiUrl <yourApiUrl>
 ```
 
-- `--apiKey` — Workspace API key (found in ChatbotX Settings → Developer → API Keys)
+- `--apiKey` — Workspace API key (found in ChatWorkAI Settings → Developer → API Keys)
 - `--apiUrl` — Base API URL of your instance, e.g. `https://app.chatbotx.io/api`
 
 You can also set them individually:

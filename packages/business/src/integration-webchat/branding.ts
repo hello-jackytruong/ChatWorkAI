@@ -31,11 +31,12 @@ export const brandWebchatMenus = async ({
     "webchat",
     true,
   )
-  const brandingMenuCount = persistentMenus.filter(
-    (menu) =>
-      menu.type === "url" &&
-      (menu.label === BRANDING_TITLE || menu.url === brandingUrl),
-  ).length
+  const isBrandingMenu = (menu: WebchatPersistentMenu) =>
+    menu.type === "url" &&
+    (menu.label === BRANDING_TITLE ||
+      menu.label === "⚡ Built with chatbotx.io" ||
+      menu.url === brandingUrl)
+  const brandingMenuCount = persistentMenus.filter(isBrandingMenu).length
   const lastMenu = persistentMenus.at(-1)
   if (
     brandingMenuCount === 1 &&
@@ -46,11 +47,7 @@ export const brandWebchatMenus = async ({
     return persistentMenus
   }
 
-  const menus = persistentMenus.filter(
-    (menu) =>
-      menu.type !== "url" ||
-      (menu.label !== BRANDING_TITLE && menu.url !== brandingUrl),
-  )
+  const menus = persistentMenus.filter((menu) => !isBrandingMenu(menu))
   return ensureBrandingMenuEntry(menus, {
     label: BRANDING_TITLE,
     url: brandingUrl,

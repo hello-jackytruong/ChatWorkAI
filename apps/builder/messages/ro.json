@@ -672,7 +672,7 @@
     "title": "General"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "Aceasta șterge campania de mesaje Meta și elimină campania din ChatbotX. Dacă Meta refuză ștergerea, campania este păstrată.",
+    "deleteWarning": "Aceasta șterge campania de mesaje Meta și elimină campania din ChatWorkAI. Dacă Meta refuză ștergerea, campania este păstrată.",
     "title": "Facebook Marketing Messages",
     "description": "Crește implicarea și vânzările cu mesaje promoționale personalizate pe Messenger.",
     "create": "Creează",
@@ -713,7 +713,7 @@
       "tosNotAccepted": "Pentru a folosi această funcție, acceptă termenii pentru obiecte personalizate la {url}",
       "notFound": "Mesajul de marketing nu a fost găsit.",
       "audienceNotTargetable": "Audiența personalizată selectată nu este pregătită sau nu aparține acestei Pagini și acestui cont de publicitate.",
-      "connectFirst": "Conectează mai întâi Marketing Messages în aplicația ChatbotX.",
+      "connectFirst": "Conectează mai întâi Marketing Messages în aplicația ChatWorkAI.",
       "mmInvalidState": "Această acțiune nu este disponibilă în starea curentă a campaniei.",
       "mmCampaignEnded": "Campania de mesaje Meta s-a încheiat, deci nu poate fi trimisă sau reluată.",
       "mmPageNotConnected": "Pagina acestei campanii nu este conectată la acest spațiu de lucru.",
@@ -733,7 +733,7 @@
       "uploadMore": "Încarcă mai multe rânduri",
       "empty": "Nu există încă audiențe personalizate.",
       "deleteTitle": "Șterge audiența personalizată",
-      "deleteWarning": "Această acțiune șterge audiența personalizată \"{name}\" de pe Meta și din ChatbotX. Nu poate fi anulată.",
+      "deleteWarning": "Această acțiune șterge audiența personalizată \"{name}\" de pe Meta și din ChatWorkAI. Nu poate fi anulată.",
       "deleted": "Audiență personalizată ștearsă.",
       "pageDisconnected": "Pagină deconectată",
       "status": {
@@ -4057,7 +4057,7 @@
     },
     "fromName": {
       "label": "Nume expeditor",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "messageTemplate": {
       "label": "Șablon de mesaj"
@@ -5723,7 +5723,7 @@
         "title": "Eligibilitate pentru apeluri",
         "appSubscriptionMissing": "Configurează mai întâi webhook-ul WhatsApp pentru această aplicație în Meta App Dashboard, apoi încearcă din nou.",
         "appSubscriptionFailed": "Nu s-a putut verifica abonarea aplicației la webhook-ul 'calls'. Încearcă din nou în scurt timp.",
-        "callsNotSubscribed": "Această aplicație nu este abonată la câmpul webhook 'calls', astfel încât evenimentele de apel nu pot ajunge la ChatbotX (eroare Meta 138018: cerințele tehnice preliminare nu sunt îndeplinite — asigură-te că cel puțin o aplicație abonată la WABA are și câmpul webhook pentru apeluri).",
+        "callsNotSubscribed": "Această aplicație nu este abonată la câmpul webhook 'calls', astfel încât evenimentele de apel nu pot ajunge la ChatWorkAI (eroare Meta 138018: cerințele tehnice preliminare nu sunt îndeplinite — asigură-te că cel puțin o aplicație abonată la WABA are și câmpul webhook pentru apeluri).",
         "fixButton": "Remediază",
         "fixSuccess": "Aplicația este acum abonată la webhook-urile de apeluri WhatsApp.",
         "manualIntegrationNotice": "Acest număr a fost conectat manual și nu are acreditări de aplicație aici. Abonează câmpul webhook 'calls' pentru aplicația ta în Meta App Dashboard.",
@@ -9151,7 +9151,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "Sursa acțiunii",
@@ -9646,8 +9646,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11169,7 +11169,7 @@
         "label": "Sursa magazinului",
         "description": "Selectează sursa magazinului folosită pentru gestionarea produselor, stocului și comenzilor. Când este setat Shopify / WooCommerce, toate produsele și comenzile sunt gestionate direct din magazinul tău Shopify / WooCommerce.",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11338,7 +11338,7 @@
       },
       "authKind": {
         "label": "Autentificare",
-        "description": "Cum se conectează ChatbotX la magazinul tău: cu tokenul de acces Admin API al unei aplicații personalizate sau cu Client ID și secretul unei aplicații create în Shopify Dev Dashboard.",
+        "description": "Cum se conectează ChatWorkAI la magazinul tău: cu tokenul de acces Admin API al unei aplicații personalizate sau cu Client ID și secretul unei aplicații create în Shopify Dev Dashboard.",
         "options": {
           "token": "Token de acces Admin API",
           "clientCredentials": "Client ID și secret (aplicație Dev Dashboard)"
@@ -12250,7 +12250,7 @@
     "noWorkspaces": "Nu ești administrator în niciun spațiu de lucru, deci nu poți autoriza această aplicație."
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12440,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12557,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "Șterge-ți contul ChatbotX",
+    "title": "Șterge-ți contul ChatWorkAI",
     "intro": "Îți poți șterge contul și datele în oricare dintre aceste moduri.",
     "waysTitle": "Cum îți ștergi contul",
     "wayMobile": "În aplicația mobilă: Setări → Șterge contul.",

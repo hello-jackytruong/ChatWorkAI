@@ -2660,7 +2660,7 @@
     },
     "fromName": {
       "label": "送信者名",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "messageTemplate": {
       "label": "メッセージテンプレート"
@@ -9151,7 +9151,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "アクションのソース",
@@ -9646,8 +9646,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11169,7 +11169,7 @@
         "label": "ストアソース",
         "description": "商品、在庫、注文の管理に使用するストアソースを選択します。Shopify / WooCommerce を選択すると、すべての商品と注文が Shopify / WooCommerce ストアから直接管理されます。",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11338,7 +11338,7 @@
       },
       "authKind": {
         "label": "認証",
-        "description": "ChatbotX がストアにサインインする方法です。カスタムアプリの Admin API アクセストークン、または Shopify Dev Dashboard で作成したアプリの Client ID とシークレットを使用します。",
+        "description": "ChatWorkAI がストアにサインインする方法です。カスタムアプリの Admin API アクセストークン、または Shopify Dev Dashboard で作成したアプリの Client ID とシークレットを使用します。",
         "options": {
           "token": "Admin API アクセストークン",
           "clientCredentials": "Client ID とシークレット（Dev Dashboard アプリ）"
@@ -12250,7 +12250,7 @@
     "noWorkspaces": "管理者であるワークスペースがないため、このアプリケーションを承認できません。"
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12440,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12557,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "ChatbotX アカウントの削除",
+    "title": "ChatWorkAI アカウントの削除",
     "intro": "次のいずれかの方法で、アカウントとそのデータを削除できます。",
     "waysTitle": "アカウントの削除方法",
     "wayMobile": "モバイルアプリ：設定 → アカウントを削除。",

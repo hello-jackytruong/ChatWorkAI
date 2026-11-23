@@ -244,7 +244,7 @@ class WooCommerceIntegrationService extends BaseService {
       for (const topic of WOOCOMMERCE_WEBHOOK_TOPICS) {
         webhookIds.push(
           await createWooCommerceWebhook(credentials, {
-            name: `ChatbotX ${topic}`,
+            name: `ChatWorkAI ${topic}`,
             topic,
             deliveryUrl: webhookUrl,
             secret: secret.webhookSecret,

@@ -1,7 +1,7 @@
 {
   "name": "chatbotx",
   "version": "0.0.0-dev",
-  "description": "ChatbotX CLI - Command line interface for the ChatbotX API",
+  "description": "ChatWorkAI CLI - Command line interface for the ChatWorkAI API",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ChatbotXIO/ChatbotX.git",

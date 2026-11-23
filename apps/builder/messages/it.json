@@ -1378,7 +1378,7 @@
     },
     "fromName": {
       "label": "Nome mittente",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "messageTemplate": {
       "label": "Modello di messaggio"
@@ -3647,7 +3647,7 @@
     "title": "Generale"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "Questo elimina la campagna di messaggi Meta e rimuove la campagna da ChatbotX. Se Meta rifiuta l'eliminazione, la campagna viene mantenuta.",
+    "deleteWarning": "Questo elimina la campagna di messaggi Meta e rimuove la campagna da ChatWorkAI. Se Meta rifiuta l'eliminazione, la campagna viene mantenuta.",
     "title": "Facebook Marketing Messages",
     "description": "Aumenta il coinvolgimento e le vendite con messaggi promozionali personalizzati su Messenger.",
     "create": "Crea nuovo",
@@ -3688,7 +3688,7 @@
       "tosNotAccepted": "Per utilizzare questa funzione, accetta i termini per gli oggetti personalizzati su {url}",
       "notFound": "Messaggio di marketing non trovato.",
       "audienceNotTargetable": "Il pubblico personalizzato selezionato non è pronto o non appartiene a questa Pagina e a questo account pubblicitario.",
-      "connectFirst": "Collega prima Marketing Messages nell'app ChatbotX.",
+      "connectFirst": "Collega prima Marketing Messages nell'app ChatWorkAI.",
       "mmInvalidState": "Questa azione non è disponibile nello stato attuale della campagna.",
       "mmCampaignEnded": "La campagna di messaggi Meta è terminata, quindi non può essere inviata né ripresa.",
       "mmPageNotConnected": "La Pagina di questa campagna non è collegata a questo spazio di lavoro.",
@@ -3708,7 +3708,7 @@
       "uploadMore": "Carica altre righe",
       "empty": "Nessun pubblico personalizzato.",
       "deleteTitle": "Elimina pubblico personalizzato",
-      "deleteWarning": "Questa azione elimina il pubblico personalizzato \"{name}\" su Meta e in ChatbotX. Non può essere annullata.",
+      "deleteWarning": "Questa azione elimina il pubblico personalizzato \"{name}\" su Meta e in ChatWorkAI. Non può essere annullata.",
       "deleted": "Pubblico personalizzato eliminato.",
       "pageDisconnected": "Pagina disconnessa",
       "status": {
@@ -5723,7 +5723,7 @@
         "title": "Idoneità alle chiamate",
         "appSubscriptionMissing": "Configura prima il webhook di WhatsApp per questa app nella dashboard delle app Meta, quindi riprova.",
         "appSubscriptionFailed": "Impossibile verificare l'iscrizione al webhook 'calls' dell'app. Riprova a breve.",
-        "callsNotSubscribed": "Questa app non è iscritta al campo webhook 'calls', quindi gli eventi di chiamata non possono raggiungere ChatbotX (errore Meta 138018: i prerequisiti tecnici non sono soddisfatti — assicurati che almeno un'app iscritta al WABA disponga anche del campo webhook delle chiamate).",
+        "callsNotSubscribed": "Questa app non è iscritta al campo webhook 'calls', quindi gli eventi di chiamata non possono raggiungere ChatWorkAI (errore Meta 138018: i prerequisiti tecnici non sono soddisfatti — assicurati che almeno un'app iscritta al WABA disponga anche del campo webhook delle chiamate).",
         "fixButton": "Correggi",
         "fixSuccess": "L'app è ora iscritta ai webhook delle chiamate WhatsApp.",
         "manualIntegrationNotice": "Questo numero è stato connesso manualmente e non dispone di credenziali app qui. Iscrivi il campo webhook 'calls' della tua app nella dashboard delle app Meta.",
@@ -9151,7 +9151,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "Origine dell'azione",
@@ -9646,8 +9646,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11169,7 +11169,7 @@
         "label": "Origine del negozio",
         "description": "Seleziona l'origine del negozio usata per gestire prodotti, inventario e ordini. Con Shopify / WooCommerce, tutti i prodotti e gli ordini sono gestiti direttamente dal tuo negozio Shopify / WooCommerce.",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11338,7 +11338,7 @@
       },
       "authKind": {
         "label": "Autenticazione",
-        "description": "Come ChatbotX accede al tuo negozio: con il token di accesso Admin API di un'app personalizzata, oppure con Client ID e secret di un'app creata nello Shopify Dev Dashboard.",
+        "description": "Come ChatWorkAI accede al tuo negozio: con il token di accesso Admin API di un'app personalizzata, oppure con Client ID e secret di un'app creata nello Shopify Dev Dashboard.",
         "options": {
           "token": "Token di accesso Admin API",
           "clientCredentials": "Client ID e secret (app Dev Dashboard)"
@@ -12250,7 +12250,7 @@
     "noWorkspaces": "Non sei amministratore di alcun workspace, quindi non puoi autorizzare questa applicazione."
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12440,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12557,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "Elimina il tuo account ChatbotX",
+    "title": "Elimina il tuo account ChatWorkAI",
     "intro": "Puoi eliminare il tuo account e i relativi dati in uno di questi modi.",
     "waysTitle": "Come eliminare il tuo account",
     "wayMobile": "Nell'app mobile: Impostazioni → Elimina account.",
