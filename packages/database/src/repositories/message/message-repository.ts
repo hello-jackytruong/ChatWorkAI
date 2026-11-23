@@ -1,3 +1,7 @@
+import type {
+  ZaloAccountLifecycle,
+  ZaloAccountRecallScanCursor,
+} from "../../partials/zalo-account-recall"
 import type { RichResponseContentAttributes } from "../../schema"
 import type { AttachmentModel, MessageModel } from "../../types"
 
@@ -22,6 +26,7 @@ export type MessageForTranslation = Pick<
   | "deletedAt"
   | "type"
 > & {
+  sourceId?: MessageModel["sourceId"]
   /** `Message.messageType`: `incoming` | `outgoing` | `activity`. */
   direction: MessageModel["messageType"]
 }
@@ -317,7 +322,19 @@ export interface DistributedLock {
   }): Promise<T>
 }
 
+export type ZaloAccountExactTarget = {
+  workspaceId: string
+  conversationId: string
+  contactInboxId: string
+  sourceId: string
+  id: string
+  createdAt: Date
+}
 export interface IMessageRepository {
+  applyZaloAccountLifecycleExact(
+    params: ZaloAccountExactTarget & { lifecycle: ZaloAccountLifecycle },
+  ): Promise<MessageModel | null>
+
   bulkCreate(
     messages: CreateMessageInput[],
   ): Promise<{ id: string; sourceId: string | null }[]>
@@ -404,6 +421,15 @@ export interface IMessageRepository {
     workspaceId: string,
     createdAt: Date,
   ): Promise<{ conversationId: string; id: string }[]>
+  fillZaloAccountOriginalExact(
+    params: ZaloAccountExactTarget & {
+      message: CreateMessageInput
+      attachments: Omit<
+        CreateAttachmentInput,
+        "messageId" | "messageCreatedAt"
+      >[]
+    },
+  ): Promise<MessageWithAttachments | null>
 
   findAIContextMessages(
     options: FindAIContextMessagesOptions,
@@ -542,6 +568,20 @@ export interface IMessageRepository {
   listIncomingTextsByContactInbox(
     params: ListIncomingTextsByContactInboxParams,
   ): Promise<string[]>
+  locateZaloAccountTarget(params: {
+    workspaceId: string
+    conversationId: string
+    contactInboxId: string
+    sourceId: string
+    cursor?: ZaloAccountRecallScanCursor | null
+    maxRanges?: number
+    maxCandidates?: number
+    deadline: number | Date
+  }): Promise<{
+    message?: MessageWithAttachments
+    complete: boolean
+    cursor?: ZaloAccountRecallScanCursor
+  }>
 
   /**
    * Atomically merges `overlay` into `contentAttributes` via a DB-side `jsonb ||`

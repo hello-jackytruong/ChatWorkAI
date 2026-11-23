@@ -360,3 +360,9 @@ test("batch projects Zalo avatars before building both conversation representati
   expect(result.data[0]?.contact?.avatar).toBe("https://signed.test/avatar")
   expect(mocks.zaloAvatars).toHaveBeenCalledTimes(1)
 })
+vi.mock("@chatbotx.io/business/zalo-account/message-recall", () => ({
+  zaloAccountMessageRecallService: {
+    projectMessagesForRead: async ({ messages }: { messages: unknown[] }) =>
+      messages,
+  },
+}))

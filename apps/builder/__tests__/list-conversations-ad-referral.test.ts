@@ -326,3 +326,14 @@ describe("listConversations / findConversation googleAdsClick mapping", () => {
     }
   })
 })
+
+vi.mock("@chatbotx.io/business/zalo-account/message-recall", () => ({
+  zaloAccountMessageRecallService: {
+    projectMessagesForRead: async ({ messages }: { messages: unknown[] }) =>
+      messages,
+  },
+}))
+
+vi.mock("@/features/contacts/queries/resolve-contact-avatars", () => ({
+  resolveZaloContactAvatarMap: async () => new Map(),
+}))

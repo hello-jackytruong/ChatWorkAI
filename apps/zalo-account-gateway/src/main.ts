@@ -5,6 +5,7 @@ import {
   zaloAccountSendAttemptService,
   zaloAccountService,
 } from "@chatbotx.io/business/zalo-account"
+import { zaloAccountMessageOperationsService } from "@chatbotx.io/business/zalo-account/native-operations"
 import { zaloAccountRuntimeStateService } from "@chatbotx.io/business/zalo-account/runtime-state"
 import { getChildLogger } from "@chatbotx.io/logger"
 import { createRedisConnection } from "@chatbotx.io/redis"
@@ -79,6 +80,19 @@ export const main = async (): Promise<void> => {
       ? new RedisCommandConsumer({
           executor: new ZaloAccountCommandExecutor({
             admission: new ZaloAccountProviderAdmission(),
+            nativeEnabled: env.nativeMessageOperationsEnabled,
+            nativeOperations: {
+              claimDispatch: (command) =>
+                zaloAccountMessageOperationsService.gatewayClaim(command),
+              settle: (command, status, providerStatus) =>
+                zaloAccountMessageOperationsService.gatewaySettle(
+                  command,
+                  status,
+                  providerStatus,
+                ),
+              outcome: (command) =>
+                zaloAccountMessageOperationsService.gatewayOutcome(command),
+            },
             ownerId,
             ownsTarget: async (command: ZaloAccountCommandEnvelope) => {
               if (command.kind === "start_qr" || !command.target) {

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
   return {
     TerminalMediaError,
     checkGuestRateLimit: vi.fn(),
+    ordinaryAttachmentVisible: vi.fn(),
     createMessageRepository: vi.fn(),
     findAttachmentById: vi.fn(),
     findContact: vi.fn(),
@@ -24,6 +25,11 @@ const mocks = vi.hoisted(() => {
   }
 })
 
+vi.mock("@chatbotx.io/business/zalo-account/message-recall", () => ({
+  zaloAccountMessageRecallService: {
+    isOrdinaryAttachmentVisible: mocks.ordinaryAttachmentVisible,
+  },
+}))
 vi.mock("@chatbotx.io/encryption", () => ({
   verifyMediaToken: mocks.verifyMediaToken,
 }))
@@ -111,6 +117,7 @@ const attachment = (
 describe("attachment media proxy", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.ordinaryAttachmentVisible.mockResolvedValue(true)
     mocks.checkGuestRateLimit.mockResolvedValue({
       limited: false,
       retryAfter: 10,
@@ -133,6 +140,20 @@ describe("attachment media proxy", () => {
     })
   })
 
+  test("denies an old ordinary Zalo token after recall before storage signing or provider fallback", async () => {
+    mocks.findAttachmentById.mockResolvedValue(attachment("stored/private.jpg"))
+    mocks.ordinaryAttachmentVisible.mockResolvedValue(false)
+    const response = await getAttachment(
+      new Request(
+        "http://localhost/media/attachment/signed-token?retry=1",
+      ) as never,
+      tokenContext(),
+    )
+    expect(response.status).toBe(404)
+    expect(mocks.getPresignedDownload).not.toHaveBeenCalled()
+    expect(mocks.resolveFreshMediaUrl).not.toHaveBeenCalled()
+    expect(mocks.lowQueueAdd).not.toHaveBeenCalled()
+  })
   test("returns 404 for an invalid token", async () => {
     mocks.verifyMediaToken.mockResolvedValue(null)
 

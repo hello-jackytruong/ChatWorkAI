@@ -74,3 +74,4 @@ export * from "./workspace"
 export * from "./workspace-api-token"
 
 export * from "./zalo-account-media"
+export * from "./zalo-account-recall"

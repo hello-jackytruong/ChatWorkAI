@@ -1,5 +1,6 @@
 "use client"
 
+import { parseZaloAccountSourceId } from "@chatbotx.io/business/zalo-account/message-projection"
 import { Button } from "@chatbotx.io/ui/components/ui/button"
 import {
   DropdownMenu,
@@ -25,6 +26,7 @@ import { useChatStore } from "../chat/store/chat-store-provider"
 import { blockContactAction } from "../contacts/actions/block-contact.action"
 import { unblockContactAction } from "../contacts/actions/unblock-contact.action"
 import DeleteContactDialog from "../contacts/components/remove-contact-dialog"
+import { ZaloAccountDeleteChatDialog } from "../zalo-accounts/components/zalo-account-delete-chat-dialog"
 import { getZaloGroupConversation } from "../zalo-accounts/lib/group-content"
 import { archiveConversationAction } from "./actions/archive-conversation.action"
 import { followConversationAction } from "./actions/follow-conversation.action"
@@ -233,6 +235,22 @@ export function ConversationAction({ conversation }: ConversationActionProps) {
             </DropdownMenuItem>
           ))}
 
+        {conversation.contactInboxes.some(
+          (inbox) => inbox.channel === "zaloAccount",
+        ) &&
+          conversation.messages?.[0] &&
+          parseZaloAccountSourceId(conversation.messages[0].sourceId) && (
+            <DropdownMenuItem
+              closeOnClick={false}
+              onClick={(e) => e.preventDefault()}
+            >
+              <ZaloAccountDeleteChatDialog
+                boundary={conversation.messages[0]}
+                key={conversation.id}
+                workspaceId={workspaceId}
+              />
+            </DropdownMenuItem>
+          )}
         {!isGroup && (
           <DeleteContactDialog
             ids={[conversation.contact?.id || ""]}

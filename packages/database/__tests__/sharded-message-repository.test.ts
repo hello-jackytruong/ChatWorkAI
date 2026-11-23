@@ -3222,3 +3222,582 @@ describe("ShardedMessageRepository.findOutgoingBefore", () => {
     ).rejects.toBeInstanceOf(MessageShardUnavailableError)
   })
 })
+
+describe("Zalo Account exact lifecycle mutation", () => {
+  test("retains original content and scopes one primary tuple without cascading replies", async () => {
+    const returning = vi.fn().mockResolvedValue([{ id: "1", text: "original" }])
+    const where = vi.fn().mockReturnValue({ returning })
+    const set = vi.fn().mockReturnValue({ where })
+    const primary = { update: vi.fn().mockReturnValue({ set }) }
+    const manager = { getShardForWrite: vi.fn().mockResolvedValue(primary) }
+    const repo = new ShardedMessageRepository(manager as never)
+    const method = repo.applyZaloAccountLifecycleExact
+    expect(method, "exact lifecycle method").toBeTypeOf("function")
+    const result = await method.call(repo, {
+      workspaceId: "1",
+      conversationId: "2",
+      contactInboxId: "3",
+      sourceId: "za:4:user:t:m",
+      id: "5",
+      createdAt: new Date("2026-01-01"),
+      lifecycle: {
+        version: 1,
+        recallId: "6",
+        lifecycleRevision: 1,
+        recalled: true,
+        placeholder: false,
+        originalObserved: true,
+        localHiddenAt: null,
+        providerDeletedForMeAt: null,
+      },
+    })
+    expect(result?.text).toBe("original")
+    expect(primary.update).toHaveBeenCalledTimes(1)
+    expect(set.mock.calls[0][0]).not.toHaveProperty("text")
+    expect(set.mock.calls[0][0]).not.toHaveProperty("attachments")
+    const query = new PgDialect().sqlToQuery(where.mock.calls[0][0])
+    expect(query.params).toEqual(
+      expect.arrayContaining(["1", "2", "3", "za:4:user:t:m", "5"]),
+    )
+    expect(query.sql).not.toContain('"parentId"')
+  })
+  test("throws primary failure instead of reporting target missing", async () => {
+    const repo = new ShardedMessageRepository({
+      getShardForWrite: vi
+        .fn()
+        .mockRejectedValue(new Error("primary unavailable")),
+    } as never)
+    const method = repo.applyZaloAccountLifecycleExact
+    expect(method, "exact lifecycle method").toBeTypeOf("function")
+    await expect(
+      method.call(repo, {
+        workspaceId: "1",
+        sourceId: "za:4:user:t:m",
+        conversationId: "2",
+        contactInboxId: "3",
+        id: "5",
+        lifecycle: {
+          version: 1,
+          recallId: "6",
+          lifecycleRevision: 1,
+          recalled: true,
+          placeholder: false,
+          originalObserved: true,
+          localHiddenAt: null,
+          providerDeletedForMeAt: null,
+        },
+        createdAt: new Date(),
+      }),
+    ).rejects.toThrow("primary unavailable")
+  })
+})
+
+describe("Zalo historical target locator", () => {
+  test("visits at most two primary ranges and resumes old history without a retention cutoff", async () => {
+    const ranges = [1, 2, 3].map((n) => ({
+      id: `range-${n}`,
+      shardId: `shard-${n}`,
+      startTime: new Date(`2020-0${n}-01`),
+      endTime: new Date(`2020-0${n + 1}-01`),
+      shard: { id: `shard-${n}` },
+    }))
+    const limit = vi.fn().mockResolvedValue([])
+    const tx = {
+      execute: vi.fn().mockResolvedValue({ rows: [] }),
+      select: () => ({ from: () => ({ where: () => ({ limit }) }) }),
+    }
+    const client = { transaction: vi.fn((fn) => fn(tx)) }
+    const manager = {
+      getShardsForTimeRange: vi.fn().mockResolvedValue(ranges),
+      getWriteShardInfo: vi.fn().mockResolvedValue(null),
+      getShardClient: vi.fn().mockResolvedValue(client),
+    }
+    const repo = new ShardedMessageRepository(manager as never)
+    const input = {
+      workspaceId: "1",
+      conversationId: "2",
+      contactInboxId: "3",
+      sourceId: "za:4:user:t:m",
+      deadline: Date.now() + 2000,
+    }
+    const first = await repo.locateZaloAccountTarget(input)
+    expect(first.complete).toBe(false)
+    expect(first.cursor?.shardId).toBe("shard-2")
+    expect(manager.getShardClient).toHaveBeenCalledTimes(2)
+    const second = await repo.locateZaloAccountTarget({
+      ...input,
+      cursor: first.cursor,
+    })
+    expect(second.complete).toBe(true)
+    expect(manager.getShardClient).toHaveBeenCalledTimes(3)
+    expect(limit).toHaveBeenCalledWith(50)
+  })
+  test("leaves unavailable primary history unresolved by throwing", async () => {
+    const range = {
+      id: "range",
+      shardId: "shard",
+      startTime: new Date(0),
+      endTime: null,
+      shard: { id: "shard" },
+    }
+    const repo = new ShardedMessageRepository({
+      getShardsForTimeRange: vi.fn().mockResolvedValue([range]),
+      getWriteShardInfo: vi.fn().mockResolvedValue(null),
+      getShardClient: vi.fn().mockRejectedValue(new Error("primary down")),
+    } as never)
+    await expect(
+      repo.locateZaloAccountTarget({
+        workspaceId: "1",
+        conversationId: "2",
+        contactInboxId: "3",
+        sourceId: "za:4:user:t:m",
+        deadline: Date.now() + 2000,
+      }),
+    ).rejects.toThrow("primary down")
+  })
+})
+
+describe("Zalo retained original after shard rotation", () => {
+  test("fills a historical placeholder rather than accepting unchanged empty history", async () => {
+    const createdAt = new Date("2020-01-01")
+    const existing = {
+      id: "5",
+      workspaceId: "1",
+      conversationId: "2",
+      contactInboxId: "3",
+      sourceId: "za:4:user:t:m",
+      createdAt,
+      text: null,
+      contentAttributes: {
+        zaloAccount: { lifecycle: { placeholder: true, recalled: true } },
+      },
+      attachments: [],
+    }
+    const filled = {
+      ...existing,
+      text: "late original",
+      contentAttributes: {
+        zaloAccount: {
+          lifecycle: {
+            placeholder: false,
+            originalObserved: true,
+            recalled: true,
+          },
+        },
+      },
+    }
+    const activeTx = {
+      update: vi.fn(() => ({
+        set: () => ({ where: () => ({ returning: async () => [] }) }),
+      })),
+    }
+    const historicalReturning = vi.fn().mockResolvedValue([filled])
+    const historicalTx = {
+      update: vi.fn(() => ({
+        set: () => ({ where: () => ({ returning: historicalReturning }) }),
+      })),
+    }
+    const active = { transaction: vi.fn((fn) => fn(activeTx)) }
+    const historical = { transaction: vi.fn((fn) => fn(historicalTx)) }
+    const range = {
+      id: "range",
+      shardId: "old",
+      startTime: new Date(0),
+      endTime: new Date("2021-01-01"),
+      shard: { id: "old" },
+    }
+    const manager = {
+      getShardForWrite: vi.fn().mockResolvedValue(active),
+      getShardsForTimeRange: vi.fn().mockResolvedValue([range]),
+      getShardClient: vi.fn().mockResolvedValue(historical),
+    }
+    const repo = new ShardedMessageRepository(manager as never)
+    vi.spyOn(repo, "findById").mockResolvedValue(existing as never)
+    const result = await repo.fillZaloAccountOriginalExact({
+      ...existing,
+      message: {
+        workspaceId: "1",
+        conversationId: "2",
+        contactInboxId: "3",
+        contentType: "text",
+        messageType: "incoming",
+        senderType: "contact",
+        text: "late original",
+      },
+      attachments: [],
+    })
+    expect(result?.text).toBe("late original")
+    expect(historicalTx.update).toHaveBeenCalledTimes(1)
+  })
+  test("propagates an unreadable historical primary instead of marking original captured", async () => {
+    const active = {
+      transaction: vi.fn((fn) =>
+        fn({
+          update: () => ({
+            set: () => ({ where: () => ({ returning: async () => [] }) }),
+          }),
+        }),
+      ),
+    }
+    const range = {
+      id: "range",
+      shardId: "old",
+      startTime: new Date(0),
+      endTime: new Date("2021-01-01"),
+      shard: { id: "old" },
+    }
+    const repo = new ShardedMessageRepository({
+      getShardForWrite: vi.fn().mockResolvedValue(active),
+      getShardsForTimeRange: vi.fn().mockResolvedValue([range]),
+      getShardClient: vi
+        .fn()
+        .mockRejectedValue(new Error("historical primary unavailable")),
+    } as never)
+    await expect(
+      repo.fillZaloAccountOriginalExact({
+        id: "5",
+        workspaceId: "1",
+        conversationId: "2",
+        contactInboxId: "3",
+        sourceId: "za:4:user:t:m",
+        createdAt: new Date("2020-01-01"),
+        message: {
+          workspaceId: "1",
+          conversationId: "2",
+          contactInboxId: "3",
+          contentType: "text",
+          messageType: "incoming",
+          senderType: "contact",
+          text: "late original",
+        },
+        attachments: [],
+      }),
+    ).rejects.toThrow("historical primary unavailable")
+  })
+  test("never returns an unchanged placeholder as a saved original", async () => {
+    const createdAt = new Date("2020-01-01")
+    const existing = {
+      id: "5",
+      workspaceId: "1",
+      conversationId: "2",
+      contactInboxId: "3",
+      sourceId: "za:4:user:t:m",
+      createdAt,
+      text: null,
+      contentAttributes: {
+        zaloAccount: { lifecycle: { placeholder: true, recalled: true } },
+      },
+      attachments: [],
+    }
+    const client = {
+      transaction: vi.fn((fn) =>
+        fn({
+          update: () => ({
+            set: () => ({ where: () => ({ returning: async () => [] }) }),
+          }),
+        }),
+      ),
+    }
+    const repo = new ShardedMessageRepository({
+      getShardForWrite: vi.fn().mockResolvedValue(client),
+      getShardsForTimeRange: vi.fn().mockResolvedValue([]),
+    } as never)
+    vi.spyOn(repo, "findById").mockResolvedValue(existing as never)
+    const result = await repo.fillZaloAccountOriginalExact({
+      ...existing,
+      message: {
+        workspaceId: "1",
+        conversationId: "2",
+        contactInboxId: "3",
+        contentType: "text",
+        messageType: "incoming",
+        senderType: "contact",
+        text: "late original",
+      },
+      attachments: [],
+    })
+    expect(result).toBeNull()
+  })
+})
+
+test("does not acknowledge an unchanged historical lifecycle revision", async () => {
+  const target = {
+    workspaceId: "1",
+    conversationId: "2",
+    contactInboxId: "3",
+    sourceId: "za:4:user:t:m",
+    id: "5",
+    createdAt: new Date("2020-01-01"),
+  }
+  const primary = {
+    update: () => ({
+      set: () => ({ where: () => ({ returning: async () => [] }) }),
+    }),
+  }
+  const repo = new ShardedMessageRepository({
+    getShardForWrite: vi.fn().mockResolvedValue(primary),
+    getShardsForTimeRange: vi.fn().mockResolvedValue([]),
+  } as never)
+  vi.spyOn(repo, "findById").mockResolvedValue({
+    ...target,
+    contentAttributes: {
+      zaloAccount: {
+        lifecycle: { version: 1, lifecycleRevision: 1, recalled: false },
+      },
+    },
+  } as never)
+  expect(
+    await repo.applyZaloAccountLifecycleExact({
+      ...target,
+      lifecycle: {
+        version: 1,
+        recallId: "recall",
+        lifecycleRevision: 2,
+        recalled: true,
+        placeholder: false,
+        originalObserved: true,
+        localHiddenAt: null,
+        providerDeletedForMeAt: null,
+      },
+    }),
+  ).toBeNull()
+})
+
+test("fills a delayed recall placeholder after a second shard rotation", async () => {
+  const memoryShard = () => {
+    let row: Record<string, unknown> | null = null
+    const insert = vi.fn(() => {
+      let value: Record<string, unknown>
+      const chain = {
+        values: (input: Record<string, unknown>) => {
+          value = input
+          return chain
+        },
+        onConflictDoNothing: () => chain,
+        returning: () => {
+          if (row) {
+            return []
+          }
+          row = { ...value }
+          return [row]
+        },
+      }
+      return chain
+    })
+    const update = vi.fn(() => ({
+      set: (patch: Record<string, unknown>) => ({
+        where: () => ({
+          returning: () => {
+            if (!row) {
+              return []
+            }
+            if (typeof patch.text === "string") {
+              row = {
+                ...row,
+                text: patch.text,
+                contentAttributes: {
+                  zaloAccount: {
+                    lifecycle: {
+                      version: 1,
+                      recallId: "recall",
+                      lifecycleRevision: 2,
+                      recalled: true,
+                      placeholder: false,
+                      originalObserved: true,
+                    },
+                  },
+                },
+              }
+            }
+            return [row]
+          },
+        }),
+      }),
+    }))
+    const client = {
+      insert,
+      update,
+      select: () => ({
+        from: (table: unknown) => ({
+          where: () =>
+            table === attachmentModel
+              ? Promise.resolve([])
+              : { limit: async () => (row ? [row] : []) },
+        }),
+      }),
+      transaction: vi.fn(),
+    }
+    client.transaction.mockImplementation(async (fn) => await fn(client))
+    return client
+  }
+  const clients = { a: memoryShard(), b: memoryShard(), c: memoryShard() }
+  let active: "a" | "b" | "c" = "b"
+  const ranges = [
+    {
+      id: "range-a",
+      shardId: "a",
+      startTime: new Date("2020-01-01"),
+      endTime: new Date("2021-01-01"),
+      shard: { id: "a" },
+    },
+    {
+      id: "range-b",
+      shardId: "b",
+      startTime: new Date("2021-01-01"),
+      endTime: new Date("2022-01-01"),
+      shard: { id: "b" },
+    },
+    {
+      id: "range-c",
+      shardId: "c",
+      startTime: new Date("2022-01-01"),
+      endTime: null,
+      shard: { id: "c" },
+    },
+  ]
+  const manager = {
+    getShardForWrite: vi.fn(async () => clients[active]),
+    getWriteShardInfo: vi.fn(async () => ({
+      id: `write:${active}`,
+      shardId: active,
+      startTime: new Date(0),
+      endTime: null,
+      shard: { id: active },
+    })),
+    getShardClient: vi.fn(
+      async (shard: { id: keyof typeof clients }) => clients[shard.id],
+    ),
+    getShardsForTimeRange: vi.fn(async (start: Date, end: Date) =>
+      ranges.filter(
+        (range) =>
+          range.startTime <= end && (!range.endTime || range.endTime >= start),
+      ),
+    ),
+  }
+  const repo = new ShardedMessageRepository(manager as never)
+  const target = {
+    id: "5",
+    workspaceId: "1",
+    conversationId: "2",
+    contactInboxId: "3",
+    sourceId: "za:4:user:t:m",
+    createdAt: new Date("2020-06-01"),
+  }
+  await repo.createWithStableIdentity(
+    {
+      ...target,
+      contentType: "text",
+      messageType: "incoming",
+      senderType: "contact",
+      text: null,
+      contentAttributes: {
+        zaloAccount: {
+          lifecycle: {
+            version: 1,
+            recallId: "recall",
+            lifecycleRevision: 1,
+            recalled: true,
+            placeholder: true,
+            originalObserved: false,
+          },
+        },
+      },
+    },
+    [],
+  )
+  expect(clients.a.insert).toHaveBeenCalledTimes(1)
+  expect(clients.b.insert).not.toHaveBeenCalled()
+  active = "c"
+  const outcomes: Awaited<
+    ReturnType<ShardedMessageRepository["fillZaloAccountOriginalExact"]>
+  >[] = []
+  for (let attempt = 0; attempt < 2; attempt++) {
+    outcomes.push(
+      await repo.fillZaloAccountOriginalExact({
+        ...target,
+        message: {
+          ...target,
+          contentType: "text",
+          messageType: "incoming",
+          senderType: "contact",
+          text: "late original",
+        },
+        attachments: [],
+      }),
+    )
+  }
+  expect(outcomes.map((row) => row?.text)).toEqual([
+    "late original",
+    "late original",
+  ])
+})
+
+test("keeps backdated non-Zalo stable creation on the current write primary", async () => {
+  const message = {
+    ...makeMessage(),
+    createdAt: new Date("2020-06-01"),
+    sourceId: "other-channel-provider",
+  }
+  const tx = makeInsertShardDb([message])
+  const primary = { transaction: vi.fn(async (fn) => await fn(tx)) }
+  const manager = {
+    getShardForWrite: vi.fn().mockResolvedValue(primary),
+    getShardsForTimeRange: vi.fn(),
+    getShardClient: vi.fn(),
+  }
+  const repo = new ShardedMessageRepository(manager as never)
+  expect(
+    await repo.createWithStableIdentity(message as never, []),
+  ).toMatchObject({ isNew: true })
+  expect(manager.getShardForWrite).toHaveBeenCalledWith(message.workspaceId)
+  expect(manager.getShardsForTimeRange).not.toHaveBeenCalled()
+  expect(manager.getShardClient).not.toHaveBeenCalled()
+})
+test("leaves a Zalo stable identity pending when no registered range covers its timestamp", async () => {
+  const manager = {
+    getShardForWrite: vi.fn(),
+    getShardsForTimeRange: vi.fn().mockResolvedValue([]),
+    getShardClient: vi.fn(),
+  }
+  const repo = new ShardedMessageRepository(manager as never)
+  await expect(
+    repo.createWithStableIdentity(
+      {
+        ...makeMessage(),
+        createdAt: new Date("2020-06-01"),
+        sourceId: "za:4:user:t:m",
+      } as never,
+      [],
+    ),
+  ).rejects.toThrow("No registered primary covers")
+  expect(manager.getShardForWrite).not.toHaveBeenCalled()
+  expect(manager.getShardClient).not.toHaveBeenCalled()
+})
+test("throws when the registered Zalo stable creation primary is unavailable", async () => {
+  const range = {
+    id: "range-a",
+    shardId: "a",
+    startTime: new Date(0),
+    endTime: null,
+    shard: { id: "a" },
+  }
+  const manager = {
+    getShardForWrite: vi.fn(),
+    getShardsForTimeRange: vi.fn().mockResolvedValue([range]),
+    getShardClient: vi
+      .fn()
+      .mockRejectedValue(new Error("registered primary down")),
+  }
+  const repo = new ShardedMessageRepository(manager as never)
+  await expect(
+    repo.createWithStableIdentity(
+      {
+        ...makeMessage(),
+        createdAt: new Date("2020-06-01"),
+        sourceId: "za:4:user:t:m",
+      } as never,
+      [],
+    ),
+  ).rejects.toThrow("registered primary down")
+  expect(manager.getShardForWrite).not.toHaveBeenCalled()
+})

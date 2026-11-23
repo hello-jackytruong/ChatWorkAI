@@ -24,7 +24,8 @@ type PoolPort = Pick<
   | "startQr"
   | "stop"
   | "updateLabels"
->
+> &
+  Partial<Pick<ZaloAccountPool, "nativeOperation">>
 
 export type CommandExecutionOutcome =
   | {
@@ -92,7 +93,27 @@ export class InMemoryCommandStateStore implements CommandStateStore {
   }
 }
 
+type NativeCommand = Extract<
+  ZaloAccountCommandEnvelope,
+  { kind: "native_operation" }
+>
+export type NativeOperationDurabilityPort = {
+  claimDispatch: (command: NativeCommand) => Promise<boolean>
+  settle: (
+    command: NativeCommand,
+    status: "applied" | "unknown" | "failed",
+    providerStatus?: number,
+  ) => Promise<void>
+  outcome: (command: NativeCommand) => Promise<CommandExecutionOutcome>
+}
+
 type ExecutorOptions = {
+  nativeStatusProof?: (
+    operation: NativeCommand["nativeOperation"]["operation"],
+    status: number,
+  ) => "applied" | "failed" | "unknown"
+  nativeEnabled?: boolean
+  nativeOperations?: NativeOperationDurabilityPort
   admission?: ProviderAdmissionPort
   now?: () => Date
   ownsTarget?: (command: ZaloAccountCommandEnvelope) => Promise<boolean>
@@ -130,6 +151,10 @@ export class ZaloAccountCommandExecutor {
       !(await this.options.ownsTarget(command))
     ) {
       return { status: "rejected_stale" }
+    }
+
+    if (command.kind === "native_operation") {
+      return await this.executeNative(command)
     }
 
     const key = commandStateKey(command)
@@ -196,6 +221,88 @@ export class ZaloAccountCommandExecutor {
     }
   }
 
+  private async executeNative(
+    command: NativeCommand,
+  ): Promise<CommandExecutionOutcome> {
+    const durable = this.options.nativeOperations
+    if (
+      !(
+        this.options.nativeEnabled &&
+        durable &&
+        this.options.pool.nativeOperation
+      )
+    ) {
+      return { status: "failed", error: "native_operations_unavailable" }
+    }
+    let dispatched = false
+    try {
+      const result = await this.options.pool.nativeOperation({
+        workspaceId: command.route.workspaceId,
+        runtime: { kind: "account", id: command.route.accountId },
+        inboxId: command.route.inboxId,
+        commandId: command.commandId,
+        nativeOperation: command.nativeOperation,
+        beforeDispatch: async () => {
+          if (
+            new Date(command.expiresAt).getTime() <=
+            this.options.now().getTime()
+          ) {
+            throw new ZaloAccountPreDispatchError(
+              "Native operation expired before dispatch",
+            )
+          }
+          if (
+            this.options.ownsTarget &&
+            !(await this.options.ownsTarget(command))
+          ) {
+            throw new ZaloAccountPreDispatchError(
+              "Native operation lease is stale",
+            )
+          }
+          if (
+            (this.options.admission?.check(command.route.accountId) ?? 0) > 0
+          ) {
+            throw new ZaloAccountPreDispatchError(
+              "Native operation provider admission is paused",
+            )
+          }
+          dispatched = await durable.claimDispatch(command)
+          return dispatched
+        },
+      })
+      if (!result) {
+        return await durable.outcome(command)
+      }
+      // SDK numeric statuses are not live-proven confirmation. Preserve the response without claiming success.
+      const status =
+        this.options.nativeStatusProof?.(
+          command.nativeOperation.operation,
+          result.status,
+        ) ?? "unknown"
+      await durable.settle(command, status, result.status)
+      if (status === "applied") {
+        return { status: "applied", result: { status: "native_applied" } }
+      }
+      if (status === "failed") {
+        return { status: "failed", error: "provider_rejected" }
+      }
+      return { status: "unknown" }
+    } catch (error) {
+      if (dispatched) {
+        this.options.admission?.recordFailure(command.route.accountId)
+        await durable.settle(command, "unknown")
+        return { status: "unknown" }
+      }
+      return {
+        status: "failed",
+        error:
+          error instanceof ZaloAccountPreDispatchError
+            ? error.message
+            : "native_operation_rejected",
+      }
+    }
+  }
+
   private async dispatch(command: ZaloAccountCommandEnvelope): Promise<{
     status: string
     messageIds?: string[]
@@ -206,6 +313,9 @@ export class ZaloAccountCommandExecutor {
     labels?: ZaloAccountLabelSnapshot
     stickerResources?: ZaloAccountStickerResource[]
   }> {
+    if (command.kind === "native_operation") {
+      throw new Error("Native operations require durable dispatch")
+    }
     if (command.kind === "start_qr") {
       return await this.options.pool.startQr({
         deadlineAt: Date.parse(command.expiresAt),

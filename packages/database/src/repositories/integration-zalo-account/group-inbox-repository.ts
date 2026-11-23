@@ -19,6 +19,10 @@ import {
 } from "../../schema"
 import { createMessageRepository } from "../message"
 import { workspaceRepository } from "../workspace"
+import {
+  lockZaloAccountMessageTarget,
+  zaloAccountMessageRecallRepository,
+} from "./message-recall-repository"
 import { zaloAccountSendAttemptRepository } from "./send-attempt-repository"
 
 type Scope = {
@@ -100,6 +104,12 @@ export const zaloAccountGroupInboxRepository = {
       createdAt: Date
     }) => Promise<void>
   }) {
+    const recallTarget = {
+      ...input,
+      threadType: "group" as const,
+      threadId: input.message.threadId,
+      providerMessageId: input.message.providerMessageId,
+    }
     const scope = {
       ...input,
       providerMessageId: input.message.providerMessageId,
@@ -127,6 +137,11 @@ export const zaloAccountGroupInboxRepository = {
       if (!(await lockAdmission(tx, input))) {
         return false
       }
+      await lockZaloAccountMessageTarget(tx, recallTarget)
+      const recall = await zaloAccountMessageRecallRepository.findTarget(
+        recallTarget,
+        tx,
+      )
       await tx
         .insert(zaloAccountMessageIdentityModel)
         .values({
@@ -135,8 +150,9 @@ export const zaloAccountGroupInboxRepository = {
           accountId: input.accountId,
           groupId: input.groupId,
           providerMessageId: input.message.providerMessageId,
-          messageId: localMessage?.id ?? createId(),
-          messageCreatedAt: localMessage?.createdAt ?? new Date(),
+          messageId: recall?.messageId ?? localMessage?.id ?? createId(),
+          messageCreatedAt:
+            recall?.messageCreatedAt ?? localMessage?.createdAt ?? new Date(),
           accountPolicyEpoch: input.accountPolicyEpoch,
           groupPolicyEpoch: input.groupPolicyEpoch,
           payload:
@@ -152,7 +168,16 @@ export const zaloAccountGroupInboxRepository = {
                 }
               : input.message,
         })
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: [
+            zaloAccountMessageIdentityModel.workspaceId,
+            zaloAccountMessageIdentityModel.accountId,
+            zaloAccountMessageIdentityModel.groupId,
+            zaloAccountMessageIdentityModel.providerMessageId,
+          ],
+          set: { payload: input.message },
+          setWhere: sql`${zaloAccountMessageIdentityModel.publishedAt} IS NULL AND ${zaloAccountMessageIdentityModel.discardedAt} IS NULL AND ${zaloAccountMessageIdentityModel.payload} IS NULL`,
+        })
       return true
     })
     if (!admitted) {
@@ -179,6 +204,11 @@ export const zaloAccountGroupInboxRepository = {
       if (!(await lockAdmission(tx, input))) {
         return { isNew: false as const }
       }
+      await lockZaloAccountMessageTarget(tx, recallTarget)
+      const recall = await zaloAccountMessageRecallRepository.findTarget(
+        recallTarget,
+        tx,
+      )
       const [identity] = await tx
         .select()
         .from(zaloAccountMessageIdentityModel)
@@ -189,7 +219,6 @@ export const zaloAccountGroupInboxRepository = {
         !identity ||
         identity.publishedAt ||
         identity.discardedAt ||
-        identity.undoneAt ||
         !identity.payload
       ) {
         return { isNew: false as const }
@@ -232,6 +261,51 @@ export const zaloAccountGroupInboxRepository = {
         workspaceId: input.workspaceId,
         primaryAndFailOnError: true,
       })
+      if (recall && !recall.messageId) {
+        await zaloAccountMessageRecallRepository.bindPointer({
+          ...recallTarget,
+          conversationId: input.conversationId,
+          contactInboxId: input.contactInboxId,
+          messageId: identity.messageId,
+          messageCreatedAt: identity.messageCreatedAt,
+          tx,
+        })
+      }
+      const recalled = !!(recall?.recallReceivedAt || identity.undoneAt)
+      if (message && recalled && recall) {
+        const payload = identity.payload as ZaloAccountGroupMessage
+        message = await repo.fillZaloAccountOriginalExact({
+          workspaceId: input.workspaceId,
+          conversationId: input.conversationId,
+          contactInboxId: input.contactInboxId,
+          sourceId: `za:${encodeURIComponent(input.accountId)}:group:${encodeURIComponent(input.message.threadId)}:${encodeURIComponent(input.message.providerMessageId)}`,
+          id: message.id,
+          createdAt: message.createdAt,
+          message: {
+            workspaceId: input.workspaceId,
+            conversationId: input.conversationId,
+            contactInboxId: input.contactInboxId,
+            contentType: "text",
+            messageType: payload.isSelf ? "outgoing" : "incoming",
+            senderType: payload.isSelf ? "user" : "contact",
+            text: payload.text ?? null,
+            contentAttributes: { zaloAccount: { group: payload } },
+          },
+          attachments: payload.attachments.map((attachment, index) => ({
+            workspaceId: input.workspaceId,
+            conversationId: input.conversationId,
+            fileType: attachment.kind,
+            mimeType: attachment.mimeType ?? "application/octet-stream",
+            originPath: attachment.url,
+            name: attachment.name ?? null,
+            size: attachment.size ?? 0,
+            sourceId: `${identity.id}-${index}`,
+          })),
+        })
+        if (!message) {
+          throw new Error("Zalo retained original fill incomplete")
+        }
+      }
       if (!message) {
         const payload = identity.payload as ZaloAccountGroupMessage
         const result = await repo.createWithStableIdentity(
@@ -266,6 +340,42 @@ export const zaloAccountGroupInboxRepository = {
         )
         message = result.result
       }
+      if (recall) {
+        await zaloAccountMessageRecallRepository.recordOriginalObserved({
+          id: recall.id,
+          workspaceId: input.workspaceId,
+          tx,
+        })
+        const current = await zaloAccountMessageRecallRepository.findTarget(
+          recallTarget,
+          tx,
+        )
+        if (current) {
+          const projected = await repo.applyZaloAccountLifecycleExact({
+            workspaceId: input.workspaceId,
+            conversationId: input.conversationId,
+            contactInboxId: input.contactInboxId,
+            sourceId: `za:${encodeURIComponent(input.accountId)}:group:${encodeURIComponent(input.message.threadId)}:${encodeURIComponent(input.message.providerMessageId)}`,
+            id: message.id,
+            createdAt: message.createdAt,
+            lifecycle: {
+              version: 1,
+              recallId: current.id,
+              lifecycleRevision: current.lifecycleRevision,
+              recalled: !!current.recallReceivedAt,
+              placeholder: false,
+              originalObserved: true,
+              localHiddenAt: current.localHiddenAt?.toISOString() ?? null,
+              providerDeletedForMeAt:
+                current.providerDeletedForMeAt?.toISOString() ?? null,
+            },
+          })
+          if (!projected) {
+            throw new Error("Zalo retained original projection missing")
+          }
+          message = { ...message, ...projected }
+        }
+      }
       await tx
         .update(zaloAccountMessageIdentityModel)
         .set({ persistedAt: new Date(), messageId: message.id })
@@ -281,7 +391,13 @@ export const zaloAccountGroupInboxRepository = {
             eq(conversationModel.workspaceId, input.workspaceId),
           ),
         )
-      return { isNew: true as const, message, conversation, contactInbox }
+      return {
+        isNew: true as const,
+        message,
+        conversation,
+        contactInbox,
+        recalled,
+      }
     })
   },
   async markPublished(input: Scope) {

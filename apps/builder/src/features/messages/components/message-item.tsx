@@ -1,5 +1,6 @@
 "use client"
 
+import { projectZaloAccountRetainedMessage } from "@chatbotx.io/business/zalo-account/message-projection"
 import { isResendableMessage } from "@chatbotx.io/database/partials"
 import type {
   MessageButtonTemplate,
@@ -74,6 +75,11 @@ import {
   getThreadControlContextCard,
   isThreadControlEcho,
 } from "../lib/thread-control-content"
+import {
+  zaloMessageDeletedForMe,
+  zaloMessageLabel,
+  zaloRetainedQuoteLabel,
+} from "../lib/zalo-message-label"
 import type { MessageResourceWithRelations } from "../schema/resource"
 import { InboundOrderBubble } from "./inbound-order-bubble"
 import { MessageActions, MessageActionsEditor } from "./message-actions"
@@ -135,6 +141,7 @@ type MessageItemProps = {
    * that can be sent again. Passed in (not rendered here) because it needs the
    * chat store, which the guest webchat view does not have.
    */
+  renderZaloActions?: (message: MessageItemProps["message"]) => ReactNode
   renderResend?: (message: MessageItemProps["message"]) => ReactNode
   /** Inbox only: omitted means the bubble renders exactly as before. */
   translation?: MessageItemTranslation
@@ -152,7 +159,7 @@ export type MessageItemTranslation = {
 
 export const MessageItem = (props: MessageItemProps) => {
   const {
-    message,
+    message: rawMessage,
     guestDisplay = false,
     avatarUrl,
     onChangeLike,
@@ -165,6 +172,9 @@ export const MessageItem = (props: MessageItemProps) => {
     onEdit,
     translation,
   } = props
+  const message = projectZaloAccountRetainedMessage(rawMessage)
+  const retentionLabel = zaloMessageLabel(message)
+  const retainedQuoteLabel = zaloRetainedQuoteLabel(message)
   const t = useTranslations("messages")
   const tRouting = useTranslations("conversationRouting")
   const tZalo = useTranslations("zaloAccount")
@@ -196,7 +206,7 @@ export const MessageItem = (props: MessageItemProps) => {
   }
 
   const isComment = message.type === "comment"
-  const isDeleted = message.deletedAt != null
+  const isDeleted = message.deletedAt != null || retentionLabel !== null
   const zaloGroupMessage = props.zaloGroup
     ? getZaloGroupMessage(message.contentAttributes)
     : null
@@ -286,6 +296,11 @@ export const MessageItem = (props: MessageItemProps) => {
         )}
       >
         {storyReply && <StoryReplyContext story={storyReply.story} />}
+        {!isDeleted && retainedQuoteLabel && (
+          <blockquote className="border-s-2 ps-2 text-muted-foreground text-xs">
+            {tZalo(retainedQuoteLabel)}
+          </blockquote>
+        )}
         {props.zaloGroup && !isDeleted && (
           <ZaloGroupMessageContext attributes={message.contentAttributes} />
         )}
@@ -307,7 +322,9 @@ export const MessageItem = (props: MessageItemProps) => {
             {!isEditing && (isDeleted || message.text || !hasAttachments) && (
               <pre className="wrap-break-word whitespace-pre-line font-sans">
                 <CommentText
-                  deletedLabel={t("messageDeleted")}
+                  deletedLabel={
+                    retentionLabel ? tZalo(retentionLabel) : t("messageDeleted")
+                  }
                   hiddenLabel={t("commentHidden")}
                   isDeleted={isDeleted}
                   isHidden={isHidden}
@@ -352,7 +369,9 @@ export const MessageItem = (props: MessageItemProps) => {
                   >
                     {isDeleted ? (
                       <span className="text-xs italic">
-                        {t("messageDeleted")}
+                        {retentionLabel
+                          ? tZalo(retentionLabel)
+                          : t("messageDeleted")}
                       </span>
                     ) : (
                       (translation?.mainText ??
@@ -380,7 +399,7 @@ export const MessageItem = (props: MessageItemProps) => {
             )}
           </>
         )}
-        {RenderContentAttributes(props, paymentRequests)}
+        {RenderContentAttributes({ ...props, message }, paymentRequests)}
         {props.zaloGroup && !isDeleted && (
           <ZaloGroupMessageStatus state={props.zaloState} />
         )}
@@ -403,6 +422,12 @@ export const MessageItem = (props: MessageItemProps) => {
             {tZalo("reply")}
           </Button>
         )}
+        {zaloMessageDeletedForMe(message) && (
+          <p className="text-muted-foreground text-xs">
+            {tZalo("deletedOnMyZalo")}
+          </p>
+        )}
+        {!guestDisplay && props.renderZaloActions?.(message)}
         {outgoingTranslationStatus && (
           <OutgoingTranslationStatus status={outgoingTranslationStatus} />
         )}

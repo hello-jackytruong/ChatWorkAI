@@ -29,6 +29,7 @@ import { deleteMessageAction } from "./actions/delete-message.action"
 import { editMessageAction } from "./actions/edit-message.action"
 import { MessageItem } from "./components/message-item"
 import { ResendMessageButton } from "./components/resend-message-button"
+import { ZaloAccountMessageActions } from "./components/zalo-account-message-actions"
 import { canPrivateReplyToComment } from "./lib/private-reply"
 import type { MessageResourceWithRelations } from "./schema/resource"
 
@@ -368,6 +369,17 @@ export function MessageList() {
                   renderResend={(failed) => (
                     <ResendMessageButton message={failed} />
                   )}
+                  renderZaloActions={
+                    activeChannel === "zaloAccount"
+                      ? (target) => (
+                          <ZaloAccountMessageActions
+                            key={`${workspaceId}:${target.conversationId}:${target.id}:${new Date(target.createdAt).toISOString()}`}
+                            message={target}
+                            workspaceId={workspaceId}
+                          />
+                        )
+                      : undefined
+                  }
                   translation={translation}
                   zaloGroup={!!groupAudience}
                   zaloState={

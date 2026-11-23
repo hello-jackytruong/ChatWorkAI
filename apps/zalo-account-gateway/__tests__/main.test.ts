@@ -20,6 +20,9 @@ vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountSendAttemptService: {},
   zaloAccountService: { listActiveRuntimeAccounts: mocks.list },
 }))
+vi.mock("@chatbotx.io/business/zalo-account/native-operations", () => ({
+  zaloAccountMessageOperationsService: {},
+}))
 vi.mock("@chatbotx.io/business/zalo-account/runtime-state", () => ({
   zaloAccountRuntimeStateService: {},
 }))

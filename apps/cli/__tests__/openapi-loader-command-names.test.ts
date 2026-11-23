@@ -684,3 +684,15 @@ describe("pathAndMethodToCommandName — Inbox translation", () => {
     expect(new Set(names)).toHaveLength(names.length)
   })
 })
+
+test("Zalo message and conversation deletion commands stay distinct", () => {
+  const prefix = "/v1/zalo-accounts/{accountId}/conversations/{conversationId}"
+  const message = pathAndMethodToCommandName(
+    `${prefix}/messages/{messageId}/delete-on-zalo`,
+    "POST",
+  )
+  const chat = pathAndMethodToCommandName(`${prefix}/delete-on-zalo`, "POST")
+  expect(message).toBe("zalo-accounts:message:delete-on-zalo")
+  expect(chat).toBe("zalo-accounts:conversation:delete-on-zalo")
+  expect(message).not.toBe(chat)
+})

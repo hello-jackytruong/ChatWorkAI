@@ -79,6 +79,13 @@ vi.mock("../src/working-hours/agent-reply-metric", () => ({
 }))
 vi.mock("../src/platform/settings", () => ({ resolveTenantSettings: vi.fn() }))
 
+vi.mock("../src/zalo-account/message-recall.service", () => ({
+  zaloAccountMessageRecallService: {
+    projectMessagesForRead: async ({ messages }: { messages: unknown[] }) =>
+      messages,
+  },
+}))
+
 const { messageService } = await import("../src/message/service")
 
 describe("messageService", () => {

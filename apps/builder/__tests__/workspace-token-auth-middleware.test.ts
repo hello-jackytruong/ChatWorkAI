@@ -492,3 +492,28 @@ describe("workspaceTokenAuthMidddleware", () => {
     expect(resolvePrincipal).not.toHaveBeenCalled()
   })
 })
+
+test.each([
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/hide-locally",
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/recall",
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/delete-on-zalo",
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/delete-on-zalo",
+])("Zalo deletion route uses real token gates: %s", async (path) => {
+  const headers = new Headers({ Authorization: "Bearer ws1_abc" })
+  getAccessState.mockResolvedValue({ blocked: true, reason: "status" })
+  findWorkspaceByTokenHash.mockResolvedValue(authResult())
+  await callMiddleware(headers, "POST", undefined, path)
+  expect(next).toHaveBeenCalledTimes(1)
+  next.mockClear()
+  findWorkspaceByTokenHash.mockResolvedValue(authResult("read_only"))
+  await expect(
+    callMiddleware(headers, "POST", undefined, path),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" })
+  expect(next).not.toHaveBeenCalled()
+  findWorkspaceByTokenHash.mockResolvedValue(authResult())
+  isWorkspaceScheduledForDeletion.mockReturnValue(true)
+  await expect(
+    callMiddleware(headers, "POST", undefined, path),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" })
+  expect(next).not.toHaveBeenCalled()
+})

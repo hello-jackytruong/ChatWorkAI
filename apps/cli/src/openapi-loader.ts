@@ -192,6 +192,11 @@ function extractPathParamNames(pathTemplate: string): string[] {
  * unambiguous verb here. Keyed by `METHOD path`.
  */
 const COMMAND_NAME_OVERRIDES: Readonly<Record<string, string>> = {
+  "POST /v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/delete-on-zalo":
+    "zalo-accounts:message:delete-on-zalo",
+  "POST /v1/zalo-accounts/{accountId}/conversations/{conversationId}/delete-on-zalo":
+    "zalo-accounts:conversation:delete-on-zalo",
+
   "POST /v1/zalo-accounts/{accountId}/messages":
     "zalo-accounts:message:send-direct",
   // Verbs on the conversation's translation, not sub-resources to "add"

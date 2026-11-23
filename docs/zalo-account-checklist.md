@@ -80,6 +80,8 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P0 · 3. Thu hồi, xóa và xem lại để tracking
 
+**Cập nhật triển khai 2026-11-23:** đã thêm ledger DM/nhóm, giữ original/attachment đã có, API + UI xem lại theo quyền, local hide riêng, native undo/delete-only-me/deleteChat, projection server/client và recovery hữu hạn. Xem [bằng chứng triển khai](../plans/261123-0500-zalo-account-recall-tracking-tdd/reports/implementation-api-ui.md) và [review](../plans/261123-0500-zalo-account-recall-tracking-tdd/reports/implementation-review.md). Giữ các mục hoàn thiện dưới đây chưa tick đến khi đủ final gate, migration và kiểm chứng disposable DM/group; không coi mock/unit test là live provider proof. Native mặc định tắt. File chưa ingest thuộc P0 · 2, không thể tải lại sau thu hồi. Receipt/reaction vẫn latest-state 90 ngày; không có lịch sử sự kiện vô hạn mới.
+
 - [x] Nhận sự kiện undo; Message được đánh dấu xóa mềm.
 - [x] Có tombstone cho undo nhóm để tin đến muộn không khôi phục tin đã thu hồi.
 - [ ] Phân biệt rõ **thu hồi trên Zalo / xóa phía mình trên Zalo / xóa nội bộ ChatbotX**.

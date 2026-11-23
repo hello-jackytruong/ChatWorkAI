@@ -5,6 +5,7 @@ import {
 import { resolveAdReferral } from "@chatbotx.io/business/ads-conversion/channel-fields"
 import { notFoundException } from "@chatbotx.io/business/errors"
 import { resolveGoogleAdsClick } from "@chatbotx.io/business/google-ads/click-fields"
+import { zaloAccountMessageRecallService } from "@chatbotx.io/business/zalo-account/message-recall"
 import {
   contactInboxOperationalColumns,
   createMessageRepository,
@@ -210,8 +211,23 @@ export async function listConversations(
     }),
   )
 
+  const previewEntries = lastMessagesResults.flatMap((messages, index) => {
+    const message = messages[0]
+    const conversation = page[index]
+    return message && conversation
+      ? [{ conversationId: conversation.id, message }]
+      : []
+  })
+  const safePreviews =
+    await zaloAccountMessageRecallService.projectMessagesForRead({
+      workspaceId,
+      messages: previewEntries.map((entry) => entry.message),
+    })
   const lastMessagesByConversationId = new Map(
-    page.map((c, index) => [c.id, lastMessagesResults[index]?.[0] ?? null]),
+    previewEntries.map((entry, index) => [
+      entry.conversationId,
+      safePreviews[index],
+    ]),
   )
 
   // ── Build cursor pagination response ────────────────────────────────────
@@ -297,7 +313,7 @@ export const findConversation = async (
   }
 
   const messageRepository = await createMessageRepository()
-  const lastMessages = await messageRepository.findLastByConversation(
+  const rawLastMessages = await messageRepository.findLastByConversation(
     conversation.id,
     {
       attachmentCountOnly: true,
@@ -321,6 +337,11 @@ export const findConversation = async (
     conversation.contactInboxes,
     input.workspaceId,
   )
+  const lastMessages =
+    await zaloAccountMessageRecallService.projectMessagesForRead({
+      workspaceId: input.workspaceId,
+      messages: rawLastMessages,
+    })
   return {
     data: {
       ...conversation,

@@ -6,6 +6,7 @@ import {
   type ZaloAccountGroup,
   type ZaloAccountLabel,
   type ZaloAccountLabelSnapshot,
+  type ZaloAccountNativeOperation,
   type ZaloAccountOutboundMessage,
   ZaloAccountPreDispatchError,
   zaloAccountCommandResultSchema,
@@ -85,6 +86,48 @@ export class ZaloAccountCommandTransport {
     this.redis = redis
     this.now = options.now ?? (() => new Date())
   }
+  async nativeOperationAndWait(
+    input: AccountCommandInput & {
+      nativeOperation: ZaloAccountNativeOperation
+      waitTimeoutMs: number
+    },
+  ): Promise<ZaloAccountCommandResult> {
+    const lease = await this.requireLease(input)
+    const createdAt = this.now()
+    const command = parseZaloAccountCommandEnvelope({
+      version: 1,
+      commandId: input.commandId,
+      kind: "native_operation",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      nativeOperation: input.nativeOperation,
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const deadline = Date.now() + input.waitTimeoutMs
+    while (Date.now() < deadline) {
+      const result = await this.redis.get(
+        zaloAccountTransportKeys.commandResult(input.commandId),
+      )
+      if (result) {
+        return zaloAccountCommandResultSchema.parse(
+          JSON.parse(result) as unknown,
+        )
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    return { status: "unknown" }
+  }
+
   async sendTyping(
     input: AccountCommandInput & {
       threadType: "user" | "group"
@@ -668,6 +711,10 @@ export const zaloAccountCommandTransportService = {
     >[0],
   ) =>
     withTransport((transport) => transport.getStickerResourcesAndWait(input)),
+  nativeOperationAndWait: (
+    input: Parameters<ZaloAccountCommandTransport["nativeOperationAndWait"]>[0],
+  ) => withTransport((transport) => transport.nativeOperationAndWait(input)),
+
   sendTyping: (
     input: Parameters<ZaloAccountCommandTransport["sendTyping"]>[0],
   ) => withTransport((transport) => transport.sendTyping(input)),

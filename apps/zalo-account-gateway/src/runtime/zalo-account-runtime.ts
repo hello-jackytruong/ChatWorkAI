@@ -1,3 +1,4 @@
+import type { ZaloAccountNativeOperation } from "@chatbotx.io/sdk"
 import {
   type ZaloAccountAuth,
   type ZaloAccountDirectMessage,
@@ -297,6 +298,24 @@ export class ZaloAccountRuntime {
     }
     return await this.api.listFriends(cursor)
   }
+  async nativeOperation(
+    input: ZaloAccountNativeOperation,
+  ): Promise<{ status: number }> {
+    if (
+      !(
+        this.active &&
+        this.api?.nativeOperation &&
+        this.state === "connected" &&
+        !this.closeObserved
+      )
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account native operations unavailable",
+      )
+    }
+    return await this.api.nativeOperation(input)
+  }
+
   async sendTyping(
     threadId: string,
     threadType: "user" | "group",

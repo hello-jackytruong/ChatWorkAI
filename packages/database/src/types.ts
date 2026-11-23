@@ -434,3 +434,7 @@ export type ZaloAccountMediaAsset =
   typeof schema.zaloAccountMediaAssetModel.$inferSelect
 export type ZaloAccountMediaReference =
   typeof schema.zaloAccountMediaReferenceModel.$inferSelect
+export type ZaloAccountMessageRecallModel =
+  typeof schema.zaloAccountMessageRecallModel.$inferSelect
+export type ZaloAccountNativeOperationAttemptModel =
+  typeof schema.zaloAccountNativeOperationAttemptModel.$inferSelect

@@ -13,6 +13,14 @@ const mocks = vi.hoisted(() => ({
   delete: vi.fn(),
   publish: vi.fn(),
   markRead: vi.fn(),
+  recall: vi.fn(),
+  project: vi.fn(async ({ messages }) => messages),
+}))
+vi.mock("../src/zalo-account/message-recall.service", () => ({
+  zaloAccountMessageRecallService: {
+    recall: mocks.recall,
+    projectMessagesForRead: mocks.project,
+  },
 }))
 vi.mock("../src/zalo-account/service", () => ({
   zaloAccountService: { findById: mocks.account },
@@ -156,20 +164,71 @@ it("publishes ephemeral typing with actor and expiry, without a Message write", 
   expect(mocks.receipt).not.toHaveBeenCalled()
   expect(mocks.message).not.toHaveBeenCalled()
 })
-it("tombstones a group undo before deleting exactly the scoped provider target", async () => {
-  mocks.undo.mockResolvedValue(true)
-  mocks.delete.mockResolvedValue([{ id: "m1" }])
+it("retains originals and tracking on undo without the generic cascading delete", async () => {
   await zaloAccountMessageLifecycleService.handle({
     ...route,
     event: { ...base, type: "undo", providerMessageId: "pm1" },
   })
-  expect(mocks.undo.mock.invocationCallOrder[0]).toBeLessThan(
-    mocks.delete.mock.invocationCallOrder[0] ?? Number.NaN,
-  )
-  expect(mocks.delete).toHaveBeenCalledWith(
+  expect(mocks.recall).toHaveBeenCalledWith(
     expect.objectContaining({
-      sourceId: "za:a1:group:g1:pm1",
-      workspaceId: "w1",
+      accountId: "a1",
+      inboxId: "in1",
+      event: expect.objectContaining({ type: "undo" }),
     }),
+  )
+  expect(mocks.delete).not.toHaveBeenCalled()
+  expect(mocks.clear).not.toHaveBeenCalled()
+})
+it("records a direct tombstone even before the contact inbox exists", async () => {
+  mocks.inbox.mockResolvedValue(null)
+  await zaloAccountMessageLifecycleService.handle({
+    ...route,
+    event: {
+      ...base,
+      threadType: "user",
+      type: "undo",
+      providerMessageId: "pm1",
+    },
+  })
+  expect(mocks.recall).toHaveBeenCalledTimes(1)
+  expect(mocks.delete).not.toHaveBeenCalled()
+})
+it("projects retained state before publishing a late receipt", async () => {
+  mocks.message.mockResolvedValue({
+    id: "m1",
+    createdAt: new Date(),
+    messageType: "incoming",
+    contentAttributes: {
+      zaloAccount: {
+        group: {
+          text: "original-secret",
+          attachments: [{ url: "https://provider/private" }],
+        },
+      },
+    },
+  })
+  mocks.project.mockResolvedValue([
+    {
+      contentAttributes: {
+        zaloAccount: { lifecycle: { recalled: true, lifecycleRevision: 2 } },
+      },
+    },
+  ])
+  await zaloAccountMessageLifecycleService.handle({
+    ...route,
+    event: {
+      ...base,
+      type: "receipt",
+      providerMessageId: "pm1",
+      status: "read",
+      memberIds: ["u1"],
+    },
+  })
+  expect(mocks.project).toHaveBeenCalledTimes(1)
+  expect(JSON.stringify(mocks.publish.mock.calls)).not.toContain(
+    "original-secret",
+  )
+  expect(JSON.stringify(mocks.publish.mock.calls)).not.toContain(
+    "https://provider",
   )
 })

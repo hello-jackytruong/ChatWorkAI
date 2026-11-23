@@ -4208,6 +4208,16 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "path": "/v1/zalo-accounts/{accountId}/media/backfill",
   },
   {
+    "method": "POST",
+    "operationId": "zaloAccounts.deleteChatOnZalo",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/delete-on-zalo",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.deleteMessageOnZalo",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/delete-on-zalo",
+  },
+  {
     "method": "GET",
     "operationId": "zaloAccounts.get",
     "path": "/v1/zalo-accounts/{id}",
@@ -4224,8 +4234,28 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "GET",
+    "operationId": "zaloAccounts.getMessageCapabilities",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/capabilities",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getMessageOperation",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/message-operations/{attemptId}",
+  },
+  {
+    "method": "GET",
     "operationId": "zaloAccounts.getMessageState",
     "path": "/v1/zalo-accounts/{accountId}/message-state",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getSavedMessageAttachment",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/saved-content/attachments/{attachmentId}",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getSavedMessageContent",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/saved-content",
   },
   {
     "method": "GET",
@@ -4236,6 +4266,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "GET",
     "operationId": "zaloAccounts.getStatus",
     "path": "/v1/zalo-accounts/{accountId}/status",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.hideMessageLocally",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/hide-locally",
   },
   {
     "method": "GET",
@@ -4256,6 +4291,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "GET",
     "operationId": "zaloAccounts.listMedia",
     "path": "/v1/zalo-accounts/{accountId}/media",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.recallMessage",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/recall",
   },
   {
     "method": "POST",

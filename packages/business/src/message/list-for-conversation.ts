@@ -12,6 +12,7 @@ import { notFoundException } from "../errors"
 import { logger } from "../logger"
 import { resolveAttachmentFallbackUrl, resolveMediaUrl } from "../media"
 import { HTTP_URL_RE } from "../utils"
+import { zaloAccountMessageRecallService } from "../zalo-account/message-recall.service"
 import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
 import { zaloAccountMediaReadService } from "../zalo-account-media/read-service"
 
@@ -94,15 +95,25 @@ async function presignAttachments<T extends { id: string; originPath: string }>(
  * is handed to a client directly, e.g. the realtime push of a new message.
  */
 export async function withResolvedAttachmentUrls(
-  message: MessageWithAttachments,
+  initialMessage: MessageWithAttachments,
   context: {
     channel: string
     workspaceId: string
+    retainedProjectionApplied?: boolean
     mediaProjection?: Awaited<
       ReturnType<typeof zaloAccountMediaReadService.projectMessages>
     >
   },
 ): Promise<MessageWithPresignedAttachments> {
+  const message =
+    context.channel === "zaloAccount" && !context.retainedProjectionApplied
+      ? ((
+          await zaloAccountMessageRecallService.projectMessagesForRead({
+            workspaceId: context.workspaceId,
+            messages: [initialMessage],
+          })
+        )[0] ?? initialMessage)
+      : initialMessage
   let mediaProjection = context.mediaProjection
   if (context.channel === "zaloAccount" && !mediaProjection) {
     const bindings = await loadContactInboxChannels(
@@ -255,22 +266,29 @@ export async function listForConversation(
     result.data,
     input.workspaceId,
   )
+  const projectedMessages =
+    await zaloAccountMessageRecallService.projectMessagesForRead({
+      workspaceId: input.workspaceId,
+      messages: result.data,
+    })
   const mediaProjection = [...channelByContactInboxId.values()].some(
     (value) => value.channel === "zaloAccount",
   )
     ? await zaloAccountMediaReadService.projectMessages({
         workspaceId: input.workspaceId,
-        messages: result.data,
+        messages: projectedMessages,
         inboxByContactInboxId: channelByContactInboxId,
       })
     : new Map()
+
   const data = await Promise.all(
-    result.data.map((message) =>
+    projectedMessages.map((message) =>
       withResolvedAttachmentUrls(message, {
         workspaceId: input.workspaceId,
         channel:
           channelByContactInboxId.get(message.contactInboxId)?.channel ?? "",
         mediaProjection,
+        retainedProjectionApplied: true,
       }),
     ),
   )

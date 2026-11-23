@@ -1,4 +1,5 @@
 import { messageService } from "@chatbotx.io/business"
+import { projectZaloAccountRetainedMessage } from "@chatbotx.io/business/zalo-account/message-projection"
 import { withMessageTranslations } from "@/features/translation/lib/message-translations"
 import { decodeCursor, encodeCursor } from "@/lib/pagination/cursor-pagination"
 import type {
@@ -55,7 +56,11 @@ export const listMessages = async (
       })
     : result.data
 
-  return { data, nextCursor, prevCursor: null }
+  return {
+    data: data.map((message) => projectZaloAccountRetainedMessage(message)),
+    nextCursor,
+    prevCursor: null,
+  }
 }
 
 export const findMessage = async (
@@ -76,5 +81,7 @@ export const findMessage = async (
     [message],
     { canSeeConversation: options.canSeeConversation },
   )
-  return withTranslation as MessageResourceWithRelations
+  return projectZaloAccountRetainedMessage(
+    withTranslation,
+  ) as MessageResourceWithRelations
 }

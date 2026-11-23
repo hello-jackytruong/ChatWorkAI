@@ -25,6 +25,7 @@ import {
   zaloAccountResource,
 } from "../schema/resource"
 import { zaloAccountMediaOperations } from "./media"
+import { zaloAccountMessageOperations } from "./message-operations"
 import { zaloAccountOperations } from "./operations"
 
 const workspaceTokenAuthAPI = workspaceTokenAuthAPIForScope("channels")
@@ -54,6 +55,7 @@ const writeErrors = {
 export const zaloAccountsPublicRouter = {
   ...zaloAccountOperations,
   ...zaloAccountMediaOperations,
+  ...zaloAccountMessageOperations,
   list: workspaceTokenAuthAPI
     .route({
       method: "GET",

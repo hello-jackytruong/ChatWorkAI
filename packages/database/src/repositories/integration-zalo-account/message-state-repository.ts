@@ -17,6 +17,7 @@ import {
   zaloAccountMessageReceiptModel as receipt,
 } from "../../schema"
 import { workspaceRepository } from "../workspace"
+import { lockZaloAccountMessageTarget as lockTarget } from "./message-recall-repository"
 
 type Scope = {
   workspaceId: string
@@ -84,27 +85,6 @@ const admitted = async (tx: DatabaseClient, input: Scope) => {
     group.policyEpoch === input.groupPolicyEpoch
   )
 }
-const undone = async (
-  tx: DatabaseClient,
-  input: Scope,
-  providerMessageId: string,
-): Promise<boolean> =>
-  !!input.groupId &&
-  !!(await tx.query.zaloAccountMessageIdentityModel.findFirst({
-    where: {
-      workspaceId: input.workspaceId,
-      accountId: input.accountId,
-      groupId: input.groupId,
-      providerMessageId,
-      undoneAt: { isNotNull: true },
-    },
-    columns: { id: true },
-  }))
-const lockTarget = async (tx: DatabaseClient, input: Thread) => {
-  await tx.execute(
-    sql`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify(["zalo-message-state", input.workspaceId, input.accountId, input.threadType, input.threadId, input.providerMessageId])}, 0))`,
-  )
-}
 
 export const zaloAccountMessageStateRepository = {
   async applyReceipt(
@@ -117,9 +97,6 @@ export const zaloAccountMessageStateRepository = {
         return false
       }
       await lockTarget(tx, { ...input, ...input.event })
-      if (await undone(tx, input, input.event.providerMessageId)) {
-        return false
-      }
       const { event } = input
       const at = new Date(event.timestampMs)
       const observedRead =
@@ -176,9 +153,6 @@ export const zaloAccountMessageStateRepository = {
         return false
       }
       await lockTarget(tx, { ...input, ...input.event })
-      if (await undone(tx, input, input.event.providerMessageId)) {
-        return false
-      }
       const { event } = input
       const scope = { ...input, ...event }
       const at = new Date(event.timestampMs)
@@ -274,7 +248,6 @@ export const zaloAccountMessageStateRepository = {
           messageId: createId(),
           messageCreatedAt: new Date(),
           undoneAt: at,
-          discardedAt: new Date(),
           payload: null,
         })
         .onConflictDoUpdate({
@@ -286,8 +259,6 @@ export const zaloAccountMessageStateRepository = {
           ],
           set: {
             undoneAt: sql`GREATEST(${identity.undoneAt}, excluded."undoneAt")`,
-            discardedAt: new Date(),
-            payload: null,
           },
         })
       return true

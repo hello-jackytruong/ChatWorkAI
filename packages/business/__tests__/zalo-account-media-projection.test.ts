@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  recalls: vi.fn(),
   guard: vi.fn(),
   byId: vi.fn(),
   currentOwnerRoute: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   updateAttachment: vi.fn(),
 }))
 vi.mock("@chatbotx.io/database/repositories", () => ({
+  zaloAccountMessageRecallRepository: { findTargets: mocks.recalls },
   zaloAccountMediaRepository: mocks,
   createMessageRepository: () => Promise.resolve(mocks),
 }))
@@ -46,6 +48,7 @@ const reference = {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.recalls.mockResolvedValue([])
   mocks.guard.mockImplementation((_workspaceId, run) => run())
   mocks.currentOwnerRoute.mockResolvedValue({
     inboxId: "i",
@@ -259,4 +262,55 @@ it("does not project or publish into a frozen workspace", async () => {
   expect(mocks.byId).not.toHaveBeenCalled()
   expect(mocks.sign).not.toHaveBeenCalled()
   expect(mocks.publish).not.toHaveBeenCalled()
+})
+
+it.each([
+  "recallReceivedAt",
+  "localHiddenAt",
+])("does not project or broadcast a late original during pending %s", async (field) => {
+  mocks.findById.mockResolvedValue({
+    ...(await mocks.findById()),
+    id: "m",
+    sourceId: "za:2:user:u:p",
+    deletedAt: null,
+  })
+  mocks.recalls.mockResolvedValue([
+    {
+      accountId: "2",
+      threadType: "user",
+      threadId: "u",
+      providerMessageId: "p",
+      [field]: new Date(),
+    },
+  ])
+  expect(await applyZaloAccountMediaProjection(input)).toEqual({
+    applied: 0,
+    pending: 1,
+  })
+  expect(mocks.updateAttachment).not.toHaveBeenCalled()
+  expect(mocks.sign).not.toHaveBeenCalled()
+  expect(mocks.publish).not.toHaveBeenCalled()
+})
+
+it("still projects an original after provider-only deletion", async () => {
+  mocks.findById.mockResolvedValue({
+    ...(await mocks.findById()),
+    id: "m",
+    sourceId: "za:2:user:u:p",
+    deletedAt: null,
+  })
+  mocks.recalls.mockResolvedValue([
+    {
+      accountId: "2",
+      threadType: "user",
+      threadId: "u",
+      providerMessageId: "p",
+      providerDeletedForMeAt: new Date(),
+    },
+  ])
+  expect(await applyZaloAccountMediaProjection(input)).toEqual({
+    applied: 1,
+    pending: 0,
+  })
+  expect(mocks.updateAttachment).toHaveBeenCalled()
 })

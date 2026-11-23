@@ -16,6 +16,8 @@ import { withResolvedAttachmentUrls } from "../message/list-for-conversation"
 import { queueMessageCreatedEvent } from "../platform/realtime-broadcast"
 import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
 import { zaloAccountMediaService } from "../zalo-account-media/service"
+import { projectZaloAccountRetainedMessage } from "./message-projection"
+
 import { zaloAccountService } from "./service"
 
 export const zaloAccountGroupInboxService = {
@@ -128,14 +130,17 @@ export const zaloAccountGroupInboxService = {
       })
       await queueMessageCreatedEvent(
         input.workspaceId,
-        await withResolvedAttachmentUrls(result.message, {
-          workspaceId: input.workspaceId,
-          channel: "zaloAccount",
-        }),
+        await withResolvedAttachmentUrls(
+          projectZaloAccountRetainedMessage(result.message),
+          {
+            workspaceId: input.workspaceId,
+            channel: "zaloAccount",
+          },
+        ),
         result.conversation,
         input.inboxId,
       )
-      if (onMessage && result.contactInbox) {
+      if (onMessage && result.contactInbox && !result.recalled) {
         await onMessage({
           message: result.message,
           conversation: result.conversation,

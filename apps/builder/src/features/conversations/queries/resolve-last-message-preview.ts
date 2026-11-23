@@ -11,6 +11,7 @@ import {
   getThreadControlActivity,
   getThreadControlContextCard,
 } from "@/features/messages/lib/thread-control-content"
+import { zaloMessageLabel } from "@/features/messages/lib/zalo-message-label"
 import type { MessageResourceWithRelations } from "@/features/messages/schema/resource"
 
 const EMPTY_PREVIEW = " "
@@ -62,6 +63,10 @@ export function resolveLastMessagePreview(
   t: ReturnType<typeof useTranslations>,
   brand = "",
 ): string {
+  const retentionLabel = message && zaloMessageLabel(message)
+  if (retentionLabel) {
+    return t(`zaloAccount.${retentionLabel}`)
+  }
   // An unsent message keeps its text in the database, so the list must not show
   // it: it reads the same placeholder the open timeline renders.
   if (message?.deletedAt) {

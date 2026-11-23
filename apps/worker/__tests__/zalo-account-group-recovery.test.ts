@@ -2,9 +2,13 @@ import { beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   pending: vi.fn(),
+  recall: vi.fn(),
   enqueue: vi.fn(),
   guard: vi.fn(async (_ws, fn) => await fn()),
   lock: vi.fn(async ({ fn }: { fn: () => Promise<unknown> }) => await fn()),
+}))
+vi.mock("@chatbotx.io/business/zalo-account/message-recall", () => ({
+  zaloAccountMessageRecallService: { recoverPending: mocks.recall },
 }))
 vi.mock("@chatbotx.io/redis", () => ({
   distributedLock: { runExclusive: mocks.lock },
@@ -78,4 +82,15 @@ it("re-enqueues bounded durable pending identities with their original policy", 
       jobId: expect.stringContaining("zalo-group-recover-i1-"),
     }),
   )
+})
+
+it("gives recall recovery the first ten seconds inside the shared deadline", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(1000)
+  mocks.pending.mockResolvedValue([])
+  await recoverZaloGroupInbox()
+  expect(mocks.recall).toHaveBeenCalledWith({ deadline: 11_000 })
+  expect(mocks.recall.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.pending.mock.invocationCallOrder[0] ?? Number.NaN,
+  )
+  vi.restoreAllMocks()
 })

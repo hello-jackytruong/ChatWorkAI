@@ -1706,6 +1706,26 @@ independent database/object cursors. Neither operation fetches provider history
 or deletes objects. Stored reads continue when capture is disabled. These six
 commands are generated from `zaloAccounts.listMedia`, `getMedia`,
 `authorizeMediaDownload`, `retryMedia`, `backfillMedia` and `reconcileMedia`.
+Retained-message operations use the existing dynamic spec. Supply `--createdAt`
+from `messages list` for exact message routing, and a stable `--commandId` for
+native mutations:
+
+```bash
+chatbotx zalo-accounts capabilities list <accountId> <conversationId> <messageId> --createdAt <iso>
+chatbotx zalo-accounts saved-content list <accountId> <conversationId> <messageId> --createdAt <iso>
+chatbotx zalo-accounts attachment get <accountId> <conversationId> <messageId> <attachmentId> --createdAt <iso>
+chatbotx zalo-accounts hide-locally add <accountId> <conversationId> <messageId> --createdAt <iso> --commandId <stable-id>
+chatbotx zalo-accounts recall add <accountId> <conversationId> <messageId> --createdAt <iso> --commandId <stable-id>
+chatbotx zalo-accounts message delete-on-zalo <accountId> <conversationId> <messageId> --createdAt <iso> --commandId <stable-id>
+chatbotx zalo-accounts conversation delete-on-zalo <accountId> <conversationId> --boundaryMessageId <id> --boundaryCreatedAt <iso> --commandId <stable-id>
+chatbotx zalo-accounts message-operation get <accountId> <conversationId> <attemptId>
+```
+
+The two delete commands have explicit naming overrides to avoid a shared derived
+command name. Saved attachments only return already stored object URLs. Native
+dispatch is default-off pending provider proof; inspect `unknown` attempts rather
+than resending. All provider deletions retain local history. These operations
+remain discoverable MCP tools rather than expanding the default tool payload.
 
 Both the account group switch and group receive/send default off. Enabling
 receive or send provisions one group conversation; send-only still rejects

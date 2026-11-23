@@ -1,6 +1,7 @@
 import { withBlockedOwnerGuard } from "@chatbotx.io/business"
 import { zaloAccountCanonicalSendService } from "@chatbotx.io/business/zalo-account/canonical-send"
 import { zaloAccountGroupInboxService } from "@chatbotx.io/business/zalo-account/group-inbox"
+import { zaloAccountMessageRecallService } from "@chatbotx.io/business/zalo-account/message-recall"
 import logger from "@chatbotx.io/logger"
 import { distributedLock } from "@chatbotx.io/redis"
 import { zaloAccountGroupMessageSchema } from "@chatbotx.io/sdk"
@@ -21,6 +22,9 @@ export async function recoverZaloGroupInbox(): Promise<void> {
 
 async function recoverPending(): Promise<void> {
   const deadline = Date.now() + 40_000
+  await zaloAccountMessageRecallService.recoverPending({
+    deadline: Math.min(deadline, Date.now() + 10_000),
+  })
   for (const attempt of await zaloAccountCanonicalSendService.pendingPrepared()) {
     if (Date.now() >= deadline) {
       break

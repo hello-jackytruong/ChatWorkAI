@@ -71,6 +71,24 @@ export function ChatRealtime() {
       updateMessageText: state.updateMessageText,
     })),
   )
+  const invalidateZaloRetention = (messageId: string, attributes: unknown) => {
+    const lifecycle = (
+      attributes as {
+        zaloAccount?: { lifecycle?: { version?: number } }
+      } | null
+    )?.zaloAccount?.lifecycle
+    if (lifecycle?.version !== 1) {
+      return
+    }
+    queryClient.invalidateQueries({
+      queryKey: zaloMessageStateKey(workspaceId),
+    })
+    queryClient.invalidateQueries({
+      queryKey: ["zalo-saved-content", workspaceId],
+      predicate: (query) => query.queryKey[4] === messageId,
+    })
+    scheduleConversationHeadRefresh(workspaceId)
+  }
   const conversationIdParam = useConversationIdParam()
   const responseSlaEnabled = useResponseSlaEnabled()
 
@@ -218,7 +236,9 @@ export function ChatRealtime() {
 
   const handlers: RealtimeHandlerMap = {
     messageCreated: (event) => {
-      queueCreatedMessage(event.data as MessageResourceWithRelations)
+      const message = event.data as MessageResourceWithRelations
+      invalidateZaloRetention(message.id, message.contentAttributes)
+      queueCreatedMessage(message)
     },
     messageDeleted: (event) => {
       flushPendingCreatedMessages()
@@ -283,6 +303,10 @@ export function ChatRealtime() {
     messageContentUpdated: (event) => {
       flushPendingCreatedMessages()
       updateMessageContentAttributes(
+        event.data.messageId,
+        event.data.contentAttributes,
+      )
+      invalidateZaloRetention(
         event.data.messageId,
         event.data.contentAttributes,
       )

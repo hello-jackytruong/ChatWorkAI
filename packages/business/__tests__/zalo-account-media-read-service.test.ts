@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  recalls: vi.fn(),
   list: vi.fn(),
   parents: vi.fn(),
   inboxes: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   contactOwner: vi.fn(),
 }))
 vi.mock("@chatbotx.io/database/repositories", () => ({
+  zaloAccountMessageRecallRepository: { findTargets: mocks.recalls },
   integrationZaloAccountGroupRepository: { findByProviderId: mocks.group },
   zaloAccountMediaRepository: {
     list: mocks.list,
@@ -90,6 +92,7 @@ const { zaloAccountMediaReadService: service } = await import(
 )
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.recalls.mockResolvedValue([])
   mocks.account.mockResolvedValue({ id: "a", inboxId: "i" })
   mocks.list.mockResolvedValue([row])
   mocks.parents.mockResolvedValue([
@@ -596,5 +599,59 @@ it("returns retry timestamps and verified checksum for media tracking", async ()
     nextAttemptAt,
     checksum: "a".repeat(64),
     providerResourceId: "provider-file",
+  })
+})
+
+it.each([
+  "recallReceivedAt",
+  "localHiddenAt",
+])("denies normal media signing while %s has not projected to deletedAt", async (field) => {
+  const parent = {
+    ...(await mocks.parents())[0],
+    sourceId: "za:a:user:u:p",
+    deletedAt: null,
+  }
+  mocks.parents.mockResolvedValue([parent])
+  mocks.recalls.mockResolvedValue([
+    {
+      accountId: "a",
+      threadType: "user",
+      threadId: "u",
+      providerMessageId: "p",
+      [field]: new Date(),
+    },
+  ])
+  await expect(service.download(input)).rejects.toThrow()
+  expect(mocks.sign).not.toHaveBeenCalled()
+  expect(
+    await service.projectMessages({
+      workspaceId: "w",
+      messages: [{ ...parent, attachments: [] }] as never,
+      inboxByContactInboxId: new Map([
+        ["ci", { channel: "zaloAccount", inboxId: "i" }],
+      ]),
+    }),
+  ).toEqual(new Map())
+})
+
+it("keeps normal archive access after provider-only deletion", async () => {
+  mocks.parents.mockResolvedValue([
+    {
+      ...(await mocks.parents())[0],
+      sourceId: "za:a:user:u:p",
+      deletedAt: null,
+    },
+  ])
+  mocks.recalls.mockResolvedValue([
+    {
+      accountId: "a",
+      threadType: "user",
+      threadId: "u",
+      providerMessageId: "p",
+      providerDeletedForMeAt: new Date(),
+    },
+  ])
+  expect(await service.download(input)).toMatchObject({
+    url: "https://signed.example.test/a",
   })
 })

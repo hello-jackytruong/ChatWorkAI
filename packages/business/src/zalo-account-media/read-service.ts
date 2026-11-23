@@ -8,6 +8,7 @@ import { uploader } from "@chatbotx.io/filesystem"
 import { contactInboxService } from "../contact-inbox/service"
 import { notFoundException, validationException } from "../errors"
 import { buildZaloMessageResources } from "../media/zalo-account-capture"
+import { hiddenZaloAccountMessageIds } from "../zalo-account/message-visibility"
 import { zaloAccountService } from "../zalo-account/service"
 import { safeMediaError } from "./policy"
 import { zaloAccountMediaService } from "./service"
@@ -166,12 +167,13 @@ export class ZaloAccountMediaReadService {
       workspaceId: input.workspaceId,
       ids: [...new Set(parents.map((parent) => parent.contactInboxId))],
     })
+    const hidden = await hiddenZaloAccountMessageIds(input.workspaceId, parents)
     const visible = candidates.filter((row) =>
       parents.some(
         (parent) =>
           parent.id === row.reference.messageId &&
           sameTime(row.reference.messageCreatedAt, parent.createdAt) &&
-          !parent.deletedAt &&
+          !hidden.has(parent.id) &&
           parent.conversationId === input.conversationId &&
           inboxes.some(
             (inbox) =>
@@ -515,6 +517,10 @@ export class ZaloAccountMediaReadService {
       string,
       Array<ReturnType<typeof safe> & { url: string | null }>
     >()
+    const hidden = await hiddenZaloAccountMessageIds(
+      input.workspaceId,
+      input.messages,
+    )
     for (const row of rows) {
       const message = input.messages.find(
         (value) =>
@@ -527,7 +533,7 @@ export class ZaloAccountMediaReadService {
         : undefined
       if (
         !message ||
-        message.deletedAt ||
+        hidden.has(message.id) ||
         binding?.channel !== "zaloAccount" ||
         binding.inboxId !== row.accountInboxId
       ) {

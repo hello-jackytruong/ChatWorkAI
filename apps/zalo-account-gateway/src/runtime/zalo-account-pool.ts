@@ -1,6 +1,7 @@
 import type {
   ZaloAccountLabel,
   ZaloAccountLabelSnapshot,
+  ZaloAccountNativeOperation,
   ZaloAccountOutboundMessage,
   ZaloAccountRuntimeRef,
 } from "@chatbotx.io/sdk"
@@ -258,6 +259,32 @@ export class ZaloAccountPool {
       runtime.getLabels(),
     )
   }
+  async nativeOperation(
+    command: RuntimeCommand & {
+      nativeOperation: ZaloAccountNativeOperation
+      beforeDispatch: () => Promise<boolean>
+    },
+  ): Promise<{ status: number } | null> {
+    return await this.withAccountRuntime(command, async (runtime) => {
+      const input = command.nativeOperation
+      if (input.threadType === "group") {
+        await this.options.admitGroupSend?.({
+          workspaceId: command.workspaceId,
+          accountId: command.runtime.id,
+          inboxId: command.inboxId ?? "",
+          providerGroupId: input.threadId,
+          accountPolicyEpoch: input.accountPolicyEpoch ?? -1,
+          groupPolicyEpoch: input.groupPolicyEpoch ?? -1,
+          consumeCapacity: false,
+        })
+      }
+      if (!(await command.beforeDispatch())) {
+        return null
+      }
+      return await runtime.nativeOperation(input)
+    })
+  }
+
   async sendTyping(
     command: RuntimeCommand & {
       threadId: string

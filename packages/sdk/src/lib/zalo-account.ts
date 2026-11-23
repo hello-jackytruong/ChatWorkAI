@@ -639,7 +639,41 @@ export type ZaloAccountOutboundMessage = z.infer<
   typeof zaloAccountOutboundMessageSchema
 >
 
+export const zaloAccountNativeOperationSchema = z
+  .object({
+    attemptCommandId: z.string().min(1),
+    operation: z.enum(["undo", "deleteMessage", "deleteChat"]),
+    requestHash: z.string().min(1),
+    threadType: z.enum(["user", "group"]),
+    threadId: z.string().min(1),
+    providerMessageId: z.string().min(1),
+    providerClientMessageId: z.string().min(1),
+    providerOwnerId: z.string().min(1),
+    accountPolicyEpoch: z.number().int().nonnegative().optional(),
+    groupPolicyEpoch: z.number().int().nonnegative().optional(),
+  })
+  .strict()
+export type ZaloAccountNativeOperation = z.infer<
+  typeof zaloAccountNativeOperationSchema
+>
+
 export const zaloAccountCommandEnvelopeSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...commandBaseShape,
+      kind: z.literal("native_operation"),
+      route: z
+        .object({
+          kind: z.literal("account"),
+          workspaceId: z.string().min(1),
+          accountId: z.string().min(1),
+          inboxId: z.string().min(1),
+        })
+        .strict(),
+      target: commandTargetSchema,
+      nativeOperation: zaloAccountNativeOperationSchema,
+    })
+    .strict(),
   z
     .object({
       ...commandBaseShape,

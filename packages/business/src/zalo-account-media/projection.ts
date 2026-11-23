@@ -9,6 +9,7 @@ import {
 } from "@chatbotx.io/realtime-protocol"
 import { publishWorkspaceRealtimeEvent } from "../platform/realtime-broadcast"
 import { withBlockedOwnerGuard } from "../workspace-lifecycle/with-blocked-owner-guard"
+import { hiddenZaloAccountMessageIds } from "../zalo-account/message-visibility"
 import type { MediaScope } from "./types"
 
 /** Shard path writes use origin CAS; the main-store revision remains retryable until both stores agree. */
@@ -48,7 +49,12 @@ export async function applyZaloAccountMediaProjection(
             conversationId: ref.conversationId,
             primaryAndFailOnError: true,
           })
-          if (parent && !parent.deletedAt && !ref.attachmentId) {
+          const hidden =
+            parent &&
+            (
+              await hiddenZaloAccountMessageIds(input.workspaceId, [parent])
+            ).has(parent.id)
+          if (parent && !hidden && !ref.attachmentId) {
             const marked = await repository.markProjected({
               ...input,
               referenceId: ref.id,
@@ -64,7 +70,7 @@ export async function applyZaloAccountMediaProjection(
           const attachment = parent?.attachments.find(
             (item) => item.id === ref.attachmentId,
           )
-          if (!(parent && attachment) || parent.deletedAt) {
+          if (!(parent && attachment) || hidden) {
             pending++
             continue
           }
@@ -123,7 +129,15 @@ export async function applyZaloAccountMediaProjection(
               conversationId: ref.conversationId,
               primaryAndFailOnError: true,
             })
-            if (owner && currentParent && !currentParent.deletedAt) {
+            if (
+              owner &&
+              currentParent &&
+              !(
+                await hiddenZaloAccountMessageIds(input.workspaceId, [
+                  currentParent,
+                ])
+              ).has(currentParent.id)
+            ) {
               const url = await uploader.getPresignedDownload(
                 asset.objectKey,
                 300,

@@ -39,6 +39,7 @@ import {
   captureZaloAccountMessage,
   redactZaloMediaLocators,
 } from "@chatbotx.io/business/zalo-account"
+import { zaloAccountMessageRecallService } from "@chatbotx.io/business/zalo-account/message-recall"
 import { getZaloAccountMediaPolicy } from "@chatbotx.io/business/zalo-account-media"
 import {
   type ChannelType,
@@ -675,6 +676,18 @@ export const receiveMessage = async (
         contactInfoCaptureTypes,
         ...systemFieldUpdates,
       })
+
+    const retainedLifecycle = (
+      newMessage.contentAttributes?.zaloAccount as
+        | { lifecycle?: { recalled?: boolean; localHiddenAt?: string | null } }
+        | undefined
+    )?.lifecycle
+    if (
+      contactInbox.channel === "zaloAccount" &&
+      (retainedLifecycle?.recalled || retainedLifecycle?.localHiddenAt)
+    ) {
+      return null
+    }
 
     if (shouldUnarchive && isNewMessage) {
       await conversationService.unarchiveByIds({
@@ -1315,6 +1328,8 @@ export type SaveAndBroadcastMessageProps = {
 }
 
 type MessageInput = CreateMessageInput & {
+  id: string
+  createdAt: Date
   type: string
   parentId: string | null
 }
@@ -1530,11 +1545,21 @@ const persistMessage = async (
       attachment.keepOriginal = true
     }
   }
-  const { message, isNew } = await upsertMessage({
-    repository,
-    messageInput,
-    attachmentInputs,
-  })
+  const persist = () =>
+    upsertMessage({ repository, messageInput, attachmentInputs })
+  const { message, isNew } =
+    contactInbox.channel === "zaloAccount"
+      ? await zaloAccountMessageRecallService.persistOriginal({
+          inboxId: inbox.id,
+          message: {
+            ...messageInput,
+            id: messageInput.id,
+            createdAt: messageInput.createdAt,
+          },
+          attachments: attachmentInputs,
+          persist,
+        })
+      : await persist()
   if (archiveZalo) {
     const attributes = incomingMessage.contentAttributes as
       | Record<string, unknown>
@@ -1556,7 +1581,9 @@ const persistMessage = async (
           ? metadata.providerMessageId
           : undefined,
       attributes,
-      attachments: message.attachments,
+      attachments: message.attachments.length
+        ? message.attachments
+        : attachmentInputs,
     })
   }
   if (isNew && !archiveZalo) {

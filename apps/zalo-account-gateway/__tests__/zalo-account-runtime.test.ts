@@ -42,6 +42,7 @@ class FakeApi implements ZcaApiPort {
   }))
   listGroups = vi.fn(async () => [])
   getStickerResources = vi.fn(async () => [])
+  nativeOperation = vi.fn(async () => ({ status: 1 }))
 
   listen(handlers: Parameters<ZcaApiPort["listen"]>[0]) {
     this.handlers = handlers
@@ -504,6 +505,32 @@ describe("ZaloAccountRuntime", () => {
     api.handlers?.onDisconnected?.(1006, "network")
     await expect(runtime.getStickerResources(["123"])).rejects.toThrow()
     expect(api.getStickerResources).toHaveBeenCalledOnce()
+    await runtime.stop()
+  })
+
+  it("rejects native operations before socket open and immediately after close", async () => {
+    const { client, runtime } = makeHarness()
+    const api = new FakeApi(auth.zaloUid)
+    api.autoOpen = false
+    vi.spyOn(client, "login").mockResolvedValue(api)
+    const input = {
+      operation: "undo" as const,
+      attemptCommandId: "cmd",
+      requestHash: "hash",
+      threadType: "user" as const,
+      threadId: "peer",
+      providerMessageId: "message",
+      providerClientMessageId: "client-message",
+      providerOwnerId: auth.zaloUid,
+    }
+    await runtime.reconnect(auth, auth.zaloUid)
+    await expect(runtime.nativeOperation(input)).rejects.toThrow()
+    api.handlers?.onConnected?.()
+    await vi.waitFor(() => expect(runtime.snapshot().state).toBe("connected"))
+    await expect(runtime.nativeOperation(input)).resolves.toEqual({ status: 1 })
+    api.handlers?.onDisconnected?.(1006, "network")
+    await expect(runtime.nativeOperation(input)).rejects.toThrow()
+    expect(api.nativeOperation).toHaveBeenCalledOnce()
     await runtime.stop()
   })
 

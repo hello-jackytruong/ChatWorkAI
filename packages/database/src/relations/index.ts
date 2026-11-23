@@ -198,9 +198,11 @@ import { workspaceBotMessageUsageRelations } from "./workspace-bot-message-usage
 import { workspaceDeletionRecordRelations } from "./workspace-deletion-record"
 import { workspaceMemberRelations } from "./workspace-member"
 import { zaloAccountMediaRelations } from "./zalo-account-media"
+import { zaloAccountRecallRelations } from "./zalo-account-recall"
 
 export const relations = {
   ...zaloAccountMediaRelations,
+  ...zaloAccountRecallRelations,
   ...integrationApiRelations,
   ...contactSyncRelations,
   ...connectionRelations,

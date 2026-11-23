@@ -2,6 +2,7 @@ import {
   type ZaloAccountAttachment,
   type ZaloAccountAuth,
   type ZaloAccountGroup,
+  type ZaloAccountNativeOperation,
   type ZaloAccountOutboundMessage,
   ZaloAccountPreDispatchError,
   zaloAccountAuthSchema,
@@ -65,6 +66,51 @@ const quoteOf = (quote: ZaloAccountOutboundMessage["quote"]) =>
       }
     : undefined
 
+type NativeSdkPort = Pick<
+  Awaited<ReturnType<Zalo["login"]>>,
+  "undo" | "deleteMessage" | "deleteChat"
+>
+
+export const invokeNativeOperation = async (
+  api: NativeSdkPort,
+  input: ZaloAccountNativeOperation,
+) => {
+  const type = input.threadType === "group" ? ThreadType.Group : ThreadType.User
+  if (input.operation === "undo") {
+    return await api.undo(
+      {
+        msgId: input.providerMessageId,
+        cliMsgId: input.providerClientMessageId,
+      },
+      input.threadId,
+      type,
+    )
+  }
+  if (input.operation === "deleteMessage") {
+    return await api.deleteMessage(
+      {
+        data: {
+          msgId: input.providerMessageId,
+          cliMsgId: input.providerClientMessageId,
+          uidFrom: input.providerOwnerId,
+        },
+        threadId: input.threadId,
+        type,
+      },
+      true,
+    )
+  }
+  return await api.deleteChat(
+    {
+      ownerId: input.providerOwnerId,
+      cliMsgId: input.providerClientMessageId,
+      globalMsgId: input.providerMessageId,
+    },
+    input.threadId,
+    type,
+  )
+}
+
 const safeCloseReason = (code: number) => {
   if (code === 3000) {
     return "duplicate_connection"
@@ -93,6 +139,7 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
   // Keep the close observer until the SDK confirms the network close.
   api.listener.on("closed", onClosed)
   return {
+    nativeOperation: (input) => invokeNativeOperation(api, input),
     getStickerResources: createStickerResourceReader((ids) =>
       api.getStickersDetail(ids),
     ),

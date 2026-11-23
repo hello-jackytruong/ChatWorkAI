@@ -4,6 +4,7 @@ import {
   resolveTemplateParams,
 } from "@chatbotx.io/business"
 import { notFoundException } from "@chatbotx.io/business/errors"
+import { projectZaloAccountRetainedMessage } from "@chatbotx.io/business/zalo-account/message-projection"
 import {
   IMAGES_NOT_SUPPORTED_ON_CHANNEL_CODE,
   PRODUCT_MESSAGE_UNRESOLVABLE_CODE,
@@ -209,7 +210,7 @@ export const messagesPublicRouter = {
         context.workspace.id,
         [message],
       )
-      return withTranslation
+      return projectZaloAccountRetainedMessage(withTranslation)
     }),
 
   getFlowResponse: workspaceTokenAuthAPI

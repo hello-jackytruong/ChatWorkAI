@@ -1,3 +1,4 @@
+import { isZaloAccountNativeOperationsEnabled } from "@chatbotx.io/business/zalo-account/native-operation-policy"
 import { z } from "zod"
 
 const booleanString = z
@@ -8,6 +9,7 @@ const booleanString = z
 const gatewayEnvSchema = z
   .object({
     enabled: booleanString,
+    nativeMessageOperationsEnabled: z.boolean().default(false),
     host: z.string().min(1).default("0.0.0.0"),
     port: z.coerce.number().int().positive().default(3211),
     redisUrl: z.string().url().default("redis://localhost:6379"),
@@ -38,6 +40,9 @@ export const resolveGatewayEnv = (
 ) =>
   gatewayEnvSchema.parse({
     enabled: runtimeEnv.ZALO_ACCOUNT_GATEWAY_ENABLED,
+    nativeMessageOperationsEnabled: isZaloAccountNativeOperationsEnabled(
+      runtimeEnv.ZALO_ACCOUNT_NATIVE_MESSAGE_OPERATIONS_ENABLED,
+    ),
     host: runtimeEnv.ZALO_ACCOUNT_GATEWAY_HOST,
     port: runtimeEnv.ZALO_ACCOUNT_GATEWAY_PORT,
     redisUrl: runtimeEnv.REDIS_URL,

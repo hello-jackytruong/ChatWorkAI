@@ -529,11 +529,18 @@ describe("handleZaloAccountEvents", () => {
     expect(mocks.enqueueIntegrationJob).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        type: "deleteIncomingMessage",
+        type: "zaloAccountThreadEvent",
         data: expect.objectContaining({
-          messageId: "za:account-1:user:peer-1:message-1",
-          retryIfMissing: true,
-          zaloAccountRoute: route,
+          accountId: route.accountId,
+          workspaceId: route.workspaceId,
+          inboxId: route.inboxId,
+          event: expect.objectContaining({
+            type: "undo",
+            threadType: "user",
+            threadId: "peer-1",
+            providerMessageId: "message-1",
+            timestampSource: "observed",
+          }),
         }),
       }),
       expect.objectContaining({

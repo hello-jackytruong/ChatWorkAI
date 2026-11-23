@@ -84791,6 +84791,1422 @@
       "entityType": "checks",
       "schema": "public",
       "table": "WorkingHoursInterval"
+    },
+    {
+      "values": [
+        "undo",
+        "deleteMessage",
+        "deleteChat"
+      ],
+      "name": "zaloAccountNativeOperation",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "pending",
+        "dispatched",
+        "applied",
+        "failed",
+        "unknown"
+      ],
+      "name": "zaloAccountNativeOperationStatus",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ZaloAccountMessageRecall",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "ZaloAccountNativeOperationAttempt",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "createdAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updatedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "workspaceId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "accountId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "inboxId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "groupId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversationId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "contactInboxId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "zaloAccountThreadType",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "threadType",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "threadId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "providerMessageId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "messageId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "messageCreatedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "providerRecalledAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "recallReceivedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "receivedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "providerActorId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "localHiddenAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "providerDeletedForMeAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "lifecycleRevision",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "anchorBoundAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "discardedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "originalObservedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "appliedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "publishedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "nextAttemptAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "retryCount",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "scanCursor",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "lastErrorCode",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "createdAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updatedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "workspaceId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "accountId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "inboxId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversationId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "contactInboxId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "commandId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "requestHash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "zaloAccountNativeOperation",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "operation",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "zaloAccountNativeOperationStatus",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "zaloAccountThreadType",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "threadType",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "threadId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "messageId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "messageCreatedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "providerMessageId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "providerClientMessageId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "providerOwnerId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dispatchedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "completedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dispatchFence",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "timestamp(6) with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dispatchClaimedAt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "providerStatus",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "errorCode",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "requestedByUserId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "requestedByTokenId",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspaceId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountMessageRecall_workspaceId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "accountId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountMessageRecall_accountId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "inboxId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountMessageRecall_inboxId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "groupId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"groupId\" IS NOT NULL",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountMessageRecall_groupId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "conversationId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"conversationId\" IS NOT NULL",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountMessageRecall_conversationId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "contactInboxId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"contactInboxId\" IS NOT NULL",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountMessageRecall_contactInboxId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspaceId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "accountId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "threadType",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "threadId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "providerMessageId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountMessageRecall_target_key",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "nextAttemptAt",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"discardedAt\" IS NULL AND (\"appliedAt\" IS NULL OR \"publishedAt\" IS NULL)",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountMessageRecall_pending_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspaceId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "conversationId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "messageId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "messageCreatedAt",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountMessageRecall_pointer_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspaceId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountNativeOperationAttempt_workspaceId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "accountId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountNativeOperationAttempt_accountId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "inboxId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountNativeOperationAttempt_inboxId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "conversationId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountNativeOperationAttempt_conversationId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "contactInboxId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountNativeOperationAttempt_contactInboxId_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspaceId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "accountId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "commandId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountNativeOperationAttempt_command_key",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "updatedAt",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ZaloAccountNativeOperationAttempt_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "workspaceId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "Workspace",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "ZaloAccountMessageRecall_workspaceId_Workspace_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "accountId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "IntegrationZaloAccount",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "ZaloAccountMessageRecall_C8N4C6tFgPVu_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "inboxId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "Inbox",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "ZaloAccountMessageRecall_inboxId_Inbox_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "groupId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "IntegrationZaloAccountGroup",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "ZaloAccountMessageRecall_jQTxX3k19XE5_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "conversationId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "Conversation",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "SET NULL",
+      "name": "ZaloAccountMessageRecall_conversationId_Conversation_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "contactInboxId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ContactInbox",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "SET NULL",
+      "name": "ZaloAccountMessageRecall_contactInboxId_ContactInbox_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "workspaceId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "Workspace",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "ZaloAccountNativeOperationAttempt_workspaceId_Workspace_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "accountId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "IntegrationZaloAccount",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "ZaloAccountNativeOperationAttempt_E5pK3cMDUwYf_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "inboxId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "Inbox",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "ZaloAccountNativeOperationAttempt_inboxId_Inbox_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "conversationId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "Conversation",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "ZaloAccountNativeOperationAttempt_EvFZboneudQJ_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "contactInboxId"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ContactInbox",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "CASCADE",
+      "onDelete": "CASCADE",
+      "name": "ZaloAccountNativeOperationAttempt_4ve0RBrWh9pJ_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ZaloAccountMessageRecall_pkey",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ZaloAccountNativeOperationAttempt_pkey",
+      "schema": "public",
+      "table": "ZaloAccountNativeOperationAttempt",
+      "entityType": "pks"
+    },
+    {
+      "value": "(\"messageId\" IS NULL) = (\"messageCreatedAt\" IS NULL)",
+      "name": "ZaloAccountMessageRecall_pointer_pair",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
+    },
+    {
+      "value": "(\"threadType\" = 'user' AND \"groupId\" IS NULL) OR (\"threadType\" = 'group' AND \"groupId\" IS NOT NULL)",
+      "name": "ZaloAccountMessageRecall_group_scope",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ZaloAccountMessageRecall"
     }
   ],
   "renames": []

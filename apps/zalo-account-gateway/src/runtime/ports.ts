@@ -12,6 +12,7 @@ import type {
   ZaloAccountLabel,
   ZaloAccountLabelSnapshot,
   ZaloAccountLifecycleEvent,
+  ZaloAccountNativeOperation,
   ZaloAccountOutboundMessage,
   ZaloAccountRuntimeDiagnostics,
   ZaloAccountRuntimeRef,
@@ -120,6 +121,9 @@ export type ZcaListenerHandlers = {
 }
 
 export type ZcaApiPort = {
+  nativeOperation?: (
+    operation: ZaloAccountNativeOperation,
+  ) => Promise<{ status: number }>
   closeConnection?: () => Promise<void>
   getAuthorization?: (previous: ZaloAccountAuth) => ZaloAccountAuth
 
