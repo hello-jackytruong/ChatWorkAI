@@ -10,6 +10,7 @@ import { messageCleanupService } from "../src/message-cleanup"
 import { quotaEnforcementService } from "../src/quota-enforcement/service"
 import { userQuotaService } from "../src/user-quota/service"
 import { workspaceService } from "../src/workspace/service"
+import { zaloContactMediaLifecycle } from "../src/zalo-account-media/contact-lifecycle"
 
 type FakeContact = {
   id: string
@@ -73,6 +74,12 @@ describe("contactService.delete", () => {
     stubConversations([{ id: "conv-1", contactId: "contact-0" }])
 
     const callOrder: string[] = []
+    const releaseMedia = vi
+      .spyOn(zaloContactMediaLifecycle, "releaseReferences")
+      .mockImplementation(() => {
+        callOrder.push("zaloMedia")
+        return Promise.resolve({ released: 100, remaining: true })
+      })
     const record = vi
       .spyOn(messageCleanupService, "record")
       .mockImplementation(() => {
@@ -129,23 +136,30 @@ describe("contactService.delete", () => {
     // the contact delete inside each one.
     expect(transaction).toHaveBeenCalledTimes(3)
     expect(record).toHaveBeenCalledTimes(3)
+    expect(releaseMedia).toHaveBeenCalledTimes(3)
+    expect(releaseMedia.mock.calls[0]?.[0].tx).toBe(
+      record.mock.calls[0]?.[0].tx,
+    )
     expect(callOrder).toEqual([
       "post",
       "activity",
       "infoCapture",
       "record",
+      "zaloMedia",
       "delete",
       "pipeline",
       "post",
       "activity",
       "infoCapture",
       "record",
+      "zaloMedia",
       "delete",
       "pipeline",
       "post",
       "activity",
       "infoCapture",
       "record",
+      "zaloMedia",
       "delete",
       "pipeline",
     ])

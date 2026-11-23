@@ -20,6 +20,10 @@ import {
   zaloAccountGroupResource,
   zaloAccountStatusResource,
 } from "../schema/resource"
+import {
+  zaloMessageSendAttemptInput,
+  zaloSendAttemptResource,
+} from "../schema/send-attempt"
 
 const api = workspaceTokenAuthAPIForScope("channels")
 const scope = z.object({
@@ -78,6 +82,25 @@ const sent = z.object({
 })
 
 export const zaloAccountOperations = {
+  getMessageSendAttempt: api
+    .route({
+      method: "GET",
+      path: "/v1/zalo-accounts/{accountId}/messages/{messageId}/send-attempt",
+      summary: "Inspect Zalo send outcome by canonical Message",
+      description:
+        "Use accountId from zaloAccounts.list and Message id plus exact createdAt from messages.list. Reads only, including when sending is disabled. Never replay pending, unknown or applied sends; needs_review requires inspection.",
+      tags: ["Zalo Accounts"],
+    })
+    .input(scope.extend(zaloMessageSendAttemptInput.shape))
+    .output(zaloSendAttemptResource)
+    .errors(readErrors)
+    .handler(
+      async ({ context, input }) =>
+        await zaloAccountCanonicalSendService.getOutcomeByMessage({
+          ...input,
+          workspaceId: context.workspace.id,
+        }),
+    ),
   getSendAttempt: api
     .route({
       method: "GET",
@@ -102,15 +125,7 @@ export const zaloAccountOperations = {
             ).length === 1,
         ),
     )
-    .output(
-      z.object({
-        commandId: z.string(),
-        status: z.enum(["pending", "applied", "failed", "unknown"]),
-        messageId: z.string().nullable(),
-        messageCreatedAt: z.string().nullable(),
-        messageIds: z.array(z.string()),
-      }),
-    )
+    .output(zaloSendAttemptResource)
     .errors(readErrors)
     .handler(
       async ({ context, input }) =>

@@ -80,6 +80,52 @@
       "closeCode": "Close code",
       "issue": "Connection issue",
       "requiresAction": "Reconnect this account to resume automatic connections."
+    },
+    "messageActions": "消息操作",
+    "viewSavedContent": "查看已保存的原始内容",
+    "hideLocally": "在ChatbotX中隐藏",
+    "recallOnZalo": "在Zalo撤回",
+    "deleteOnMyZalo": "从我的Zalo删除",
+    "nativeOperationsDisabled": "Zalo原生操作目前不可用。",
+    "retainOriginalNotice": "已保存的原始内容仍可供获得授权的收件箱成员查看。",
+    "operationFailed": "操作失败。",
+    "operationApplied": "操作已确认。",
+    "operationUnconfirmed": "结果尚未确认。请先检查状态再执行其他操作。",
+    "confirmOperation": "确认操作",
+    "inspectOperation": "检查状态",
+    "savedContent": "已保存的原始内容",
+    "savedLoading": "正在加载已保存的内容…",
+    "savedDenied": "您已无权访问，或此内容不可用。",
+    "originalNotCaptured": "未捕获原始内容。",
+    "providerRecallTime": "Zalo撤回时间",
+    "observedRecallTime": "撤回检测时间",
+    "recallActor": "撤回人",
+    "unknownActor": "未知",
+    "savedFile": "已保存的文件",
+    "fileNotArchived": "文件未归档或不可用。",
+    "openSavedFile": "打开已保存的文件",
+    "getSavedFile": "获取文件链接",
+    "savedFileUnavailable": "此已保存的文件不可用。",
+    "recalled": "已在 Zalo 撤回",
+    "hiddenLocally": "已在CRM中隐藏",
+    "deleteChatOnZalo": "从我的Zalo删除历史记录",
+    "deleteChatConfirm": "删除截至所选消息的Zalo历史记录？CRM中保存的历史记录将保留以供跟踪。",
+    "deleteChatNoBoundary": "没有可用于删除Zalo历史记录的消息边界。",
+    "deletedOnMyZalo": "已从我的 Zalo 删除",
+    "deleteChatBoundary": "历史记录删除边界",
+    "evidence": {
+      "unsupportedContent": "不支持的 Zalo 消息",
+      "invalidContent": "无法读取 Zalo 消息",
+      "unsupportedSchema": "不支持此 Zalo 消息格式",
+      "pending": "等待确认",
+      "unknown": "结果未知 — 请检查状态",
+      "failed": "消息未发送",
+      "applied": "已发送",
+      "appliedPending": "已发送，正在本地核对",
+      "needsReview": "结果需要检查",
+      "safeFailure": "无法安全完成 Zalo 操作",
+      "unavailable": "状态不可用，请重试。",
+      "inspect": "检查状态"
     }
   },
   "QRCode": {
@@ -2159,7 +2205,7 @@
     "unknown": "未知"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "这会删除 Meta 消息广告系列，并从 ChatbotX 中移除该广告系列。如果 Meta 拒绝删除，则会保留该广告系列。",
+    "deleteWarning": "这会删除 Meta 消息广告系列，并从 ChatWorkAI 中移除该广告系列。如果 Meta 拒绝删除，则会保留该广告系列。",
     "title": "Facebook 营销消息",
     "description": "通过 Messenger 上的个性化推广消息提升互动与销售。",
     "create": "新建",
@@ -2200,7 +2246,7 @@
       "tosNotAccepted": "要使用此功能，请在 {url} 接受自定义对象条款",
       "notFound": "未找到营销消息。",
       "audienceNotTargetable": "所选自定义受众尚未就绪，或不属于此主页和广告账户。",
-      "connectFirst": "请先在 ChatbotX 应用中连接营销消息。",
+      "connectFirst": "请先在 ChatWorkAI 应用中连接营销消息。",
       "mmInvalidState": "当前活动状态下无法执行此操作。",
       "mmCampaignEnded": "Meta 消息广告系列已结束，因此无法发送或恢复。",
       "mmPageNotConnected": "此广告系列的主页未连接到该工作区。",
@@ -2220,7 +2266,7 @@
       "uploadMore": "上传更多行",
       "empty": "暂无自定义受众。",
       "deleteTitle": "删除自定义受众",
-      "deleteWarning": "此操作将在 Meta 和 ChatbotX 中删除自定义受众“{name}”，且无法撤销。",
+      "deleteWarning": "此操作将在 Meta 和 ChatWorkAI 中删除自定义受众“{name}”，且无法撤销。",
       "deleted": "自定义受众已删除。",
       "pageDisconnected": "主页已断开连接",
       "status": {
@@ -3022,7 +3068,7 @@
     },
     "fromName": {
       "label": "发件人姓名",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "fullName": {
       "label": "全名"
@@ -8408,7 +8454,7 @@
         "title": "Calling eligibility",
         "appSubscriptionMissing": "Configure the WhatsApp webhook for this app in the Meta App Dashboard first, then try again.",
         "appSubscriptionFailed": "Could not verify the app's 'calls' webhook subscription. Try again shortly.",
-        "callsNotSubscribed": "This app is not subscribed to the 'calls' webhook field, so call events cannot reach ChatbotX (Meta error 138018: technical pre-requisites are not met — ensure at least one app subscribed to the WABA also has the calls webhook field).",
+        "callsNotSubscribed": "This app is not subscribed to the 'calls' webhook field, so call events cannot reach ChatWorkAI (Meta error 138018: technical pre-requisites are not met — ensure at least one app subscribed to the WABA also has the calls webhook field).",
         "fixButton": "Fix",
         "fixSuccess": "The app is now subscribed to WhatsApp call webhooks.",
         "manualIntegrationNotice": "This number was connected manually and has no app credentials here. Subscribe the 'calls' webhook field for your app in the Meta App Dashboard.",
@@ -8808,7 +8854,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "操作来源",
@@ -9303,8 +9349,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11123,7 +11169,7 @@
         "label": "店铺来源",
         "description": "选择用于管理商品、库存和订单的店铺来源。设置为 Shopify / WooCommerce 后，所有商品和订单都将直接在您的 Shopify / WooCommerce 店铺中管理。",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11292,7 +11338,7 @@
       },
       "authKind": {
         "label": "身份验证",
-        "description": "ChatbotX 登录您店铺的方式：使用自定义应用的 Admin API 访问令牌，或使用在 Shopify Dev Dashboard 中创建的应用的 Client ID 和密钥。",
+        "description": "ChatWorkAI 登录您店铺的方式：使用自定义应用的 Admin API 访问令牌，或使用在 Shopify Dev Dashboard 中创建的应用的 Client ID 和密钥。",
         "options": {
           "token": "Admin API 访问令牌",
           "clientCredentials": "Client ID 和密钥（Dev Dashboard 应用）"
@@ -12204,7 +12250,7 @@
     "noWorkspaces": "你不是任何工作区的管理员，因此无法授权此应用。"
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12394,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12511,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "删除您的 ChatbotX 账号",
+    "title": "删除您的 ChatWorkAI 账号",
     "intro": "您可以通过以下任一方式删除账号及其数据。",
     "waysTitle": "如何删除账号",
     "wayMobile": "在移动应用中：设置 → 删除账号。",

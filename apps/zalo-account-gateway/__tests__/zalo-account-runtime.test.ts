@@ -41,6 +41,8 @@ class FakeApi implements ZcaApiPort {
     lastUpdateTime: 0,
   }))
   listGroups = vi.fn(async () => [])
+  getStickerResources = vi.fn(async () => [])
+  nativeOperation = vi.fn(async () => ({ status: 1 }))
 
   listen(handlers: Parameters<ZcaApiPort["listen"]>[0]) {
     this.handlers = handlers
@@ -489,6 +491,49 @@ describe("ZaloAccountRuntime", () => {
     await runtime.stop()
   })
 
+  it("rejects sticker reads before socket open and immediately after close", async () => {
+    const { client, runtime } = makeHarness()
+    const api = new FakeApi(auth.zaloUid)
+    api.autoOpen = false
+    vi.spyOn(client, "login").mockResolvedValue(api)
+    await runtime.reconnect(auth, auth.zaloUid)
+    await expect(runtime.getStickerResources(["123"])).rejects.toThrow()
+    api.handlers?.onConnected?.()
+    await vi.waitFor(() => expect(runtime.snapshot().state).toBe("connected"))
+    await expect(runtime.getStickerResources(["123"])).resolves.toEqual([])
+    expect(api.getStickerResources).toHaveBeenCalledOnce()
+    api.handlers?.onDisconnected?.(1006, "network")
+    await expect(runtime.getStickerResources(["123"])).rejects.toThrow()
+    expect(api.getStickerResources).toHaveBeenCalledOnce()
+    await runtime.stop()
+  })
+
+  it("rejects native operations before socket open and immediately after close", async () => {
+    const { client, runtime } = makeHarness()
+    const api = new FakeApi(auth.zaloUid)
+    api.autoOpen = false
+    vi.spyOn(client, "login").mockResolvedValue(api)
+    const input = {
+      operation: "undo" as const,
+      attemptCommandId: "cmd",
+      requestHash: "hash",
+      threadType: "user" as const,
+      threadId: "peer",
+      providerMessageId: "message",
+      providerClientMessageId: "client-message",
+      providerOwnerId: auth.zaloUid,
+    }
+    await runtime.reconnect(auth, auth.zaloUid)
+    await expect(runtime.nativeOperation(input)).rejects.toThrow()
+    api.handlers?.onConnected?.()
+    await vi.waitFor(() => expect(runtime.snapshot().state).toBe("connected"))
+    await expect(runtime.nativeOperation(input)).resolves.toEqual({ status: 1 })
+    api.handlers?.onDisconnected?.(1006, "network")
+    await expect(runtime.nativeOperation(input)).rejects.toThrow()
+    expect(api.nativeOperation).toHaveBeenCalledOnce()
+    await runtime.stop()
+  })
+
   it("emits QR/scanned/auth then releases the temporary session socket", async () => {
     const { client, events, lease, runtime } = makeHarness()
     await expect(runtime.startQr()).resolves.toEqual({ status: "started" })
@@ -711,4 +756,84 @@ describe("ReconnectPolicy", () => {
       delayMs: 0,
     })
   })
+})
+
+it("bounds pending account messages and restores readiness after draining", async () => {
+  const { client, runtime, sink } = makeHarness({ account: true })
+  await runtime.reconnect(auth, auth.zaloUid)
+  let release!: () => void
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  vi.mocked(sink.publishDirectMessage).mockImplementation(() => blocked)
+  const message = {
+    providerMessageId: "m",
+    threadId: "peer",
+    threadType: "user" as const,
+    senderId: "peer",
+    recipientId: "uid-1",
+    timestampMs: 1,
+    msgType: "webchat",
+    isSelf: false,
+    text: "hello",
+    attachments: [],
+  }
+  for (let i = 0; i < 30; i++) {
+    client.reconnectApis[0].handlers?.onDirectMessage({
+      ...message,
+      providerMessageId: String(i),
+    })
+  }
+  expect(runtime.snapshot()).toMatchObject({ messageReady: false })
+  release()
+  await vi.waitFor(() =>
+    expect(runtime.snapshot()).toMatchObject({ messageReady: true }),
+  )
+  expect(sink.publishDirectMessage).toHaveBeenCalledTimes(20)
+  await runtime.stop()
+})
+
+it("caps all account callback reservations at 200 while allowing independent accounts to drain", async () => {
+  const harnesses = Array.from({ length: 11 }, () =>
+    makeHarness({ account: true }),
+  )
+  const releases: (() => void)[] = []
+  for (const { client, runtime, sink } of harnesses) {
+    await runtime.reconnect(auth, auth.zaloUid)
+    const blocked = new Promise<void>((resolve) => releases.push(resolve))
+    vi.mocked(sink.publishDirectMessage).mockImplementation(() => blocked)
+    for (let i = 0; i < 20; i++) {
+      client.reconnectApis[0].handlers?.onDirectMessage({
+        providerMessageId: String(i),
+        threadId: "p",
+        threadType: "user",
+        senderId: "p",
+        recipientId: "uid-1",
+        timestampMs: 1,
+        msgType: "webchat",
+        isSelf: false,
+        text: "hello",
+        attachments: [],
+      })
+    }
+  }
+  expect(harnesses[10].runtime.snapshot()).toMatchObject({
+    messageReady: false,
+  })
+  for (const release of releases) {
+    release()
+  }
+  await vi.waitFor(() =>
+    expect(harnesses.every((h) => h.runtime.snapshot().messageReady)).toBe(
+      true,
+    ),
+  )
+  expect(
+    harnesses.reduce(
+      (total, h) =>
+        total + vi.mocked(h.sink.publishDirectMessage).mock.calls.length,
+      0,
+    ),
+  ).toBe(200)
+  await Promise.all(harnesses.map((h) => h.runtime.stop()))
 })

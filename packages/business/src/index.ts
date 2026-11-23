@@ -202,3 +202,5 @@ export * from "./workspace-member"
 export * from "./workspace-presence"
 export * from "./workspace-support-access"
 export * from "./workspace-usage"
+
+export * from "./zalo-account-media"

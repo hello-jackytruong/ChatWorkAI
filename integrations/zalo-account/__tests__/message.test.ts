@@ -46,6 +46,28 @@ describe("Zalo Account message adapter", () => {
   beforeEach(() => {
     mocks.sendDirectAndWait.mockReset()
   })
+  it("carries descriptor-only media to the registration boundary", async () => {
+    const mediaResources = [
+      {
+        kind: "video",
+        role: "original",
+        slot: "original",
+        url: "https://cdn.example.test/v?token=private",
+      },
+    ]
+    const result = await receiveMessage({
+      ctx,
+      data: {
+        integrationType: "zaloAccount",
+        integrationIdentifier: "account-1",
+        payload: { ...payload, text: undefined, mediaResources },
+      },
+    })
+    expect(result.message).toMatchObject({
+      attachments: [],
+      contentAttributes: { zaloAccount: { mediaResources } },
+    })
+  })
   it("routes reserved group anchors through group policy instead of direct UID sending", async () => {
     mocks.sendByProviderId.mockResolvedValue({
       messageIds: ["m1"],
@@ -106,6 +128,13 @@ describe("Zalo Account message adapter", () => {
         sourceId: "za:account-1:user:peer-1:message-7",
         messageType: "incoming",
         text: "hello",
+        contentAttributes: {
+          zaloAccount: {
+            recipientId: "self-1",
+            isSelf: false,
+            threadType: "user",
+          },
+        },
       },
       contact: { sourceId: "peer-1", firstName: "Customer" },
     })

@@ -80,6 +80,52 @@
       "closeCode": "Close code",
       "issue": "Connection issue",
       "requiresAction": "Reconnect this account to resume automatic connections."
+    },
+    "messageActions": "Mesaj əməliyyatları",
+    "viewSavedContent": "Saxlanmış orijinala bax",
+    "hideLocally": "ChatbotX-də gizlət",
+    "recallOnZalo": "Zalo-da geri çağır",
+    "deleteOnMyZalo": "Mənim Zalo hesabımdan sil",
+    "nativeOperationsDisabled": "Zalo-nun daxili əməliyyatları hazırda əlçatan deyil.",
+    "retainOriginalNotice": "Saxlanmış orijinal səlahiyyətli gələnlər qutusu üzvləri üçün əlçatan qalır.",
+    "operationFailed": "Əməliyyat uğursuz oldu.",
+    "operationApplied": "Əməliyyat təsdiqləndi.",
+    "operationUnconfirmed": "Nəticə təsdiqlənməyib. Növbəti əməliyyatdan əvvəl statusu yoxlayın.",
+    "confirmOperation": "Əməliyyatı təsdiqlə",
+    "inspectOperation": "Statusu yoxla",
+    "savedContent": "Saxlanmış orijinal",
+    "savedLoading": "Saxlanmış məzmun yüklənir…",
+    "savedDenied": "Artıq girişiniz yoxdur və ya məzmun əlçatan deyil.",
+    "originalNotCaptured": "Orijinal məzmun qeydə alınmayıb.",
+    "providerRecallTime": "Zalo geri çağırma vaxtı",
+    "observedRecallTime": "Geri çağırmanın müşahidə vaxtı",
+    "recallActor": "Geri çağıran",
+    "unknownActor": "Naməlum",
+    "savedFile": "Saxlanmış fayl",
+    "fileNotArchived": "Fayl arxivləşdirilməyib və ya əlçatan deyil.",
+    "openSavedFile": "Saxlanmış faylı aç",
+    "getSavedFile": "Fayl keçidini al",
+    "savedFileUnavailable": "Bu saxlanmış fayl əlçatan deyil.",
+    "recalled": "Zalo-da geri çağırılıb",
+    "hiddenLocally": "CRM-də gizlədilib",
+    "deleteChatOnZalo": "Zalo hesabımdan tarixçəni sil",
+    "deleteChatConfirm": "Seçilmiş mesaja qədər Zalo tarixçəsi silinsin? Saxlanmış CRM tarixçəsi izləmə üçün qalır.",
+    "deleteChatNoBoundary": "Zalo tarixçəsini silmək üçün mesaj sərhədi yoxdur.",
+    "deletedOnMyZalo": "Zalo hesabımda silinib",
+    "deleteChatBoundary": "Tarixçənin silinmə sərhədi",
+    "evidence": {
+      "unsupportedContent": "Dəstəklənməyən Zalo mesajı",
+      "invalidContent": "Zalo mesajı oxunmadı",
+      "unsupportedSchema": "Zalo mesaj formatı dəstəklənmir",
+      "pending": "Təsdiq gözlənilir",
+      "unknown": "Nəticə məlum deyil — statusu yoxlayın",
+      "failed": "Mesaj göndərilmədi",
+      "applied": "Göndərildi",
+      "appliedPending": "Göndərildi, yerli uzlaşdırma aparılır",
+      "needsReview": "Nəticə nəzərdən keçirilməlidir",
+      "safeFailure": "Zalo əməliyyatı təhlükəsiz tamamlanmadı",
+      "unavailable": "Status əlçatan deyil. Yenidən cəhd edin.",
+      "inspect": "Statusu yoxla"
     }
   },
   "actions": {
@@ -2822,7 +2868,7 @@
     },
     "fromName": {
       "label": "Göndərən adı",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "messageTemplate": {
       "label": "Mesaj şablonu"
@@ -3393,7 +3439,7 @@
     },
     "limitedDataUse": {
       "label": "Məlumatların məhdud istifadəsi (ABŞ-da məxfilik)",
-      "description": "ABŞ-ın müvafiq ştatlarındakı istifadəçilər üçün Meta-nın hadisə məlumatlarından istifadəsini məhdudlaşdırın. Meta istifadəçinin məkanını bu hadisədən avtomatik müəyyən edir; ChatbotX məkan məlumatı göndərmir."
+      "description": "ABŞ-ın müvafiq ştatlarındakı istifadəçilər üçün Meta-nın hadisə məlumatlarından istifadəsini məhdudlaşdırın. Meta istifadəçinin məkanını bu hadisədən avtomatik müəyyən edir; ChatWorkAI məkan məlumatı göndərmir."
     },
     "actionSource": {
       "label": "Əməliyyat mənbəyi",
@@ -3888,8 +3934,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -4440,7 +4486,7 @@
     "title": "Ümumi"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "Bu, Meta mesaj kampaniyasını silir və kampaniyanı ChatbotX-dən çıxarır. Meta silinməni rədd etsə, kampaniya saxlanılır.",
+    "deleteWarning": "Bu, Meta mesaj kampaniyasını silir və kampaniyanı ChatWorkAI-dən çıxarır. Meta silinməni rədd etsə, kampaniya saxlanılır.",
     "title": "Facebook Marketing Messages",
     "description": "Messenger-də fərdiləşdirilmiş reklam mesajları ilə qarşılıqlı əlaqəni və satışları artırın.",
     "create": "Yenisini yarat",
@@ -4481,7 +4527,7 @@
       "tosNotAccepted": "Bu funksiyadan istifadə etmək üçün {url} ünvanında fərdi obyekt şərtlərini qəbul edin",
       "notFound": "Marketinq mesajı tapılmadı.",
       "audienceNotTargetable": "Seçilmiş fərdi auditoriya hazır deyil və ya bu Səhifəyə və reklam hesabına aid deyil.",
-      "connectFirst": "Əvvəlcə ChatbotX tətbiqində Marketinq Mesajlarını qoşun.",
+      "connectFirst": "Əvvəlcə ChatWorkAI tətbiqində Marketinq Mesajlarını qoşun.",
       "mmInvalidState": "Bu əməliyyat kampaniyanın cari vəziyyətində mövcud deyil.",
       "mmCampaignEnded": "Meta mesaj kampaniyası başa çatıb, ona görə göndərmək və ya davam etdirmək olmaz.",
       "mmPageNotConnected": "Bu kampaniyanın Səhifəsi bu iş sahəsinə qoşulmayıb.",
@@ -4501,7 +4547,7 @@
       "uploadMore": "Daha çox sətir yüklə",
       "empty": "Hələ fərdi auditoriya yoxdur.",
       "deleteTitle": "Fərdi auditoriyanı sil",
-      "deleteWarning": "Bu əməliyyat \"{name}\" fərdi auditoriyasını Meta-dan və ChatbotX-dən silir. Geri qaytarıla bilməz.",
+      "deleteWarning": "Bu əməliyyat \"{name}\" fərdi auditoriyasını Meta-dan və ChatWorkAI-dən silir. Geri qaytarıla bilməz.",
       "deleted": "Fərdi auditoriya silindi.",
       "pageDisconnected": "Səhifənin bağlantısı kəsildi",
       "status": {
@@ -6389,7 +6435,7 @@
         "title": "Zəng üçün uyğunluq",
         "appSubscriptionMissing": "Əvvəlcə Meta tətbiqinin idarə panelində bu tətbiq üçün WhatsApp Webhook-unu konfiqurasiya edin, sonra yenidən cəhd edin.",
         "appSubscriptionFailed": "Tətbiqin 'calls' Webhook abunəliyini doğrulamaq mümkün olmadı. Bir az sonra yenidən cəhd edin.",
-        "callsNotSubscribed": "Bu tətbiq 'calls' Webhook sahəsinə abunə deyil, buna görə zəng hadisələri ChatbotX-ə çata bilmir (Meta xətası 138018: texniki ilkin şərtlər ödənmir, WABA-ya abunə olan ən azı bir tətbiqin calls Webhook sahəsinə də abunə olduğuna əmin olun).",
+        "callsNotSubscribed": "Bu tətbiq 'calls' Webhook sahəsinə abunə deyil, buna görə zəng hadisələri ChatWorkAI-ə çata bilmir (Meta xətası 138018: texniki ilkin şərtlər ödənmir, WABA-ya abunə olan ən azı bir tətbiqin calls Webhook sahəsinə də abunə olduğuna əmin olun).",
         "fixButton": "Düzəlt",
         "fixSuccess": "Tətbiq artıq WhatsApp zəng Webhook-larına abunədir.",
         "manualIntegrationNotice": "Bu nömrə əl ilə qoşulub və burada onun tətbiq giriş məlumatları yoxdur. Meta tətbiqinin idarə panelində tətbiqiniz üçün 'calls' Webhook sahəsinə abunə olun.",
@@ -8854,7 +8900,7 @@
     "portalPricingPage": "Qiymətlər"
   },
   "deleteAccountPage": {
-    "title": "ChatbotX hesabınızı silin",
+    "title": "ChatWorkAI hesabınızı silin",
     "intro": "Hesabınızı və məlumatlarınızı aşağıdakı yollardan biri ilə silə bilərsiniz.",
     "waysTitle": "Hesabı necə silmək olar",
     "wayMobile": "Mobil tətbiqdə: Parametrlər → Hesabı sil.",
@@ -11139,7 +11185,7 @@
         "label": "Mağaza mənbəyi",
         "description": "Məhsullarınızı, inventarınızı və sifarişlərinizi idarə etmək üçün istifadə olunan mağaza mənbəyini seçin. Shopify / WooCommerce seçildikdə bütün məhsul və sifarişlər birbaşa Shopify / WooCommerce mağazanızdan idarə olunur.",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11308,7 +11354,7 @@
       },
       "authKind": {
         "label": "Autentifikasiya",
-        "description": "ChatbotX mağazanıza necə daxil olur: fərdi tətbiqin Admin API giriş tokeni ilə və ya Shopify Dev Dashboard-da yaradılmış tətbiqin Client ID və secret-i ilə.",
+        "description": "ChatWorkAI mağazanıza necə daxil olur: fərdi tətbiqin Admin API giriş tokeni ilə və ya Shopify Dev Dashboard-da yaradılmış tətbiqin Client ID və secret-i ilə.",
         "options": {
           "token": "Admin API giriş tokeni",
           "clientCredentials": "Client ID və secret (Dev Dashboard tətbiqi)"
@@ -12220,7 +12266,7 @@
     "noWorkspaces": "Heç bir iş sahəsinin admini deyilsiniz, ona görə bu tətbiqə icazə verə bilməzsiniz."
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12410,7 +12456,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",

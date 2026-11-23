@@ -648,3 +648,62 @@ describe("Zalo group message translation", () => {
     }
   })
 })
+
+test("Zalo recalled marker suppresses raw text and retained attachment URLs", () => {
+  const el = renderComponent(
+    <MessageItem
+      message={makeMessage({
+        sourceId: "za:1:user:2:3",
+        text: "original-secret",
+        contentAttributes: { zaloAccount: { lifecycle: { recalled: true } } },
+        attachments: [makeImageAttachment("secret-image")],
+      })}
+    />,
+  )
+  expect(el.textContent).toContain("recalled")
+  expect(el.textContent).not.toContain("original-secret")
+  expect(el.querySelector("img[src*=secret-image]")).toBeNull()
+})
+
+test("Zalo delete-only-me shows provider state while preserving the local original", () => {
+  const el = renderComponent(
+    <MessageItem
+      message={makeMessage({
+        sourceId: "za:1:user:2:3",
+        text: "retained original",
+        contentAttributes: {
+          zaloAccount: {
+            lifecycle: { providerDeletedForMeAt: "2026-11-23T00:00:00Z" },
+          },
+        },
+      })}
+    />,
+  )
+  expect(el.textContent).toContain("retained original")
+  expect(el.textContent).toContain("deletedOnMyZalo")
+})
+
+test("retained quote shows a safe recall marker without hiding the reply body", () => {
+  const el = renderComponent(
+    <MessageItem
+      message={makeMessage({
+        sourceId: "za:1:user:2:reply",
+        text: "reply body",
+        contentAttributes: {
+          zaloAccount: {
+            retainedQuote: {
+              sourceId: "za:1:user:2:parent",
+              lifecycle: { recalled: true },
+            },
+          },
+        },
+      })}
+    />,
+  )
+  expect(el.textContent).toContain("reply body")
+  expect(el.querySelector("blockquote")?.textContent).toContain("recalled")
+})
+
+vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
+  inspectZaloAccountMessageAction: vi.fn(),
+}))

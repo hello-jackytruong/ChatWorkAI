@@ -13,9 +13,11 @@ const {
   mockDeletePartitionedBatch,
   mockDeleteWorkspaceRowsBatch,
   mockTransaction,
+  mockPurgeMedia,
 } = vi.hoisted(() => {
   const execute = vi.fn()
   return {
+    mockPurgeMedia: vi.fn().mockResolvedValue(0),
     mockConnectionTransition: vi.fn(),
     mockDeleteMessagesAndAttachments: vi.fn(),
     mockDeletePartitionedBatch: vi.fn(),
@@ -31,6 +33,10 @@ const {
     ),
   }
 })
+
+vi.mock("../../zalo-account-media/purge", () => ({
+  purgeZaloAccountMediaForWorkspace: mockPurgeMedia,
+}))
 
 vi.mock("../../leaderboard/purge", () => ({
   purgeLeaderboardDataForWorkspace: vi.fn().mockResolvedValue(0),
@@ -103,6 +109,21 @@ describe("workspaceLifecycleService", () => {
     mockInboxDisconnect.mockResolvedValue(undefined)
     mockListMessageConversationPage.mockResolvedValue([])
     mockListWithIntegrationsByWorkspace.mockResolvedValue([])
+  })
+
+  test("keeps workspace and message rows while Zalo private objects are awaiting deletion", async () => {
+    mockPurgeMedia.mockRejectedValueOnce(
+      new WorkspacePurgeIncompleteError("workspace-1", "ZaloAccountMediaAsset"),
+    )
+    await expect(
+      workspaceLifecycleService.purgeWorkspaceHeavyData({
+        workspaceId: "workspace-1",
+        deadlineAt: deadlineAt(),
+      }),
+    ).rejects.toBeInstanceOf(WorkspacePurgeIncompleteError)
+    expect(mockDeleteMessagesAndAttachments).not.toHaveBeenCalled()
+    expect(mockDeleteWorkspaceRowsBatch).not.toHaveBeenCalled()
+    expect(mockDeletePartitionedBatch).not.toHaveBeenCalled()
   })
 
   test("drains each registered direct workspace table once when batches are short", async () => {

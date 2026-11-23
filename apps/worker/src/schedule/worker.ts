@@ -58,6 +58,7 @@ import { reconcileBroadcasts } from "./handlers/reconcile-broadcasts"
 import { reconcileMetaCatalogSyncs } from "./handlers/reconcile-meta-catalog-syncs"
 import { reconcileTenants } from "./handlers/reconcile-tenants"
 import { reconcileZaloLabels } from "./handlers/reconcile-zalo-labels"
+import { recoverZaloAccountMedia } from "./handlers/recover-zalo-account-media"
 import { recoverZaloGroupInbox } from "./handlers/recover-zalo-group-inbox"
 import { redispatchInboundWebhookRequests } from "./handlers/redispatch-inbound-webhook-requests"
 import { redispatchTemplateJobs } from "./handlers/redispatch-template-jobs"
@@ -282,6 +283,9 @@ async function startScheduleWorker() {
             // default worker), so no `isBlockedJob` guard here either.
             case ScheduleJobData.redispatchInboundWebhookRequests:
               await redispatchInboundWebhookRequests()
+              return
+            case ScheduleJobData.recoverZaloAccountMedia:
+              await recoverZaloAccountMedia()
               return
             case ScheduleJobData.recoverZaloGroupInbox:
               await recoverZaloGroupInbox()

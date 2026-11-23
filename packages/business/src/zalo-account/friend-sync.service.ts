@@ -2,6 +2,7 @@ import { zaloAccountFriendImportRepository } from "@chatbotx.io/database/reposit
 import { zaloAccountFriendSyncSchema } from "@chatbotx.io/sdk"
 import { sha256Hex } from "@chatbotx.io/utils/crypto"
 import { quotaEnforcementService } from "../quota-enforcement/service"
+import { captureZaloAccountResourceMedia } from "../zalo-account-media/resource-capture"
 import { zaloAccountService } from "./service"
 import { zaloAccountCommandTransportService } from "./transport.service"
 
@@ -97,6 +98,16 @@ export const zaloAccountFriendSyncService = {
           nextCursor: snapshot.nextCursor,
         },
         async (tx, count) => {
+          await captureZaloAccountResourceMedia({
+            workspaceId: input.workspaceId,
+            accountId: input.accountId,
+            tx,
+            resources: friends.slice(offset, offset + 100).map((friend) => ({
+              ownerKind: "contact",
+              ownerId: friend.uid,
+              avatarUrl: friend.avatarUrl,
+            })),
+          })
           await quotaEnforcementService.incrementImportedContacts(
             { workspaceId: input.workspaceId, userIds: quotaUserIds, count },
             tx,

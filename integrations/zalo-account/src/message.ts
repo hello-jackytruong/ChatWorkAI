@@ -157,6 +157,16 @@ export const receiveMessage: MessageHandlers<ZaloAccountAuthValue>["receiveMessa
         ),
         contentAttributes: {
           zaloAccount: {
+            accountId,
+            recipientId: payload.recipientId,
+            isSelf: payload.isSelf,
+            threadType: payload.threadType,
+            ...(payload.schemaVersion
+              ? { schemaVersion: payload.schemaVersion }
+              : {}),
+            ...(payload.unsupported
+              ? { unsupported: payload.unsupported }
+              : {}),
             providerMessageId: payload.providerMessageId,
             clientMessageId: payload.clientMessageId,
             threadId: payload.threadId,
@@ -164,6 +174,9 @@ export const receiveMessage: MessageHandlers<ZaloAccountAuthValue>["receiveMessa
             msgType: payload.msgType,
             timestampMs: payload.timestampMs,
             quote: payload.quote,
+            ...(payload.mediaResources?.length
+              ? { mediaResources: payload.mediaResources }
+              : {}),
           },
         },
       },

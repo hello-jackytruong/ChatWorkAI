@@ -113,6 +113,10 @@ vi.mock("../src/appointment-calendar", () => ({
   matchesAvailabilityFingerprint: vi.fn(() => true),
 }))
 
+vi.mock("../src/appointment-external-calendar", () => ({
+  appointmentExternalCalendarService: {},
+}))
+
 vi.mock("../src/contact-inbox/service", () => ({
   contactInboxService: {
     findByUncached: (...args: unknown[]) =>

@@ -343,3 +343,21 @@ describe("workspaceAccessDenialOrpcError", () => {
     expect(error.status).toBe(403)
   })
 })
+
+test.each([
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/hide-locally",
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/recall",
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/delete-on-zalo",
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/delete-on-zalo",
+])("expired deletion allowed, read-only token still denied: %s", async (path) => {
+  isCloud.mockReturnValue(true)
+  getAccessState.mockResolvedValue({ blocked: true, reason: "status" })
+  await expect(
+    assertWorkspaceOwnerAccessForMethod({
+      method: "POST",
+      ownerId: "owner-1",
+      path,
+    }),
+  ).resolves.toBeUndefined()
+  expect(isReadOnlyTokenAllowedMethod("POST", path)).toBe(false)
+})

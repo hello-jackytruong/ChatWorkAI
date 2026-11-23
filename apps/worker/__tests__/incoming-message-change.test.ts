@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   identifyInbox: vi.fn(),
+  lifecycle: vi.fn(),
   updateTextBySourceId: vi.fn(),
   deleteBySourceId: vi.fn(),
   findConversation: vi.fn(),
@@ -13,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   deleteTranslation: vi.fn(),
 }))
 
+vi.mock("@chatbotx.io/business/zalo-account/lifecycle", () => ({
+  zaloAccountMessageLifecycleService: { handle: mocks.lifecycle },
+}))
 vi.mock("../src/lib/logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
@@ -20,6 +24,7 @@ vi.mock("../src/lib/logger", () => ({
 vi.mock("../src/services/integrations", () => ({
   integrationService: {
     identifyInboxAndIntegrationAuthFromIdentifier: mocks.identifyInbox,
+    identifyZaloAccountFromRoute: mocks.identifyInbox,
   },
 }))
 
@@ -501,4 +506,32 @@ describe("translation of a changed message", () => {
     )
     expect(eventTypes()).toEqual(["messageUpdated"])
   })
+})
+
+test("reroutes a previously queued Zalo undo before generic cascading deletion", async () => {
+  mocks.identifyInbox.mockResolvedValue({
+    inbox: { id: "inbox-1", workspaceId: "ws-1" },
+  })
+  await deleteIncomingMessage({
+    integrationType: "zaloAccount",
+    integrationIdentifier: "a",
+    messageId: "za:a:user:u:p",
+    zaloAccountRoute: {
+      kind: "account",
+      workspaceId: "ws-1",
+      accountId: "a",
+      inboxId: "inbox-1",
+    },
+  })
+  expect(mocks.lifecycle).toHaveBeenCalledWith(
+    expect.objectContaining({
+      accountId: "a",
+      event: expect.objectContaining({
+        type: "undo",
+        providerMessageId: "p",
+        timestampSource: "observed",
+      }),
+    }),
+  )
+  expect(mocks.deleteBySourceId).not.toHaveBeenCalled()
 })

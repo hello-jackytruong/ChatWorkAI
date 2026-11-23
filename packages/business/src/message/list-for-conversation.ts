@@ -5,6 +5,10 @@ import {
   type PaginationCursor,
 } from "@chatbotx.io/database/repositories"
 import { uploader } from "@chatbotx.io/filesystem"
+import {
+  getZaloAccountErrorInfo,
+  getZaloAccountErrorMessage,
+} from "@chatbotx.io/sdk"
 import { endOfHour } from "date-fns"
 import { contactInboxService } from "../contact-inbox/service"
 import { conversationService } from "../conversation/service"
@@ -12,6 +16,9 @@ import { notFoundException } from "../errors"
 import { logger } from "../logger"
 import { resolveAttachmentFallbackUrl, resolveMediaUrl } from "../media"
 import { HTTP_URL_RE } from "../utils"
+import { zaloAccountMessageRecallService } from "../zalo-account/message-recall.service"
+import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
+import { zaloAccountMediaReadService } from "../zalo-account-media/read-service"
 
 type PresignedAttachmentUrls = {
   url: string | null
@@ -22,8 +29,22 @@ type PresignedAttachmentUrls = {
 
 async function presignAttachments<T extends { id: string; originPath: string }>(
   attachments: T[],
-  context: { channel: string; workspaceId: string; messageCreatedAt: Date },
+  context: {
+    channel: string
+    workspaceId: string
+    messageCreatedAt: Date
+    privateZaloMedia?: boolean
+  },
 ): Promise<Array<T & PresignedAttachmentUrls>> {
+  if (context.channel === "zaloAccount" && context.privateZaloMedia) {
+    return attachments.map((attachment) => ({
+      ...attachment,
+      originPath: "",
+      thumbnailPath: null,
+      url: null,
+      fallbackUrl: null,
+    }))
+  }
   return await Promise.all(
     attachments.map(async (attachment) => {
       const ref = {
@@ -72,19 +93,97 @@ async function presignAttachments<T extends { id: string; originPath: string }>(
 
 /**
  * Resolves a message's attachment URLs from data the caller already holds
- * (no DB read, no download): a stored object gets a presigned URL, a pending
- * (lazily-ingested) one the signed media proxy URL. Used wherever a message
+ * A stored object gets a presigned URL, a pending (lazily-ingested) one the
+ * signed media proxy URL. Zalo private originals use a scoped batch ledger
+ * lookup when the caller has not supplied its page projection. Used wherever a message
  * is handed to a client directly, e.g. the realtime push of a new message.
  */
 export async function withResolvedAttachmentUrls(
-  message: MessageWithAttachments,
-  context: { channel: string; workspaceId: string },
+  initialMessage: MessageWithAttachments,
+  context: {
+    channel: string
+    workspaceId: string
+    retainedProjectionApplied?: boolean
+    mediaProjection?: Awaited<
+      ReturnType<typeof zaloAccountMediaReadService.projectMessages>
+    >
+  },
 ): Promise<MessageWithPresignedAttachments> {
+  const message =
+    context.channel === "zaloAccount" && !context.retainedProjectionApplied
+      ? ((
+          await zaloAccountMessageRecallService.projectMessagesForRead({
+            workspaceId: context.workspaceId,
+            messages: [initialMessage],
+          })
+        )[0] ?? initialMessage)
+      : initialMessage
+  let mediaProjection = context.mediaProjection
+  if (context.channel === "zaloAccount" && !mediaProjection) {
+    const bindings = await loadContactInboxChannels(
+      [message],
+      context.workspaceId,
+    )
+    mediaProjection = await zaloAccountMediaReadService.projectMessages({
+      workspaceId: context.workspaceId,
+      messages: [message],
+      inboxByContactInboxId: bindings,
+    })
+  }
+  const resources = mediaProjection?.get(message.id) ?? []
+  const attachments = await presignAttachments(message.attachments, {
+    ...context,
+    messageCreatedAt: message.createdAt,
+    privateZaloMedia:
+      resources.length > 0 ||
+      getZaloAccountMediaPolicy().enabled ||
+      Boolean(message.deletedAt),
+  })
+  const attributes = message.contentAttributes
+  const zaloAttributes = attributes?.zaloAccount
   return {
     ...message,
-    attachments: await presignAttachments(message.attachments, {
-      ...context,
-      messageCreatedAt: message.createdAt,
+    ...(context.channel === "zaloAccount" && message.sendError
+      ? {
+          sendError: getZaloAccountErrorMessage(
+            getZaloAccountErrorInfo(
+              (
+                message.contentAttributes?.zaloAccount as
+                  | { sendAttempt?: { errorInfo?: unknown } }
+                  | undefined
+              )?.sendAttempt?.errorInfo,
+            ),
+          ),
+        }
+      : {}),
+    ...(context.channel === "zaloAccount"
+      ? {
+          contentAttributes: {
+            ...attributes,
+            zaloAccount: {
+              ...(typeof zaloAttributes === "object" && zaloAttributes !== null
+                ? zaloAttributes
+                : {}),
+              mediaResources: resources.map(({ url, ...metadata }) => metadata),
+            },
+          },
+        }
+      : {}),
+    attachments: attachments.map((attachment) => {
+      const resource = resources.find(
+        (item) =>
+          item.attachmentId === attachment.id && item.role === "original",
+      )
+      const preview = resources.find(
+        (item) =>
+          item.attachmentId === attachment.id &&
+          ["thumbnail", "poster"].includes(item.role),
+      )
+      return {
+        ...attachment,
+        ...(resource ? { url: resource.url } : {}),
+        ...(preview ? { thumbnailPath: preview.url } : {}),
+      }
     }),
   }
 }
@@ -92,7 +191,7 @@ export async function withResolvedAttachmentUrls(
 const loadContactInboxChannels = async (
   messages: readonly Pick<MessageWithAttachments, "contactInboxId">[],
   workspaceId: string,
-): Promise<Map<string, string>> => {
+): Promise<Map<string, { channel: string; inboxId: string | null }>> => {
   const contactInboxIds = [
     ...new Set(messages.map((message) => message.contactInboxId)),
   ]
@@ -106,7 +205,7 @@ const loadContactInboxChannels = async (
   return new Map(
     contactInboxes.map((contactInbox) => [
       contactInbox.id,
-      contactInbox.channel,
+      { channel: contactInbox.channel, inboxId: contactInbox.inboxId },
     ]),
   )
 }
@@ -184,11 +283,29 @@ export async function listForConversation(
     result.data,
     input.workspaceId,
   )
+  const projectedMessages =
+    await zaloAccountMessageRecallService.projectMessagesForRead({
+      workspaceId: input.workspaceId,
+      messages: result.data,
+    })
+  const mediaProjection = [...channelByContactInboxId.values()].some(
+    (value) => value.channel === "zaloAccount",
+  )
+    ? await zaloAccountMediaReadService.projectMessages({
+        workspaceId: input.workspaceId,
+        messages: projectedMessages,
+        inboxByContactInboxId: channelByContactInboxId,
+      })
+    : new Map()
+
   const data = await Promise.all(
-    result.data.map((message) =>
+    projectedMessages.map((message) =>
       withResolvedAttachmentUrls(message, {
         workspaceId: input.workspaceId,
-        channel: channelByContactInboxId.get(message.contactInboxId) ?? "",
+        channel:
+          channelByContactInboxId.get(message.contactInboxId)?.channel ?? "",
+        mediaProjection,
+        retainedProjectionApplied: true,
       }),
     ),
   )
@@ -228,7 +345,7 @@ export async function findForContact(input: {
 
   return await withResolvedAttachmentUrls(message, {
     workspaceId,
-    channel: channelByContactInboxId.get(message.contactInboxId) ?? "",
+    channel: channelByContactInboxId.get(message.contactInboxId)?.channel ?? "",
   })
 }
 
@@ -254,6 +371,6 @@ export async function findByIdWithUrls(input: {
 
   return await withResolvedAttachmentUrls(message, {
     workspaceId: input.workspaceId,
-    channel: channelByContactInboxId.get(message.contactInboxId) ?? "",
+    channel: channelByContactInboxId.get(message.contactInboxId)?.channel ?? "",
   })
 }

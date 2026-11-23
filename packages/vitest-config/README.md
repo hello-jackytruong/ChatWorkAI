@@ -1,6 +1,6 @@
 # @chatbotx.io/vitest-config
 
-Shared Vitest presets for the ChatbotX monorepo. Mirrors how
+Shared Vitest presets for the ChatWorkAI monorepo. Mirrors how
 [`@chatbotx.io/typescript-config`](../typescript-config) works for TypeScript:
 one place to bump versions, one place to tune the config.
 

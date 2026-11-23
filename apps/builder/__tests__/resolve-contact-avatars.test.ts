@@ -3,9 +3,17 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   listByContactIds: vi.fn(),
+  profiles: vi.fn().mockResolvedValue(new Map()),
+  accounts: vi.fn().mockResolvedValue([]),
   resolveTenantSettings: vi.fn(),
 }))
 
+vi.mock("@chatbotx.io/business/zalo-account-media", () => ({
+  zaloAccountMediaReadService: { projectProfiles: mocks.profiles },
+}))
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountService: { listByWorkspace: mocks.accounts },
+}))
 vi.mock("@chatbotx.io/business", () => ({
   contactInboxService: { listByContactIds: mocks.listByContactIds },
   resolveTenantSettings: mocks.resolveTenantSettings,
@@ -52,5 +60,47 @@ describe("resolveContactAvatars", () => {
     expect(result[1].avatar).toBeNull()
     expect(mocks.resolveTenantSettings).toHaveBeenCalledTimes(1)
     expect(mocks.listByContactIds).toHaveBeenCalledTimes(1)
+  })
+})
+
+test("batch projects current Zalo contact avatars using provider UID while preserving other channels", async () => {
+  mocks.accounts.mockResolvedValue([{ id: "account", inboxId: "inbox" }])
+  mocks.listByContactIds.mockResolvedValue([
+    {
+      id: "ci",
+      contactId: "contact",
+      channel: "zaloAccount",
+      inboxId: "inbox",
+      sourceId: "123",
+    },
+    {
+      id: "other",
+      contactId: "messenger",
+      channel: "messenger",
+      inboxId: "other",
+      sourceId: "other",
+    },
+  ])
+  mocks.profiles.mockResolvedValue(
+    new Map([
+      [
+        JSON.stringify(["account", "contact", "123"]),
+        { avatarUrl: "https://signed.test/avatar" },
+      ],
+    ]),
+  )
+  const result = await resolveContactAvatars(
+    [
+      { id: "contact", avatar: null },
+      { id: "messenger", avatar: "ws/manual.png" },
+    ],
+    "w",
+  )
+  expect(result[0]?.avatar).toBe("https://signed.test/avatar")
+  expect(result[1]?.avatar).toBe("ws/manual.png")
+  expect(mocks.accounts).toHaveBeenCalledTimes(1)
+  expect(mocks.profiles).toHaveBeenCalledWith({
+    workspaceId: "w",
+    owners: [{ accountId: "account", ownerKind: "contact", ownerId: "123" }],
   })
 })

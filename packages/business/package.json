@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
+    "./zalo-account-media": "./src/zalo-account-media/index.ts",
     ".": "./src/index.ts",
     "./admin-workspace/constants": "./src/admin-workspace/constants.ts",
     "./ads-analytics/date-range": "./src/ads-analytics/date-range.ts",
@@ -90,7 +91,12 @@
     "./zalo-account/group-inbox": "./src/zalo-account/group-inbox.service.ts",
     "./zalo-account/lifecycle": "./src/zalo-account/message-lifecycle.service.ts",
     "./zalo-account/runtime-state": "./src/zalo-account/runtime-state.service.ts",
-    "./zalo-account/canonical-send": "./src/zalo-account/canonical-send.service.ts"
+    "./zalo-account/canonical-send": "./src/zalo-account/canonical-send.service.ts",
+    "./zalo-account/recall": "./src/zalo-account/message-recall.service.ts",
+    "./zalo-account/message-projection": "./src/zalo-account/message-projection.ts",
+    "./zalo-account/native-operations": "./src/zalo-account/message-operations.service.ts",
+    "./zalo-account/message-recall": "./src/zalo-account/message-recall.service.ts",
+    "./zalo-account/native-operation-policy": "./src/zalo-account/native-operation-policy.ts"
   },
   "dependencies": {
     "@chatbotx.io/analytics": "workspace:*",

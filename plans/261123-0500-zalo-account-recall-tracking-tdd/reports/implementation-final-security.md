@@ -1,0 +1,23 @@
+# Focused final security review
+
+Reviewed 2026-11-23. Read-only source review of the latest cache, embedded-quote, private-action, sidebar and message-rendering changes. One confirmed quote-restoration gap was identified with the controller and is now **resolved by source re-review**. No remaining confirmed finding was found in the inspected seams.
+
+## Confirmed finding
+
+**High — an off-page recalled quote can return after a content update.** `packages/business/src/zalo-account/message-recall.service.ts:929` removes embedded quotes but does not preserve the target's safe retention metadata. `apps/builder/src/features/messages/lib/zalo-retention.ts:99` builds quote fences from `retainedQuote`; when the recalled parent is absent from loaded rows, initial loading therefore creates no fence. `apps/builder/src/features/chat/store/chat-store.ts:1374` can subsequently replace the reply's attributes with a raw quote snapshot, and retention has no evidence to strip it again. Preserve `zaloAccount.retainedQuote: { sourceId, lifecycle }` in server projection, using the canonical quoted-target source and `lifecycleOfRecall(recall)`. Add the off-page initial-load followed by raw-update regression. The controller owns this correction. Existing group quote rendering also needs a safe recalled/hidden label if the accepted UI requires a visible quote placeholder; this is a presentation follow-up, not an additional leak.
+
+**Resolved:** final projection now attaches the canonical quoted target's `sourceId` and `lifecycleOfRecall(recall)` as `retainedQuote`, containing no original body or media URL. The existing client retention helper reads that marker from the previous row into its conversation-scoped fence before applying a raw attribute replacement; the restored quote is therefore removed even while the parent remains off-page. The server regression now asserts the marker as well as absence of original bytes. `zaloRetainedQuoteLabel` validates the message and quoted source as Zalo identities and reuses the recalled/local-hidden labels. `MessageItem` renders that label as a blockquote for a visible reply without changing its body or depending on group mode. The new component regression asserts the blockquote and preserved reply. These corrections were source-inspected, not executed by this reviewer.
+
+## Other inspected seams
+
+- Saved-content failures resolve to `null`, replacing the cached original on reauthorization failure. The denied branch unmounts `SavedContentBody`, discarding its local signed-link state. Exact-target keys and close cleanup prevent a previous tuple's original or links carrying into another review. Attachment access failure rechecks original access; late attachment completions update only the old component instance.
+- Private actions inherit workspace authentication, enforce the scheduled-deletion gate, check conversation access and pass the same resolved member scope to the shared service. The workspace used by that access check is resolved from the first bound argument by the inherited safe-action middleware.
+- Quote targets include `zaloAccount.quote`, `zaloAccount.group.quote`, legacy `zaloAccountQuote` and `quote` representations. Batch lookup retains workspace/account/thread identity, and a recalled or hidden quoted target removes all embedded quote copies while preserving the reply body.
+- Sidebar projection keeps each nonempty preview attached to its original conversation before batching; the projector preserves array order. Missing previews therefore cannot shift another conversation's message into the wrong sidebar row.
+- `MessageItem` uses the Zalo-only pure projector; it returns the original object for other channels. Generic content-attribute rendering remains active through the projected message, preserving existing non-Zalo cards.
+
+Inspected the eight saved-content dialog cases, seven native UI cases, six private-action cases, ten recall-service cases, projection cases and affected sidebar fixtures. Assertions cover denial replacing cache data, signed-link disposal, exact-target changes, ACL/deletion ordering and legacy quote redaction. These tests were read, **not executed**; no heavy tests or typecheck were run, as requested. Sidebar fixtures stub projection, so runtime integration evidence remains the controller's responsibility.
+
+Applied critical and informational base/web/API checklists to the stated seams. CodeGraph was attempted but its executable was unavailable; native source search was used. This review does not recertify the wider diff, migration execution, live SDK behavior or plan completion.
+
+Status: DONE

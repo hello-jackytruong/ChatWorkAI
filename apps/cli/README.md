@@ -1,8 +1,8 @@
-# ChatbotX CLI
+# ChatWorkAI CLI
 
-CLI for interacting with the ChatbotX API.
+CLI for interacting with the ChatWorkAI API.
 
-Commands are automatically generated from the ChatbotX public API spec — no manual update needed when new APIs are added.
+Commands are automatically generated from the ChatWorkAI public API spec — no manual update needed when new APIs are added.
 
 CLI writes execute directly; MCP-only human approval (`x-mcp.hitlPolicy` and `_confirm`) does not gate CLI commands.
 
@@ -28,7 +28,7 @@ Before running any command, save your API key and URL:
 chatbotx config set --apiKey <yourApiKey> --apiUrl <yourApiUrl>
 ```
 
-- `--apiKey` — Workspace API key (found in ChatbotX Settings → Developer → API Keys)
+- `--apiKey` — Workspace API key (found in ChatWorkAI Settings → Developer → API Keys)
 - `--apiUrl` — Base API URL of your instance, e.g. `https://app.chatbotx.io/api`
 
 You can also set them individually:
@@ -1668,6 +1668,12 @@ sync, canonical messaging and lifecycle aggregates. Connection lifecycle uses th
 
 ```bash
 chatbotx zalo-accounts list
+chatbotx zalo-accounts media list <accountId> --conversationId <conversationId>
+chatbotx zalo-accounts media get <accountId> <referenceId> --conversationId <conversationId>
+chatbotx zalo-accounts download list <accountId> <referenceId> --conversationId <conversationId>
+chatbotx zalo-accounts retry add <accountId> <referenceId> --conversationId <conversationId> --expectedSourceRevision <revision>
+chatbotx zalo-accounts backfill add <accountId> --conversationId <conversationId> --from <ISO-date> --to <ISO-date> --dryRun true
+chatbotx zalo-accounts reconcile add <accountId> --conversationId <conversationId> --dryRun true
 chatbotx zalo-accounts get <id>
 chatbotx zalo-accounts status list <accountId>
 chatbotx zalo-accounts groups list <accountId>
@@ -1680,6 +1686,7 @@ chatbotx zalo-accounts message send <accountId> <id> --commandId <stable-id> --t
                                                      # Use --attachment <json> instead of --text for one supported image/file
 chatbotx zalo-accounts message send-direct <accountId> --contactInboxId <id> --commandId <stable-id> --text <text>
 chatbotx zalo-accounts send-attempt get <accountId> <commandId> --groupId <groupId>
+chatbotx zalo-accounts send-attempt list <accountId> <messageId> --messageCreatedAt <exact-createdAt>
 chatbotx zalo-accounts message-state list <accountId> --groupId <groupId> --providerMessageIds <id>
 chatbotx zalo-accounts typing add <accountId> --groupId <groupId> --commandId <stable-id>
 chatbotx zalo-accounts tags list <accountId> <groupId>
@@ -1687,6 +1694,39 @@ chatbotx zalo-accounts tags update <accountId> <groupId> --commandId <stable-id>
 chatbotx zalo-account-set-group-messaging <accountId> --enabled <true|false>
 chatbotx zalo-account-update-group-policy <accountId> <groupId> --receiveEnabled <true|false> --sendEnabled <true|false> --automationMode <disabled|mentionOnly|all>
 ```
+
+Archived message-media reads require the `inbox` scope and current conversation
+access; `channels` alone cannot read message content. For account/group/contact
+or sticker resources, omit `--conversationId` and pass `--ownerKind` plus
+`--ownerId`; this requires `channels` management access. Contact owner IDs are
+the provider UID from a current ContactInbox, not a CRM contact ID. Downloads return a five-minute URL
+only while the parent message exists and is not deleted. Backfill and reconcile
+also require `channels`; backfill reads persisted messages in a window of at most
+31 days and returns a timestamp cursor, while reconcile is always dry-run with
+independent database/object cursors. Neither operation fetches provider history
+or deletes objects. Stored reads continue when capture is disabled. These six
+commands are generated from `zaloAccounts.listMedia`, `getMedia`,
+`authorizeMediaDownload`, `retryMedia`, `backfillMedia` and `reconcileMedia`.
+Retained-message operations use the existing dynamic spec. Supply `--createdAt`
+from `messages list` for exact message routing, and a stable `--commandId` for
+native mutations:
+
+```bash
+chatbotx zalo-accounts capabilities list <accountId> <conversationId> <messageId> --createdAt <iso>
+chatbotx zalo-accounts saved-content list <accountId> <conversationId> <messageId> --createdAt <iso>
+chatbotx zalo-accounts attachment get <accountId> <conversationId> <messageId> <attachmentId> --createdAt <iso>
+chatbotx zalo-accounts hide-locally add <accountId> <conversationId> <messageId> --createdAt <iso> --commandId <stable-id>
+chatbotx zalo-accounts recall add <accountId> <conversationId> <messageId> --createdAt <iso> --commandId <stable-id>
+chatbotx zalo-accounts message delete-on-zalo <accountId> <conversationId> <messageId> --createdAt <iso> --commandId <stable-id>
+chatbotx zalo-accounts conversation delete-on-zalo <accountId> <conversationId> --boundaryMessageId <id> --boundaryCreatedAt <iso> --commandId <stable-id>
+chatbotx zalo-accounts message-operation get <accountId> <conversationId> <attemptId>
+```
+
+The two delete commands have explicit naming overrides to avoid a shared derived
+command name. Saved attachments only return already stored object URLs. Native
+dispatch is default-off pending provider proof; inspect `unknown` attempts rather
+than resending. All provider deletions retain local history. These operations
+remain discoverable MCP tools rather than expanding the default tool payload.
 
 Both the account group switch and group receive/send default off. Enabling
 receive or send provisions one group conversation; send-only still rejects
@@ -1697,7 +1737,12 @@ credentials and phone-number discovery are not exposed. Replies use
 
 Reuse a `commandId` only with identical input. Sends persist a canonical Message
 before dispatch. Inspect the send-attempt endpoint after a timeout; pending and
-unknown outcomes must not be automatically resent. Friend sync follows the
+unknown outcomes must not be automatically resent. The `send-attempt list` command
+reads one canonical Message outcome using its ID and exact creation time from
+`messages list`; it does not send or replay a command. Both inspection methods
+return safe optional reconciliation and error metadata. `needs_review` requires
+inspection, and an applied send with pending local reconciliation is already sent.
+Friend sync follows the
 returned `nextCursor` with a new command ID per page and creates no MAC/activity.
 The generated MCP equivalents include `zalo_account_set_group_messaging` and
 `zalo_account_update_group_policy`; Zalo operations remain discoverable through

@@ -1,6 +1,7 @@
 import type {
   ZaloAccountLabel,
   ZaloAccountLabelSnapshot,
+  ZaloAccountNativeOperation,
   ZaloAccountOutboundMessage,
   ZaloAccountRuntimeRef,
 } from "@chatbotx.io/sdk"
@@ -19,6 +20,11 @@ import { LocalAuthCapacityError } from "./ports"
 import { ZaloAccountRuntime } from "./zalo-account-runtime"
 
 type PoolOptions = RuntimeOwnershipHooks & {
+  messageIntegrityEnabled?: boolean
+  admitDirectSend?: (input: {
+    workspaceId: string
+    accountId: string
+  }) => Promise<void>
   clientFactory: ZcaClientFactory
   eventSink: RuntimeEventSink
   lease: AccountLeasePort
@@ -142,6 +148,15 @@ export class ZaloAccountPool {
     }
   }
 
+  isMessageReady(): boolean {
+    for (const runtime of this.runtimes.values()) {
+      if (!runtime.snapshot().messageReady) {
+        return false
+      }
+    }
+    return true
+  }
+
   async sendDirect(
     command: RuntimeCommand & { message: ZaloAccountOutboundMessage },
   ): Promise<RuntimeSendResult> {
@@ -151,13 +166,28 @@ export class ZaloAccountPool {
     const key = keyOf(command.runtime)
     return await this.withKeyOperation(key, async () => {
       this.assertRunning()
+      if (
+        command.deadlineAt !== undefined &&
+        command.deadlineAt <= Date.now()
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account command deadline expired",
+        )
+      }
       const runtime = this.runtimes.get(key)
       if (!runtime) {
         throw new ZaloAccountPreDispatchError(
           "Zalo Account runtime is not owned by this gateway",
         )
       }
-      const result = await runtime.sendDirect(command.message)
+      const result = await runtime.sendDirect(
+        command.message,
+        () =>
+          this.options.admitDirectSend?.({
+            workspaceId: command.workspaceId,
+            accountId: command.runtime.id,
+          }) ?? Promise.resolve(),
+      )
       if (command.commandId?.startsWith("zalo-send-")) {
         await this.options.onGroupSendResult?.({
           workspaceId: command.workspaceId,
@@ -178,6 +208,14 @@ export class ZaloAccountPool {
     const key = keyOf(command.runtime)
     return await this.withKeyOperation(key, async () => {
       this.assertRunning()
+      if (
+        command.deadlineAt !== undefined &&
+        command.deadlineAt <= Date.now()
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account command deadline expired",
+        )
+      }
       const runtime = this.runtimes.get(key)
       if (!runtime) {
         throw new ZaloAccountPreDispatchError(
@@ -195,6 +233,14 @@ export class ZaloAccountPool {
     const key = keyOf(command.runtime)
     return await this.withKeyOperation(key, async () => {
       this.assertRunning()
+      if (
+        command.deadlineAt !== undefined &&
+        command.deadlineAt <= Date.now()
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account command deadline expired",
+        )
+      }
       const runtime = this.runtimes.get(key)
       if (!runtime) {
         throw new ZaloAccountPreDispatchError(
@@ -219,6 +265,14 @@ export class ZaloAccountPool {
     const key = keyOf(command.runtime)
     return await this.withKeyOperation(key, async () => {
       this.assertRunning()
+      if (
+        command.deadlineAt !== undefined &&
+        command.deadlineAt <= Date.now()
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account command deadline expired",
+        )
+      }
       const runtime = this.runtimes.get(key)
       if (!runtime) {
         throw new ZaloAccountPreDispatchError(
@@ -245,11 +299,45 @@ export class ZaloAccountPool {
     })
   }
 
+  async getStickerResources(
+    command: RuntimeCommand & { stickerIds: string[] },
+  ) {
+    return await this.withAccountRuntime(command, (runtime) =>
+      runtime.getStickerResources(command.stickerIds),
+    )
+  }
+
   async getLabels(command: RuntimeCommand): Promise<ZaloAccountLabelSnapshot> {
     return await this.withAccountRuntime(command, (runtime) =>
       runtime.getLabels(),
     )
   }
+  async nativeOperation(
+    command: RuntimeCommand & {
+      nativeOperation: ZaloAccountNativeOperation
+      beforeDispatch: () => Promise<boolean>
+    },
+  ): Promise<{ status: number } | null> {
+    return await this.withAccountRuntime(command, async (runtime) => {
+      const input = command.nativeOperation
+      if (input.threadType === "group") {
+        await this.options.admitGroupSend?.({
+          workspaceId: command.workspaceId,
+          accountId: command.runtime.id,
+          inboxId: command.inboxId ?? "",
+          providerGroupId: input.threadId,
+          accountPolicyEpoch: input.accountPolicyEpoch ?? -1,
+          groupPolicyEpoch: input.groupPolicyEpoch ?? -1,
+          consumeCapacity: false,
+        })
+      }
+      if (!(await command.beforeDispatch())) {
+        return null
+      }
+      return await runtime.nativeOperation(input)
+    })
+  }
+
   async sendTyping(
     command: RuntimeCommand & {
       threadId: string
@@ -381,6 +469,14 @@ export class ZaloAccountPool {
     const key = keyOf(command.runtime)
     return await this.withKeyOperation(key, async () => {
       this.assertRunning()
+      if (
+        command.deadlineAt !== undefined &&
+        command.deadlineAt <= Date.now()
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account command deadline expired",
+        )
+      }
       const runtime = this.runtimes.get(key)
       if (!runtime) {
         throw new ZaloAccountPreDispatchError(
@@ -396,6 +492,7 @@ export class ZaloAccountPool {
     const epoch = (this.epochs.get(key) ?? 0) + 1
     this.epochs.set(key, epoch)
     return new ZaloAccountRuntime({
+      messageIntegrityEnabled: this.options.messageIntegrityEnabled,
       qrDeadlineAt: command.deadlineAt ?? Date.now() + 300_000,
       initialDeadlineAt: command.deadlineAt,
       loginTimeoutMs: 30_000,

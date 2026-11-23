@@ -13,7 +13,7 @@ vi.mock("../src/repositories/workspace", () => ({
 import { zaloAccountMessageStateRepository } from "../src/repositories/integration-zalo-account/message-state-repository"
 import { integrationZaloAccountModel } from "../src/schema"
 
-it("reads the undo tombstone after serializing against an in-flight undo, before writing a receipt", async () => {
+it("retains late receipts after serializing against recall without resurrecting message content", async () => {
   let undoVisible = false
   const chain = {
     values: vi.fn().mockReturnThis(),
@@ -68,6 +68,6 @@ it("reads the undo tombstone after serializing against an in-flight undo, before
       timestampSource: "provider",
     },
   })
-  expect(result).toBe(false)
-  expect(tx.insert).not.toHaveBeenCalled()
+  expect(result).toBe(true)
+  expect(tx.insert).toHaveBeenCalledTimes(1)
 })

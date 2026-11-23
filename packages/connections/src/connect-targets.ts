@@ -128,7 +128,16 @@ const connectCandidate = async (input: {
   const { adapter } = input
   const { provider } = adapter
   const auth = input.candidate.auth
-  const descriptor = provider.describe(auth)
+  const described = provider.describe(auth)
+  const descriptor =
+    input.provider === "zaloAccount" &&
+    described.sourceId === input.candidate.sourceId
+      ? {
+          ...described,
+          displayName: input.candidate.displayName,
+          avatarUrl: input.candidate.avatarUrl,
+        }
+      : described
   const extraConfig = provider.candidateToConfig?.(auth) ?? {}
 
   const existing = await connectionRepository.findByProviderSourceId({
@@ -141,18 +150,27 @@ const connectCandidate = async (input: {
   }
 
   try {
-    return await connectAndPersist({
+    const connected = await connectAndPersist({
       adapter,
       provider: input.provider,
       workspaceId: input.workspaceId,
       auth,
       descriptor,
+      ...(input.provider === "zaloAccount"
+        ? {
+            zaloAccountProfile: {
+              displayName: descriptor.displayName,
+              avatarUrl: descriptor.avatarUrl,
+            },
+          }
+        : {}),
       extraConfig,
       existing,
       ownerId: input.ownerId,
       actorUserId: input.actorUserId,
       missingOwnerError: notFoundException("Workspace owner not found"),
     })
+    return connected
   } catch (err) {
     // `upsertConnectionRow` already converts its own `Connection` unique
     // violation into `connectionAlreadyConnectedException`. Any raw unique

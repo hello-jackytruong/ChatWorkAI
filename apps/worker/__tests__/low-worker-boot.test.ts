@@ -19,6 +19,8 @@ type CapturedWorker = {
 
 const workerState = vi.hoisted(() => ({
   capturedWorkers: [] as CapturedWorker[],
+  globalConcurrency: vi.fn(async () => undefined),
+  transferMedia: vi.fn(async () => undefined),
   ensureBootstrapped: vi.fn(async () => undefined),
   coexistAttachmentDownload: vi.fn(async () => undefined),
   updateContactAvatar: vi.fn(async () => undefined),
@@ -76,15 +78,24 @@ vi.mock("@chatbotx.io/worker-config", () => ({
   queueNames: {
     enum: {
       low: "low",
+      zaloAccountMedia: "zaloAccountMedia",
       profileSnapshot: "profileSnapshot",
       leaderboard: "leaderboard",
       contactInfoCapture: "contactInfoCapture",
     },
   },
+  zaloAccountMediaQueue: {
+    setGlobalConcurrency: workerState.globalConcurrency,
+  },
   closeAllQueueEvents: vi.fn(async () => undefined),
   defaultWorkerOptions: { concurrency: 5, removeOnComplete: { count: 1000 } },
   getRedisConnection: vi.fn(() => ({})),
   getQueueConnection: vi.fn(() => ({})),
+}))
+
+vi.mock("../src/zalo-account-media/handler", () => ({
+  transferZaloAccountMedia: workerState.transferMedia,
+  abortZaloAccountMediaTransfers: vi.fn(),
 }))
 
 vi.mock("../src/leaderboard/process-job", () => ({
@@ -172,8 +183,9 @@ vi.mock("../src/integration/handlers/received-message", () => ({
 // Importing the worker module boots it exactly once (ESM module cache).
 await import("../src/low/worker")
 await vi.waitFor(() => {
-  expect(workerState.capturedWorkers).toHaveLength(4)
+  expect(workerState.capturedWorkers).toHaveLength(5)
 })
+expect(workerState.globalConcurrency).toHaveBeenCalledWith(1)
 
 describe("low worker process boot", () => {
   beforeEach(() => {
@@ -197,7 +209,9 @@ describe("low worker process boot", () => {
   })
 
   test("boots the low Worker at the env-tunable concurrency plus the dedicated profileSnapshot and leaderboard Workers", () => {
-    expect(workerState.capturedWorkers).toHaveLength(4)
+    expect(workerState.capturedWorkers).toHaveLength(5)
+    expect(workerState.capturedWorkers[4]?.queueName).toBe("zaloAccountMedia")
+    expect(workerState.capturedWorkers[4]?.options.concurrency).toBe(1)
     expect(workerState.capturedWorkers[0]?.queueName).toBe("low")
     expect(workerState.capturedWorkers[0]?.options.concurrency).toBe(30)
     expect(workerState.capturedWorkers[1]?.queueName).toBe("profileSnapshot")
@@ -294,7 +308,7 @@ describe("low worker process boot", () => {
     await vi.waitFor(() => {
       expect(exit).toHaveBeenCalledWith(0)
     })
-    expect(workerState.workerClose).toHaveBeenCalledTimes(4)
+    expect(workerState.workerClose).toHaveBeenCalledTimes(5)
     exit.mockRestore()
   })
 

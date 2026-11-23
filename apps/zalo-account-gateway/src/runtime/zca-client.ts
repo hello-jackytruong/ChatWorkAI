@@ -2,6 +2,7 @@ import {
   type ZaloAccountAttachment,
   type ZaloAccountAuth,
   type ZaloAccountGroup,
+  type ZaloAccountNativeOperation,
   type ZaloAccountOutboundMessage,
   ZaloAccountPreDispatchError,
   zaloAccountAuthSchema,
@@ -27,6 +28,7 @@ import {
   normalizeProviderMessage,
 } from "./provider-message"
 import { normalizeProviderThreadEvent } from "./provider-thread-event"
+import { createStickerResourceReader } from "./sticker-resource"
 
 const normalizeQrImage = (image: string) =>
   image.startsWith("data:image/") ? image : `data:image/png;base64,${image}`
@@ -34,11 +36,14 @@ const normalizeQrImage = (image: string) =>
 const prepareOutboundAttachment = async (attachment: ZaloAccountAttachment) => {
   try {
     return await downloadOutboundAttachment(attachment)
-  } catch (error) {
+  } catch {
     throw new ZaloAccountPreDispatchError(
-      error instanceof Error
-        ? error.message
-        : "Zalo Account attachment preparation failed",
+      "Zalo Account attachment preparation failed before sending",
+      {
+        code: "preparation_failed",
+        phase: "preparation",
+        safeAction: "new_attempt",
+      },
     )
   }
 }
@@ -63,6 +68,51 @@ const quoteOf = (quote: ZaloAccountOutboundMessage["quote"]) =>
         ttl: 0,
       }
     : undefined
+
+type NativeSdkPort = Pick<
+  Awaited<ReturnType<Zalo["login"]>>,
+  "undo" | "deleteMessage" | "deleteChat"
+>
+
+export const invokeNativeOperation = async (
+  api: NativeSdkPort,
+  input: ZaloAccountNativeOperation,
+) => {
+  const type = input.threadType === "group" ? ThreadType.Group : ThreadType.User
+  if (input.operation === "undo") {
+    return await api.undo(
+      {
+        msgId: input.providerMessageId,
+        cliMsgId: input.providerClientMessageId,
+      },
+      input.threadId,
+      type,
+    )
+  }
+  if (input.operation === "deleteMessage") {
+    return await api.deleteMessage(
+      {
+        data: {
+          msgId: input.providerMessageId,
+          cliMsgId: input.providerClientMessageId,
+          uidFrom: input.providerOwnerId,
+        },
+        threadId: input.threadId,
+        type,
+      },
+      true,
+    )
+  }
+  return await api.deleteChat(
+    {
+      ownerId: input.providerOwnerId,
+      cliMsgId: input.providerClientMessageId,
+      globalMsgId: input.providerMessageId,
+    },
+    input.threadId,
+    type,
+  )
+}
 
 const safeCloseReason = (code: number) => {
   if (code === 3000) {
@@ -92,6 +142,10 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
   // Keep the close observer until the SDK confirms the network close.
   api.listener.on("closed", onClosed)
   return {
+    nativeOperation: (input) => invokeNativeOperation(api, input),
+    getStickerResources: createStickerResourceReader((ids) =>
+      api.getStickersDetail(ids),
+    ),
     sendTyping: async (threadId, threadType) => {
       await api.sendTypingEvent(
         threadId,
@@ -164,17 +218,24 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
           )
           api.listener.on("error", () => handlers.onError?.("unknown"))
           api.listener.on("message", (message) => {
-            const normalized = normalizeProviderMessage(message)
-            if (normalized.kind === "direct") {
-              handlers.onDirectMessage(normalized.message)
-            } else if (normalized.kind === "group") {
-              handlers.onGroupMessage(normalized)
-            } else {
-              const activity = normalizeProviderGroupActivity(message)
-              if (activity) {
-                handlers.onGroupMessage(activity)
+            try {
+              const normalized = normalizeProviderMessage(message, {
+                ownUid: handlers.ownUid,
+                messageIntegrityEnabled: handlers.messageIntegrityEnabled,
+              })
+              if (normalized.kind === "direct") {
+                handlers.onDirectMessage(normalized.message)
+              } else if (normalized.kind === "group") {
+                handlers.onGroupMessage(normalized)
+              } else {
+                const activity = normalizeProviderGroupActivity(message)
+                if (activity) {
+                  handlers.onGroupMessage(activity)
+                }
+                handlers.onUnsupported(normalized.reason)
               }
-              handlers.onUnsupported(normalized.reason)
+            } catch {
+              handlers.onUnsupported("invalid_fields")
             }
           })
           api.listener.on("seen_messages", (messages) => {
@@ -280,13 +341,14 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
         stop: () => api.listener.stop(),
       }
     },
-    sendDirect: async (message) => {
+    sendDirect: async (message, beforeDispatch) => {
       const attachments: Awaited<
         ReturnType<typeof downloadOutboundAttachment>
       >[] = []
       for (const attachment of message.attachments) {
         attachments.push(await prepareOutboundAttachment(attachment))
       }
+      await beforeDispatch?.()
       const result = await api.sendMessage(
         {
           msg: message.text ?? "",

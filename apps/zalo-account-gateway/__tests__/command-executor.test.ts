@@ -28,6 +28,7 @@ const reconnectCommand: ZaloAccountCommandEnvelope = {
 
 const makeHarness = (admission?: ProviderAdmissionPort) => {
   const pool = {
+    getStickerResources: vi.fn(async () => []),
     getLabels: vi.fn(
       async (): Promise<ZaloAccountLabelSnapshot> => ({
         labelData: [],
@@ -115,7 +116,10 @@ describe("ZaloAccountCommandExecutor", () => {
         target: { ownerId: "owner-1", fenceToken: "7" },
         message: { recipientId: "g1", text: "hello", attachments: [] },
       }),
-    ).resolves.toEqual({ status: "failed", error: "Group policy changed" })
+    ).resolves.toMatchObject({
+      status: "failed",
+      errorInfo: { code: "pre_dispatch_failed" },
+    })
     expect(pool.sendGroup).toHaveBeenCalledWith(
       expect.objectContaining({ accountPolicyEpoch: 1, groupPolicyEpoch: 2 }),
     )
@@ -219,7 +223,7 @@ describe("ZaloAccountCommandExecutor", () => {
     }
     const { executor, pool } = makeHarness(admission)
 
-    await expect(executor.execute(reconnectCommand)).resolves.toEqual({
+    await expect(executor.execute(reconnectCommand)).resolves.toMatchObject({
       status: "failed",
       error: "Zalo Account provider admission is paused; retry after 15000ms",
     })
@@ -392,4 +396,67 @@ describe("ZaloAccountCommandExecutor", () => {
       expect.objectContaining({ expectedVersion: 4, labelData: [label] }),
     )
   })
+})
+
+it("dispatches bounded sticker reads through the owned account runtime", async () => {
+  const { executor, pool } = makeHarness()
+  const command = {
+    ...reconnectCommand,
+    kind: "get_sticker_resources",
+    stickerIds: ["123"],
+    target: { ownerId: "owner-1", epoch: 1, fenceToken: "1" },
+  }
+  expect(await executor.execute(command)).toEqual({
+    status: "applied",
+    result: { status: "synced", stickerResources: [] },
+  })
+  expect(pool.getStickerResources).toHaveBeenCalledWith(
+    expect.objectContaining({
+      workspaceId: "workspace-1",
+      runtime: { kind: "account", id: "account-1" },
+      stickerIds: ["123"],
+    }),
+  )
+})
+
+it("retries pure reads once within the same claim and rechecks ownership", async () => {
+  const { executor, pool, ownsTarget } = makeHarness()
+  pool.listGroups.mockRejectedValueOnce(new Error("network secret"))
+  const command = {
+    ...reconnectCommand,
+    kind: "sync_groups",
+    target: { ownerId: "owner-1", fenceToken: "1" },
+  }
+  expect(await executor.execute(command)).toMatchObject({ status: "applied" })
+  expect(pool.listGroups).toHaveBeenCalledTimes(2)
+  expect(ownsTarget).toHaveBeenCalledTimes(2)
+})
+it("keeps stop available while provider admission is paused", async () => {
+  const { executor, pool } = makeHarness({
+    check: () => 15_000,
+    recordFailure: vi.fn(),
+    recordSuccess: vi.fn(),
+  })
+  expect(
+    await executor.execute({
+      ...reconnectCommand,
+      kind: "stop",
+      target: { ownerId: "owner-1", fenceToken: "1" },
+    }),
+  ).toMatchObject({ status: "applied" })
+  expect(pool.stop).toHaveBeenCalledOnce()
+})
+
+it("retries sticker resource reads within the bounded read policy", async () => {
+  const { executor, pool } = makeHarness()
+  pool.getStickerResources.mockRejectedValueOnce(new Error("network"))
+  expect(
+    await executor.execute({
+      ...reconnectCommand,
+      kind: "get_sticker_resources",
+      stickerIds: ["123"],
+      target: { ownerId: "owner-1", fenceToken: "1" },
+    }),
+  ).toMatchObject({ status: "applied" })
+  expect(pool.getStickerResources).toHaveBeenCalledTimes(2)
 })

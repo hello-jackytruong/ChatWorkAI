@@ -209,6 +209,28 @@ describe("ChatRealtime — chat event parity", () => {
     })
   })
 
+  test("media readiness forwards its exact attachment identity without replacing other attachments", async () => {
+    await render()
+    act(() =>
+      emit("messageUpdated", {
+        messageId: "m1",
+        newText: "",
+        attachmentId: "a1",
+        newAttachmentPublicUrl: "signed",
+        newAttachmentSize: 30,
+      }),
+    )
+    expect(chatStoreState.updateMessageText).toHaveBeenCalledWith(
+      "m1",
+      "",
+      expect.objectContaining({
+        attachmentId: "a1",
+        newAttachmentPublicUrl: "signed",
+        newAttachmentSize: 30,
+      }),
+    )
+  })
+
   test("messageUpdated updates the message text/attachment fields", async () => {
     await render()
     act(() =>

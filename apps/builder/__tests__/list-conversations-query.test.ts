@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => {
     assertCurrentUserCanAccessChatbot: vi.fn().mockResolvedValue(undefined),
     buildConversationWhere: vi.fn().mockReturnValue({}),
     createMessageRepository: vi.fn().mockResolvedValue(repo),
+    zaloAvatars: vi.fn().mockResolvedValue(new Map()),
     findManyQuery: vi.fn().mockResolvedValue([]),
     findWithFullRelations: vi.fn().mockResolvedValue(null),
     // Identity mock: resolveLastMessageSinceTime's output becomes exactly the
@@ -34,6 +35,9 @@ const mocks = vi.hoisted(() => {
   }
 })
 
+vi.mock("@/features/contacts/queries/resolve-contact-avatars", () => ({
+  resolveZaloContactAvatarMap: mocks.zaloAvatars,
+}))
 vi.mock("@chatbotx.io/business", () => ({
   conversationService: {
     findManyQuery: mocks.findManyQuery,
@@ -335,3 +339,30 @@ describe("listConversations / findConversation attachment count", () => {
     expect(result.data[0]?.contact?.avatar).toBeNull()
   })
 })
+
+test("batch projects Zalo avatars before building both conversation representations", async () => {
+  mocks.zaloAvatars.mockResolvedValue(
+    new Map([["contact-z", "https://signed.test/avatar"]]),
+  )
+  mocks.findManyQuery.mockResolvedValue([
+    {
+      id: "conv-z",
+      contactId: "contact-z",
+      contact: { id: "contact-z", avatar: null },
+      contactInboxes: [],
+      lastActivityAt: null,
+    },
+  ])
+  const result = await listConversations(
+    { workspaceId: "w", perPage: 20 } as never,
+    { includeEmailAndPhone: true },
+  )
+  expect(result.data[0]?.contact?.avatar).toBe("https://signed.test/avatar")
+  expect(mocks.zaloAvatars).toHaveBeenCalledTimes(1)
+})
+vi.mock("@chatbotx.io/business/zalo-account/message-recall", () => ({
+  zaloAccountMessageRecallService: {
+    projectMessagesForRead: async ({ messages }: { messages: unknown[] }) =>
+      messages,
+  },
+}))

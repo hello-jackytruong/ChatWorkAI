@@ -1,11 +1,14 @@
 import { cacheConnections, type Redis } from "@chatbotx.io/redis"
 import {
+  getZaloAccountErrorInfo,
+  getZaloAccountErrorMessage,
   parseZaloAccountCommandEnvelope,
   type ZaloAccountCommandEnvelope,
   type ZaloAccountCommandResult,
   type ZaloAccountGroup,
   type ZaloAccountLabel,
   type ZaloAccountLabelSnapshot,
+  type ZaloAccountNativeOperation,
   type ZaloAccountOutboundMessage,
   ZaloAccountPreDispatchError,
   zaloAccountCommandResultSchema,
@@ -85,6 +88,48 @@ export class ZaloAccountCommandTransport {
     this.redis = redis
     this.now = options.now ?? (() => new Date())
   }
+  async nativeOperationAndWait(
+    input: AccountCommandInput & {
+      nativeOperation: ZaloAccountNativeOperation
+      waitTimeoutMs: number
+    },
+  ): Promise<ZaloAccountCommandResult> {
+    const lease = await this.requireLease(input)
+    const createdAt = this.now()
+    const command = parseZaloAccountCommandEnvelope({
+      version: 1,
+      commandId: input.commandId,
+      kind: "native_operation",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      nativeOperation: input.nativeOperation,
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const deadline = Date.now() + input.waitTimeoutMs
+    while (Date.now() < deadline) {
+      const result = await this.redis.get(
+        zaloAccountTransportKeys.commandResult(input.commandId),
+      )
+      if (result) {
+        return zaloAccountCommandResultSchema.parse(
+          JSON.parse(result) as unknown,
+        )
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    return { status: "unknown" }
+  }
+
   async sendTyping(
     input: AccountCommandInput & {
       threadType: "user" | "group"
@@ -416,6 +461,38 @@ export class ZaloAccountCommandTransport {
     return { messageIds, sentCount }
   }
 
+  async getStickerResourcesAndWait(
+    input: AccountCommandInput & {
+      stickerIds: string[]
+      waitTimeoutMs: number
+    },
+  ) {
+    const lease = await this.requireLease(input)
+    const command = this.command({
+      commandId: input.commandId,
+      kind: "get_sticker_resources",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      ttlMs: input.ttlMs,
+      stickerIds: input.stickerIds.slice(0, 20),
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const result = await this.waitForResult(
+      input.commandId,
+      input.waitTimeoutMs,
+      "sticker detail",
+    )
+    return result.result.stickerResources ?? []
+  }
+
   async getLabelsAndWait(
     input: AccountCommandInput & { waitTimeoutMs: number },
   ): Promise<ZaloAccountLabelSnapshot> {
@@ -492,6 +569,7 @@ export class ZaloAccountCommandTransport {
 
   private command(input: {
     cursor?: number
+    stickerIds?: string[]
     threadType?: "user" | "group"
     threadId?: string
     operationToken?: string
@@ -517,6 +595,7 @@ export class ZaloAccountCommandTransport {
       expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
       ...(input.target ? { target: input.target } : {}),
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(input.stickerIds ? { stickerIds: input.stickerIds } : {}),
       ...(input.operationToken ? { operationToken: input.operationToken } : {}),
       ...(input.groupId ? { groupId: input.groupId } : {}),
       ...(input.threadId
@@ -574,10 +653,17 @@ export class ZaloAccountCommandTransport {
             `Zalo Account ${operation} outcome is unknown; do not retry automatically`,
           )
         }
+        const errorInfo =
+          result.status === "failed" && result.errorInfo
+            ? result.errorInfo
+            : getZaloAccountErrorInfo(
+                new ZaloAccountPreDispatchError(
+                  "Zalo Account request rejected",
+                ),
+              )
         throw new ZaloAccountPreDispatchError(
-          result.status === "failed"
-            ? `Zalo Account ${operation} failed: ${result.error}`
-            : `Zalo Account runtime ${operation} was not confirmed: ${result.status}`,
+          getZaloAccountErrorMessage(errorInfo),
+          errorInfo,
         )
       }
       await new Promise((resolve) => setTimeout(resolve, 50))
@@ -628,6 +714,16 @@ const withTransport = async <T>(
 }
 
 export const zaloAccountCommandTransportService = {
+  getStickerResourcesAndWait: (
+    input: Parameters<
+      ZaloAccountCommandTransport["getStickerResourcesAndWait"]
+    >[0],
+  ) =>
+    withTransport((transport) => transport.getStickerResourcesAndWait(input)),
+  nativeOperationAndWait: (
+    input: Parameters<ZaloAccountCommandTransport["nativeOperationAndWait"]>[0],
+  ) => withTransport((transport) => transport.nativeOperationAndWait(input)),
+
   sendTyping: (
     input: Parameters<ZaloAccountCommandTransport["sendTyping"]>[0],
   ) => withTransport((transport) => transport.sendTyping(input)),

@@ -7,6 +7,7 @@ const PRIVATE_STATUS_FIELDS_PATTERN =
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  captureResource: vi.fn(),
   decryptObject: vi.fn(),
   encryptObject: vi.fn(),
   findByInboxIdForWorkspace: vi.fn(),
@@ -18,6 +19,10 @@ const mocks = vi.hoisted(() => ({
   connection: vi.fn(),
   lease: vi.fn(),
   mget: vi.fn(),
+}))
+
+vi.mock("../src/zalo-account-media/resource-capture", () => ({
+  captureZaloAccountResourceMedia: mocks.captureResource,
 }))
 
 vi.mock("@chatbotx.io/encryption", async (importOriginal) => ({
@@ -543,14 +548,41 @@ describe("Zalo Account authorization", () => {
       sessionVerifiedAt: row.sessionVerifiedAt,
     })
 
-    expect(mocks.updateAuthorizationAndProfile).toHaveBeenCalledWith({
+    expect(mocks.updateAuthorizationAndProfile).toHaveBeenCalledWith(
+      {
+        workspaceId: "workspace-1",
+        inboxId: "inbox-1",
+        encryptedAuth,
+        name: "Renamed",
+        avatarUrl: "https://example.com/avatar.jpg",
+        sessionVerifiedAt: row.sessionVerifiedAt,
+      },
+      undefined,
+    )
+  })
+
+  it("keeps trusted profile and media intents inside the connection commit transaction", async () => {
+    const tx = { transactionMarker: true } as never
+    await zaloAccountService.saveAuthorization({
       workspaceId: "workspace-1",
       inboxId: "inbox-1",
-      encryptedAuth,
-      name: "Renamed",
-      avatarUrl: "https://example.com/avatar.jpg",
+      auth,
+      name: "Jacky",
+      avatarUrl: "https://a.zdn.vn/avatar",
       sessionVerifiedAt: row.sessionVerifiedAt,
+      tx,
     })
+    expect(mocks.findByInboxIdForWorkspace).toHaveBeenLastCalledWith(
+      expect.objectContaining({ inboxId: "inbox-1" }),
+      tx,
+    )
+    expect(mocks.updateAuthorizationAndProfile).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "Jacky" }),
+      tx,
+    )
+    expect(mocks.captureResource).toHaveBeenCalledWith(
+      expect.objectContaining({ tx, accountId: "account-1" }),
+    )
   })
 
   it("rejects refreshed authorization for a different Zalo identity", async () => {

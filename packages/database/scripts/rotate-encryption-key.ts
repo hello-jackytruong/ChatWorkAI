@@ -17,6 +17,7 @@
  *   4. Run this script (--dry-run first to see row counts)
  *   5. Once complete, remove ENCRYPTION_KEY_PREV from env
  */
+
 import { encryptUtils } from "@chatbotx.io/encryption"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
@@ -33,6 +34,7 @@ import {
   type ConnectionAuthorizationCrypto,
   rotateConnectionAuthorizations,
 } from "./rotate-connection-authorizations"
+import { rotateZaloAccountMediaSources } from "./rotate-zalo-account-media-sources"
 
 const isDryRun = process.argv.includes("--dry-run")
 const activeKid = process.env.ENCRYPTION_KEY_ID ?? "default"
@@ -70,6 +72,14 @@ const main = async (): Promise<void> => {
     })
     console.log(
       `Found ${authorizations.toRotate} connection authorization entries across ${authorizations.scanned} users to rotate.`,
+    )
+    const media = await rotateZaloAccountMediaSources({
+      activeKid,
+      dryRun: true,
+      crypto: authorizationCrypto,
+    })
+    console.log(
+      `Zalo media locators: ${media.toRotate} of ${media.scanned} rows require rotation.`,
     )
     console.log("Dry run — no changes written.")
     return
@@ -115,7 +125,15 @@ const main = async (): Promise<void> => {
   console.log(
     `Connection authorizations: ${authorizations.rotated} rotated, ${authorizations.skippedChanged} changed meanwhile, ${authorizations.errors} errors.`,
   )
-  if (errors > 0 || authorizations.errors > 0) {
+  const media = await rotateZaloAccountMediaSources({
+    activeKid,
+    dryRun: false,
+    crypto: authorizationCrypto,
+  })
+  console.log(
+    `Zalo media locators: ${media.rotated} rotated, ${media.skippedChanged} changed meanwhile, ${media.errors} errors.`,
+  )
+  if (errors > 0 || authorizations.errors > 0 || media.errors > 0) {
     process.exit(1)
   }
 }

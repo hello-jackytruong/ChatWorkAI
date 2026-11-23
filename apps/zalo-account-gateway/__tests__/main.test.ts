@@ -15,10 +15,14 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock("../src/env", () => ({ resolveGatewayEnv: () => mocks.env }))
 vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  takeDirectSendCapacity: vi.fn(),
   zaloAccountGroupService: {},
   zaloAccountLabelService: {},
   zaloAccountSendAttemptService: {},
   zaloAccountService: { listActiveRuntimeAccounts: mocks.list },
+}))
+vi.mock("@chatbotx.io/business/zalo-account/native-operations", () => ({
+  zaloAccountMessageOperationsService: {},
 }))
 vi.mock("@chatbotx.io/business/zalo-account/runtime-state", () => ({
   zaloAccountRuntimeStateService: {},
@@ -37,6 +41,7 @@ vi.mock("../src/runtime/zalo-account-pool", () => ({
   ZaloAccountPool: class {
     reconnect = mocks.reconnect
     shutdown = mocks.shutdown
+    isMessageReady = () => true
   },
 }))
 vi.mock("../src/runtime/zca-client", () => ({

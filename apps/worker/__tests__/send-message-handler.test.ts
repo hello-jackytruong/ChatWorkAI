@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
+const mockReconcileZalo = vi.hoisted(() => vi.fn().mockResolvedValue(true))
+vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
+  zaloAccountCanonicalSendService: { reconcileMessage: mockReconcileZalo },
+}))
+
 const mockValidateGroupAudience = vi.hoisted(() =>
   vi.fn().mockResolvedValue(true),
 )
@@ -304,7 +309,10 @@ describe("chat send-message handlers", () => {
         }),
       }),
     )
-    expect(mockReconcileOutgoingSourceId).toHaveBeenCalled()
+    expect(mockReconcileZalo).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "ws-1", messageId: "msg-1" }),
+    )
+    expect(mockReconcileOutgoingSourceId).not.toHaveBeenCalled()
     expect(mockRecordOutboundMessageSent).not.toHaveBeenCalled()
     expect(mockRecordDelivered).not.toHaveBeenCalled()
     expect(mockContactUnblockIfBlocked).not.toHaveBeenCalled()
@@ -369,6 +377,45 @@ describe("chat send-message handlers", () => {
     expect(mockUpdateSendError).toHaveBeenCalled()
     expect(mockHardDelete).not.toHaveBeenCalled()
     expect(mockEmit).not.toHaveBeenCalled()
+  })
+
+  test("a local Zalo reconciliation failure never replays an accepted send", async () => {
+    mockReconcileZalo.mockRejectedValueOnce(
+      new Error("local database unavailable"),
+    )
+    await expect(
+      sendMessageToChannel({
+        conversation: conversation as never,
+        contactInbox: {
+          ...contactInbox,
+          channel: "zaloAccount",
+          inboxId: "inbox",
+        } as never,
+        message: { id: "msg-1", createdAt: new Date(), text: "hello" } as never,
+      }),
+    ).resolves.toMatchObject({ sentCount: 1 })
+    expect(mockRunChannelHandler).toHaveBeenCalledTimes(1)
+    expect(mockReconcileOutgoingSourceId).not.toHaveBeenCalled()
+  })
+
+  test("Zalo unknown errors never persist provider secrets", async () => {
+    mockRetainZaloAttempt.mockResolvedValueOnce(true)
+    mockRunChannelHandler.mockRejectedValueOnce(
+      new Error("SECRET https://private.invalid/token"),
+    )
+    await sendMessageToChannel({
+      conversation: conversation as never,
+      contactInbox: {
+        ...contactInbox,
+        channel: "zaloAccount",
+        inboxId: "inbox",
+      } as never,
+      message: { id: "msg-1", createdAt: new Date() } as never,
+    })
+    expect(JSON.stringify(mockUpdateSendError.mock.calls)).not.toContain(
+      "SECRET",
+    )
+    expect(mockHardDelete).not.toHaveBeenCalled()
   })
 
   describe("last delivered", () => {

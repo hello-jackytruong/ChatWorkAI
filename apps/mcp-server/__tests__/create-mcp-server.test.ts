@@ -266,7 +266,7 @@ describe("createMcpServer", () => {
       {},
     )) as CallToolResult
     expect(guideResult.isError).toBeUndefined()
-    expect(guideResult.content[0]?.text).toContain("# ChatbotX MCP overview")
+    expect(guideResult.content[0]?.text).toContain("# ChatWorkAI MCP overview")
   })
 
   test("'toString' is not treated as a meta-tool name", async () => {

@@ -37,6 +37,12 @@ vi.mock("next/image", () => ({
   ),
 }))
 
+// Evidence inspection is a server action; keep unrelated MessageItem tests
+// independent of its database and request-context imports.
+vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
+  inspectZaloAccountMessageAction: vi.fn(),
+}))
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 

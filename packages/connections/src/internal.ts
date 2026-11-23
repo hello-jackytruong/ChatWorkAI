@@ -13,9 +13,13 @@ import {
   notFoundException,
   validationException,
 } from "@chatbotx.io/business/errors"
+import { zaloAccountService } from "@chatbotx.io/business/zalo-account"
 import { db } from "@chatbotx.io/database/client"
 import type { IntegrationType } from "@chatbotx.io/database/partials"
-import { connectionRepository } from "@chatbotx.io/database/repositories"
+import {
+  connectionRepository,
+  workspaceRepository,
+} from "@chatbotx.io/database/repositories"
 import type { ConnectionModel } from "@chatbotx.io/database/types"
 import type {
   AuthValue,
@@ -27,6 +31,7 @@ import type {
 import {
   authValueSchema,
   ConnectionProviderRejectedError,
+  zaloAccountAuthSchema,
 } from "@chatbotx.io/sdk"
 import { z } from "zod"
 import { logger } from "./logger"
@@ -378,6 +383,7 @@ export const connectAndPersist = async (input: {
   actorUserId?: string | null
   /** Reuses an inactive channel's existing `inboxId` instead of minting a new one — only `connectFromCredentials`'s revive-or-insert path does this; a fresh `connectCandidate` target never has one yet. */
   reuseExistingInboxId?: boolean
+  zaloAccountProfile?: { displayName: string; avatarUrl?: string }
   missingOwnerError: Error
 }): Promise<ConnectionModel> => {
   const { adapter, auth, descriptor, extraConfig, existing, ownerId } = input
@@ -399,6 +405,15 @@ export const connectAndPersist = async (input: {
     },
     async () =>
       await db.transaction(async (tx) => {
+        if (
+          input.provider === "zaloAccount" &&
+          !(await workspaceRepository.lockWorkspaceForChildWrite(
+            { workspaceId: input.workspaceId },
+            tx,
+          ))
+        ) {
+          throw notFoundException("Workspace not found")
+        }
         let inboxId = input.reuseExistingInboxId
           ? (existing?.inboxId ?? undefined)
           : undefined
@@ -419,7 +434,7 @@ export const connectAndPersist = async (input: {
           })
           inboxId = inbox.id
         }
-        return await upsertConnectionRow({
+        const persisted = await upsertConnectionRow({
           tx,
           workspaceId: input.workspaceId,
           provider: input.provider,
@@ -434,6 +449,22 @@ export const connectAndPersist = async (input: {
           actorUserId: input.actorUserId,
           inboxId,
         })
+        if (
+          input.provider === "zaloAccount" &&
+          input.zaloAccountProfile &&
+          persisted.inboxId
+        ) {
+          await zaloAccountService.saveAuthorization({
+            workspaceId: input.workspaceId,
+            inboxId: persisted.inboxId,
+            auth: zaloAccountAuthSchema.parse(auth),
+            name: input.zaloAccountProfile.displayName,
+            avatarUrl: input.zaloAccountProfile.avatarUrl ?? null,
+            sessionVerifiedAt: new Date(),
+            tx,
+          })
+        }
+        return persisted
       }),
   )
 

@@ -80,6 +80,52 @@
       "closeCode": "Close code",
       "issue": "Connection issue",
       "requiresAction": "Reconnect this account to resume automatic connections."
+    },
+    "messageActions": "Viestin toiminnot",
+    "viewSavedContent": "Näytä tallennettu alkuperäinen",
+    "hideLocally": "Piilota ChatbotX:ssä",
+    "recallOnZalo": "Peruuta Zalossa",
+    "deleteOnMyZalo": "Poista omasta Zalostani",
+    "nativeOperationsDisabled": "Zalon omat toiminnot eivät ole käytettävissä.",
+    "retainOriginalNotice": "Tallennettu alkuperäinen säilyy valtuutettujen Saapuneet-kansion jäsenten käytettävissä.",
+    "operationFailed": "Toiminto epäonnistui.",
+    "operationApplied": "Toiminto vahvistettiin.",
+    "operationUnconfirmed": "Tulosta ei ole vahvistettu. Tarkista tila ennen muita toimia.",
+    "confirmOperation": "Vahvista toiminto",
+    "inspectOperation": "Tarkista tila",
+    "savedContent": "Tallennettu alkuperäinen",
+    "savedLoading": "Ladataan tallennettua sisältöä…",
+    "savedDenied": "Sinulla ei ole enää käyttöoikeutta tai sisältö ei ole saatavilla.",
+    "originalNotCaptured": "Alkuperäistä sisältöä ei tallennettu.",
+    "providerRecallTime": "Zalon peruutusaika",
+    "observedRecallTime": "Peruutus havaittu",
+    "recallActor": "Peruuttaja",
+    "unknownActor": "Tuntematon",
+    "savedFile": "Tallennettu tiedosto",
+    "fileNotArchived": "Tiedostoa ei arkistoitu tai se ei ole saatavilla.",
+    "openSavedFile": "Avaa tallennettu tiedosto",
+    "getSavedFile": "Hae tiedostolinkki",
+    "savedFileUnavailable": "Tämä tallennettu tiedosto ei ole saatavilla.",
+    "recalled": "Peruttu Zalossa",
+    "hiddenLocally": "Piilotettu CRM:ssä",
+    "deleteChatOnZalo": "Poista historia omasta Zalostani",
+    "deleteChatConfirm": "Poistetaanko Zalon historia valittuun viestiin asti? Tallennettu CRM-historia säilyy seurantaa varten.",
+    "deleteChatNoBoundary": "Zalon historian poistamiseen ei ole viestirajaa.",
+    "deletedOnMyZalo": "Poistettu omasta Zalosta",
+    "deleteChatBoundary": "Historian poiston raja",
+    "evidence": {
+      "unsupportedContent": "Zalo-viestiä ei tueta",
+      "invalidContent": "Zalo-viestiä ei voitu lukea",
+      "unsupportedSchema": "Zalo-viestimuotoa ei tueta",
+      "pending": "Odotetaan vahvistusta",
+      "unknown": "Tulos tuntematon — tarkista tila",
+      "failed": "Viestiä ei lähetetty",
+      "applied": "Lähetetty",
+      "appliedPending": "Lähetetty, paikallinen täsmäytys käynnissä",
+      "needsReview": "Tulos vaatii tarkistuksen",
+      "safeFailure": "Zalo-toimintoa ei voitu suorittaa turvallisesti",
+      "unavailable": "Tila ei saatavilla. Yritä uudelleen.",
+      "inspect": "Tarkista tila"
     }
   },
   "actions": {
@@ -2614,7 +2660,7 @@
     },
     "fromName": {
       "label": "Lähettäjän nimi",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "messageTemplate": {
       "label": "Viestimalli"
@@ -3601,7 +3647,7 @@
     "title": "Yleiset"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "Tämä poistaa Metan viestikampanjan ja poistaa kampanjan ChatbotX:stä. Jos Meta hylkää poiston, kampanja säilyy.",
+    "deleteWarning": "Tämä poistaa Metan viestikampanjan ja poistaa kampanjan ChatWorkAI:stä. Jos Meta hylkää poiston, kampanja säilyy.",
     "title": "Facebook Marketing Messages",
     "description": "Kasvata sitoutumista ja myyntiä personoiduilla mainosviesteillä Messengerissä.",
     "create": "Luo uusi",
@@ -3642,7 +3688,7 @@
       "tosNotAccepted": "Jos haluat käyttää tätä toimintoa, hyväksy mukautettujen objektien ehdot osoitteessa {url}",
       "notFound": "Markkinointiviestiä ei löytynyt.",
       "audienceNotTargetable": "Valittu mukautettu kohderyhmä ei ole valmis tai ei kuulu tälle sivulle ja mainostilille.",
-      "connectFirst": "Yhdistä Marketing Messages ensin ChatbotX-sovelluksessa.",
+      "connectFirst": "Yhdistä Marketing Messages ensin ChatWorkAI-sovelluksessa.",
       "mmInvalidState": "Tämä toiminto ei ole käytettävissä kampanjan nykyisessä tilassa.",
       "mmCampaignEnded": "Metan viestikampanja on päättynyt, joten sitä ei voi lähettää tai jatkaa.",
       "mmPageNotConnected": "Tämän kampanjan sivua ei ole yhdistetty tähän työtilaan.",
@@ -3662,7 +3708,7 @@
       "uploadMore": "Lähetä lisää rivejä",
       "empty": "Ei vielä mukautettuja kohderyhmiä.",
       "deleteTitle": "Poista mukautettu kohderyhmä",
-      "deleteWarning": "Tämä poistaa mukautetun kohderyhmän \"{name}\" Metasta ja ChatbotX:stä. Toimintoa ei voi peruuttaa.",
+      "deleteWarning": "Tämä poistaa mukautetun kohderyhmän \"{name}\" Metasta ja ChatWorkAI:stä. Toimintoa ei voi peruuttaa.",
       "deleted": "Mukautettu kohderyhmä poistettu.",
       "pageDisconnected": "Sivun yhteys katkaistu",
       "status": {
@@ -5677,7 +5723,7 @@
         "title": "Puheluoikeus",
         "appSubscriptionMissing": "Määritä ensin WhatsApp-webhook tälle sovellukselle Meta-sovelluspaneelissa ja yritä sitten uudelleen.",
         "appSubscriptionFailed": "Sovelluksen 'calls'-webhook-tilausta ei voitu vahvistaa. Yritä pian uudelleen.",
-        "callsNotSubscribed": "Tämä sovellus ei ole tilannut 'calls'-webhook-kenttää, joten puhelutapahtumat eivät voi tavoittaa ChatbotX:ää (Meta-virhe 138018: tekniset edellytykset eivät täyty — varmista, että ainakin yhdellä WABA:an tilatulla sovelluksella on myös puhelujen webhook-kenttä).",
+        "callsNotSubscribed": "Tämä sovellus ei ole tilannut 'calls'-webhook-kenttää, joten puhelutapahtumat eivät voi tavoittaa ChatWorkAI:ää (Meta-virhe 138018: tekniset edellytykset eivät täyty — varmista, että ainakin yhdellä WABA:an tilatulla sovelluksella on myös puhelujen webhook-kenttä).",
         "fixButton": "Korjaa",
         "fixSuccess": "Sovellus on nyt tilannut WhatsApp-puheluwebhookit.",
         "manualIntegrationNotice": "Tämä numero yhdistettiin manuaalisesti, ja sillä ei ole sovellustunnuksia tässä. Tilaa 'calls'-webhook-kenttä sovellukselle Meta-sovelluspaneelissa.",
@@ -9105,7 +9151,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "Toiminnon lähde",
@@ -9600,8 +9646,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11123,7 +11169,7 @@
         "label": "Kaupan lähde",
         "description": "Valitse kaupan lähde, jonka kautta hallitset tuotteita, varastoa ja tilauksia. Kun valittuna on Shopify / WooCommerce, kaikkia tuotteita ja tilauksia hallitaan suoraan Shopify / WooCommerce-kaupastasi.",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11292,7 +11338,7 @@
       },
       "authKind": {
         "label": "Todennus",
-        "description": "Miten ChatbotX kirjautuu kauppaasi: mukautetun sovelluksen Admin API -käyttöoikeustunnuksella tai Shopify Dev Dashboardissa luodun sovelluksen Client ID:llä ja secretillä.",
+        "description": "Miten ChatWorkAI kirjautuu kauppaasi: mukautetun sovelluksen Admin API -käyttöoikeustunnuksella tai Shopify Dev Dashboardissa luodun sovelluksen Client ID:llä ja secretillä.",
         "options": {
           "token": "Admin API -käyttöoikeustunnus",
           "clientCredentials": "Client ID ja secret (Dev Dashboard -sovellus)"
@@ -12204,7 +12250,7 @@
     "noWorkspaces": "Et ole minkään työtilan ylläpitäjä, joten et voi valtuuttaa tätä sovellusta."
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12394,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12511,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "Poista ChatbotX-tilisi",
+    "title": "Poista ChatWorkAI-tilisi",
     "intro": "Voit poistaa tilisi ja sen tiedot jollakin seuraavista tavoista.",
     "waysTitle": "Tilin poistaminen",
     "wayMobile": "Mobiilisovelluksessa: Asetukset → Poista tili.",

@@ -2,6 +2,10 @@ import { beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   account: vi.fn(),
+  due: vi.fn(),
+  finish: vi.fn(),
+  repair: vi.fn(),
+  byMessage: vi.fn(),
   group: vi.fn(),
   context: vi.fn(),
   claim: vi.fn(),
@@ -11,6 +15,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@chatbotx.io/database/repositories", () => ({
   zaloAccountSendAttemptRepository: {
     claim: mocks.claim,
+    claimReconciliation: mocks.due,
+    finishReconciliation: mocks.finish,
+    findByMessage: mocks.byMessage,
     find: mocks.find,
     preparedContext: mocks.context,
   },
@@ -22,10 +29,18 @@ vi.mock("../src/zalo-account/group.service", () => ({
   zaloAccountGroupService: { get: mocks.group },
 }))
 vi.mock("../src/zalo-account/send-attempt.service", () => ({
-  zaloAccountSendAttemptService: { commandId: async () => "scoped-command" },
+  zaloAccountSendAttemptService: {
+    commandId: async () => "scoped-command",
+    publishOutcome: vi.fn(),
+    reconcileAttempt: mocks.repair,
+  },
 }))
 vi.mock("../src/message/create-outgoing", () => ({
   createOutgoing: mocks.outgoing,
+}))
+vi.mock("../src/workspace-lifecycle/with-blocked-owner-guard", () => ({
+  withBlockedOwnerGuard: async (_workspaceId: string, fn: () => unknown) =>
+    await fn(),
 }))
 const { zaloAccountCanonicalSendService } = await import(
   "../src/zalo-account/canonical-send.service"
@@ -121,4 +136,53 @@ it("returns the durable outcome after sending has been disabled without exposing
   )
   expect(JSON.stringify(result)).not.toContain("secret body")
   expect(mocks.outgoing).not.toHaveBeenCalled()
+})
+
+it("repairs at most twenty durable ACKs without calling provider send", async () => {
+  const row = {
+    workspaceId: "w",
+    accountId: "a",
+    commandId: "c",
+    providerMessageIds: ["provider"],
+    reconciliation: { revision: 7 },
+  }
+  mocks.due.mockResolvedValue([row])
+  mocks.repair.mockResolvedValue(true)
+  await zaloAccountCanonicalSendService.recoverReconciliation()
+  expect(mocks.due).toHaveBeenCalledTimes(20)
+  expect(mocks.finish).not.toHaveBeenCalled()
+  expect(mocks.outgoing).not.toHaveBeenCalled()
+})
+it("projects pointer inspection with safe error evidence and no CAS details", async () => {
+  mocks.byMessage.mockResolvedValue({
+    commandId: "c",
+    status: "failed",
+    messageId: "m",
+    messageCreatedAt: new Date(0),
+    providerMessageIds: [],
+    reconciliation: {
+      state: "not_required",
+      revision: 9,
+      attempts: 0,
+      lastErrorCode: null,
+      sendError: {
+        code: "preparation_failed",
+        phase: "preparation",
+        safeAction: "new_attempt",
+        raw: "private",
+      },
+    },
+  })
+  const result = await zaloAccountCanonicalSendService.getOutcomeByMessage({
+    workspaceId: "w",
+    accountId: "a",
+    messageId: "m",
+    messageCreatedAt: new Date(0),
+  })
+  expect(result).toMatchObject({
+    status: "failed",
+    reconciliation: { state: "not_required" },
+  })
+  expect(JSON.stringify(result)).not.toContain("private")
+  expect(JSON.stringify(result)).not.toContain("revision")
 })

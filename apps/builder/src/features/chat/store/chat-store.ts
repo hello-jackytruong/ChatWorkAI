@@ -4,7 +4,10 @@ import type {
   ConversationStatus,
 } from "@chatbotx.io/database/partials"
 import type { MessageTranslationUpdatedData } from "@chatbotx.io/realtime-protocol"
-import { resolveMessagingWindowOpenedAt } from "@chatbotx.io/sdk"
+import {
+  getZaloAccountSendAttemptRevision,
+  resolveMessagingWindowOpenedAt,
+} from "@chatbotx.io/sdk"
 import { createStore } from "zustand/vanilla"
 import type { ContactFilterRequest } from "@/features/contact-filter/schema"
 import type { GetContactResponse } from "@/features/contacts/schema/query"
@@ -30,6 +33,10 @@ import {
   type SendResultSignal,
   settleSend,
 } from "@/features/messages/lib/send-queue"
+import {
+  retainZaloMessages,
+  type ZaloRetentionEvent,
+} from "@/features/messages/lib/zalo-retention"
 import type { CreateMessageWithRoutingBypassRequest } from "@/features/messages/schema/mutation"
 import type {
   MessageResource,
@@ -374,6 +381,8 @@ export type ChatActions = {
     messageId: string,
     newText: string,
     attachmentUpdate?: {
+      attachmentId?: string
+      newAttachmentSize?: number
       newAttachmentPath: string | null
       newAttachmentPublicUrl?: string | null
       newAttachmentMimeType?: string | null
@@ -478,7 +487,7 @@ const patchConversationPreviews = (
 ): { conversations: ListConversationsResponse["data"] } | null => {
   let changed = false
   const nextConversations = conversations.map((conversation) => {
-    const [preview] = conversation.messages
+    const [preview] = conversation.messages ?? []
     if (!(preview && messageIds.has(preview.id))) {
       return conversation
     }
@@ -501,7 +510,7 @@ const replaceRemovedConversationPreviews = (props: {
   const { conversations, activeConversationId, messages, removedIds } = props
   let changed = false
   const nextConversations = conversations.map((conversation) => {
-    const [preview] = conversation.messages
+    const [preview] = conversation.messages ?? []
     if (
       !(
         preview &&
@@ -530,9 +539,13 @@ const prependOlderMessages = (
   messages: MessageResourceWithRelations[]
   prependedCount: number
 } => {
+  const retainedCurrent = retainZaloMessages(currentMessages, [
+    ...currentMessages,
+    ...olderPage,
+  ])
   const messageIds = new Set<string>()
   const clientIds = new Set<string>()
-  for (const message of currentMessages) {
+  for (const message of retainedCurrent) {
     messageIds.add(message.id)
     if (message.clientId) {
       clientIds.add(message.clientId)
@@ -557,7 +570,7 @@ const prependOlderMessages = (
   }
 
   return {
-    messages: [...prependedMessages, ...currentMessages],
+    messages: [...prependedMessages, ...retainedCurrent],
     prependedCount: prependedMessages.length,
   }
 }
@@ -703,6 +716,52 @@ const pruneIdleSendQueues = (
     Object.entries(queues).filter(([, queue]) => !isSendQueueIdle(queue, now)),
   )
 
+const retainChatState = (
+  next: ChatStore,
+  previous: ChatStore,
+  event?: ZaloRetentionEvent,
+): ChatStore => {
+  const previousRows = [
+    ...previous.messages,
+    ...previous.conversations.flatMap(
+      (conversation) => conversation.messages ?? [],
+    ),
+    ...(previous.replyToMessage ? [previous.replyToMessage] : []),
+  ]
+  const rows = [
+    ...next.messages,
+    ...next.conversations.flatMap(
+      (conversation) => conversation.messages ?? [],
+    ),
+    ...(next.replyToMessage ? [next.replyToMessage] : []),
+  ]
+  const retained = retainZaloMessages(rows, previousRows, event)
+  if (retained === rows) {
+    return next
+  }
+  let offset = next.messages.length
+  const messages = retained.slice(0, offset)
+  const conversations = next.conversations.map((conversation) => {
+    if (!conversation.messages?.length) {
+      return conversation
+    }
+    const previews = retained.slice(
+      offset,
+      offset + conversation.messages.length,
+    )
+    offset += conversation.messages.length
+    return previews.some((row, index) => row !== conversation.messages[index])
+      ? { ...conversation, messages: previews }
+      : conversation
+  })
+  return {
+    ...next,
+    messages,
+    conversations,
+    replyToMessage: next.replyToMessage ? (retained[offset] ?? null) : null,
+  }
+}
+
 export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
   warnIfActiveConversationUnlisted(initialState)
 
@@ -721,7 +780,15 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
   let pendingConversationHeadRefreshWorkspaceId: string | null = null
   const { messagesSeed, ...restInitialState } = initialState
 
-  return createStore<ChatStore>((set, get, store) => {
+  return createStore<ChatStore>((commit, get, store) => {
+    const set: typeof commit = (partial) =>
+      commit((state) => {
+        const patch = typeof partial === "function" ? partial(state) : partial
+        if (patch === state) {
+          return state
+        }
+        return retainChatState({ ...state, ...patch }, state)
+      })
     const waitUntilState = (
       predicate: (state: ChatStore) => boolean,
     ): Promise<void> =>
@@ -734,7 +801,7 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
         })
       })
 
-    return {
+    const seeded: ChatStore = {
       ...conversationListDefaults(),
       filters: {},
       ...messageThreadDefaults(),
@@ -1310,13 +1377,68 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
       // deep merge, matching how the worker always sends the entity's complete
       // shape.
       updateMessageContentAttributes: (messageId, contentAttributes) => {
-        set(
-          (state) =>
-            replaceMessageById(state.messages, messageId, (message) => ({
-              ...message,
-              contentAttributes,
-            })) ?? state,
-        )
+        set((state) => {
+          const shouldApplyAttributes = (attributes: unknown) => {
+            const currentRevision =
+              getZaloAccountSendAttemptRevision(attributes)
+            const nextRevision =
+              getZaloAccountSendAttemptRevision(contentAttributes)
+            const nextZalo = contentAttributes?.zaloAccount as
+              | { lifecycle?: unknown }
+              | undefined
+            // Lifecycle markers must still hide content when an integrity
+            // status with a newer revision is already cached.
+            return (
+              !!nextZalo?.lifecycle ||
+              currentRevision === undefined ||
+              (nextRevision !== undefined && nextRevision >= currentRevision)
+            )
+          }
+          const patch = replaceMessageById(
+            state.messages,
+            messageId,
+            (message) =>
+              shouldApplyAttributes(message.contentAttributes)
+                ? { ...message, contentAttributes }
+                : message,
+          )
+          const za = contentAttributes?.zaloAccount as
+            | { sourceId?: string; lifecycle?: Record<string, unknown> }
+            | undefined
+          const event =
+            za?.sourceId && za.lifecycle
+              ? { sourceId: za.sourceId, lifecycle: za.lifecycle }
+              : undefined
+          const isZaloTarget =
+            !!event ||
+            [
+              ...state.messages,
+              ...state.conversations.flatMap(
+                (conversation) => conversation.messages ?? [],
+              ),
+            ].some(
+              (message) =>
+                message.id === messageId && message.sourceId?.startsWith("za:"),
+            )
+          const previews = isZaloTarget
+            ? patchConversationPreviews(
+                state.conversations,
+                new Set([messageId]),
+                (message) =>
+                  shouldApplyAttributes(message.contentAttributes)
+                    ? { ...message, contentAttributes }
+                    : message,
+              )
+            : null
+          if (!(patch || previews || event)) {
+            return state
+          }
+          return retainChatState(
+            { ...state, ...patch, ...previews },
+            state,
+            event,
+          )
+        })
       },
 
       markMessagesDeleted: (messageIds: string[]) => {
@@ -1470,6 +1592,38 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
         set(
           (state) =>
             replaceMessageById(state.messages, messageId, (message) => {
+              if (attachmentUpdate?.attachmentId) {
+                if (message.deletedAt) {
+                  return message
+                }
+                return {
+                  ...message,
+                  attachments: (message.attachments ?? []).map((attachment) =>
+                    attachment.id === attachmentUpdate.attachmentId
+                      ? {
+                          ...attachment,
+                          originPath: "",
+                          url:
+                            attachmentUpdate.newAttachmentPublicUrl ??
+                            attachment.url,
+                          fallbackUrl: null,
+                          mimeType:
+                            attachmentUpdate.newAttachmentMimeType ??
+                            attachment.mimeType,
+                          size:
+                            attachmentUpdate.newAttachmentSize ??
+                            attachment.size,
+                          width:
+                            attachmentUpdate.newAttachmentWidth ??
+                            attachment.width,
+                          height:
+                            attachmentUpdate.newAttachmentHeight ??
+                            attachment.height,
+                        }
+                      : attachment,
+                  ),
+                }
+              }
               // A new text makes the old translation wrong: drop it here; the
               // worker also deletes its row, and the inbox asks again.
               const base = { ...message, text: newText, translation: undefined }
@@ -1521,6 +1675,9 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
               }
             }) ?? state,
         )
+        if (attachmentUpdate?.attachmentId) {
+          return
+        }
         set(
           (state) =>
             patchConversationPreviews(
@@ -1728,7 +1885,11 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
         }
 
         let unmatchedWorkspaceId: string | null = null
-        set((state) => {
+        set((previousState) => {
+          const state = retainChatState(previousState, {
+            ...previousState,
+            messages: [...previousState.messages, ...incomingMessages],
+          })
           const conversationsById = new Map(
             state.conversations.map(
               (conversation) => [conversation.id, conversation] as const,
@@ -1905,5 +2066,6 @@ export const createChatStore = (initialState: ChatStoreInitialState = {}) => {
         })
       },
     }
+    return retainChatState(seeded, seeded)
   })
 }

@@ -12,9 +12,11 @@ import type {
   ZaloAccountLabel,
   ZaloAccountLabelSnapshot,
   ZaloAccountLifecycleEvent,
+  ZaloAccountNativeOperation,
   ZaloAccountOutboundMessage,
   ZaloAccountRuntimeDiagnostics,
   ZaloAccountRuntimeRef,
+  ZaloAccountStickerResource,
   ZaloAccountThreadEvent,
 } from "@chatbotx.io/sdk"
 
@@ -101,6 +103,8 @@ export type ZcaQrEvent =
 export type ZcaListenerPort = { start: () => void; stop: () => void }
 
 export type ZcaListenerHandlers = {
+  ownUid?: string
+  messageIntegrityEnabled?: boolean
   onEvent?: () => void
   onThreadEvent?: (event: ZaloAccountThreadEvent) => void
   onConnected?: () => void
@@ -119,14 +123,23 @@ export type ZcaListenerHandlers = {
 }
 
 export type ZcaApiPort = {
+  nativeOperation?: (
+    operation: ZaloAccountNativeOperation,
+  ) => Promise<{ status: number }>
   closeConnection?: () => Promise<void>
   getAuthorization?: (previous: ZaloAccountAuth) => ZaloAccountAuth
 
+  getStickerResources?: (
+    stickerIds: string[],
+  ) => Promise<ZaloAccountStickerResource[]>
   listFriends?: (cursor: number) => Promise<ZaloAccountFriendSync>
   sendTyping?: (threadId: string, threadType: "user" | "group") => Promise<void>
   getOwnId: () => Promise<string>
   listen: (handlers: ZcaListenerHandlers) => ZcaListenerPort
-  sendDirect: (message: ZaloAccountOutboundMessage) => Promise<{
+  sendDirect: (
+    message: ZaloAccountOutboundMessage,
+    beforeDispatch?: () => Promise<void>,
+  ) => Promise<{
     messageIds: string[]
     sentCount: number
   }>

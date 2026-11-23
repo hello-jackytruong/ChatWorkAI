@@ -36,3 +36,20 @@ describe("ZaloAccountProviderAdmission", () => {
     expect(admission.check("account-1")).toBe(0)
   })
 })
+
+it("bounds account circuit memory and expires entries on access", () => {
+  let now = 1000
+  const admission = new ZaloAccountProviderAdmission({
+    now: () => now,
+    providerFailureThreshold: 100_000,
+  })
+  for (let i = 0; i < 5000; i++) {
+    admission.recordFailure(`account-${i}`)
+  }
+  expect(
+    (admission as unknown as { accounts: Map<string, unknown> }).accounts.size,
+  ).toBeLessThanOrEqual(4096)
+  expect(admission.check("new-account")).toBeGreaterThan(0)
+  now += 120_001
+  expect(admission.check("account-1")).toBe(0)
+})

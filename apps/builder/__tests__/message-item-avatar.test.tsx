@@ -129,3 +129,8 @@ describe("MessageItem avatar (guest widget showLogo)", () => {
     expect(el.querySelector('[data-slot="avatar-image"]')).toBeNull()
   })
 })
+
+// Evidence inspection is a server action, outside this rendering test.
+vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
+  inspectZaloAccountMessageAction: vi.fn(),
+}))

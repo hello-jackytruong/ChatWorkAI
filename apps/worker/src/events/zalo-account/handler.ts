@@ -119,6 +119,10 @@ const handleConnectSessionEvent = async (
   await connectionService.completeTrustedDeviceAuthorization({
     ...session,
     auth: authorization.auth,
+    trustedProfile: {
+      displayName: authorization.displayName,
+      avatarUrl: authorization.avatarUrl,
+    },
   })
 }
 
@@ -336,14 +340,19 @@ export const handleZaloAccountEvents = async (
         })
         await enqueueIntegrationJob(
           {
-            type: IntegrationJobAction.deleteIncomingMessage,
+            type: IntegrationJobAction.zaloAccountThreadEvent,
             data: {
-              integrationType: "zaloAccount",
-              integrationIdentifier: event.route.accountId,
               workspaceId: event.route.workspaceId,
-              zaloAccountRoute: event.route,
-              messageId,
-              retryIfMissing: true,
+              accountId: event.route.accountId,
+              inboxId: event.route.inboxId,
+              event: {
+                type: "undo",
+                threadType: "user",
+                threadId: event.payload.threadId,
+                providerMessageId: event.payload.providerMessageId,
+                timestampMs: new Date(event.occurredAt).getTime(),
+                timestampSource: "observed",
+              },
             },
           },
           { jobId: `zalo-account-undo-${await sha256Hex(messageId)}` },

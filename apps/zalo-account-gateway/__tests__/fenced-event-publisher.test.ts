@@ -2,7 +2,9 @@ import type {
   ZaloAccountAuthorizationEvent,
   ZaloAccountLifecycleEvent,
 } from "@chatbotx.io/sdk"
+import { zaloAccountDirectMessageSchema } from "@chatbotx.io/sdk"
 import { describe, expect, it, vi } from "vitest"
+import { z } from "zod"
 import type { AccountLease, AccountRuntimeScope } from "../src/runtime/ports"
 import { FencedEventPublisher } from "../src/transport/fenced-event-publisher"
 
@@ -192,4 +194,70 @@ describe("FencedEventPublisher", () => {
       },
     })
   })
+})
+
+it("omits new metadata in the default legacy frame and suppresses placeholders", async () => {
+  const message = {
+    schemaVersion: 1 as const,
+    providerMessageId: "m1",
+    threadId: "p",
+    threadType: "user" as const,
+    senderId: "p",
+    recipientId: "s",
+    timestampMs: 1,
+    msgType: "webchat",
+    isSelf: false,
+    text: "hello",
+    attachments: [],
+  }
+  await publisher().publishDirectMessage(message, {
+    ...context,
+    accountId: "a",
+    inboxId: "i",
+    epoch: 1,
+    fenceToken: "1",
+  })
+  const {
+    schemaVersion: _version,
+    unsupported: _marker,
+    ...legacyShape
+  } = zaloAccountDirectMessageSchema.shape
+  expect(
+    z
+      .object(legacyShape)
+      .strict()
+      .safeParse(JSON.parse(payloadOfLastAppend()).payload).success,
+  ).toBe(true)
+  expect(JSON.parse(payloadOfLastAppend()).payload).not.toHaveProperty(
+    "schemaVersion",
+  )
+  appendIfOwned.mockClear()
+  await publisher().publishDirectMessage(
+    { ...message, unsupported: { reason: "unsupported_content" } },
+    { ...context, accountId: "a", inboxId: "i", epoch: 1, fenceToken: "1" },
+  )
+  expect(appendIfOwned).not.toHaveBeenCalled()
+})
+it("retries a failed append once with the identical transport event identity", async () => {
+  appendIfOwned.mockRejectedValueOnce(new Error("redis unavailable"))
+  const start = appendIfOwned.mock.calls.length
+  await publisher().publishDirectMessage(
+    {
+      providerMessageId: "m1",
+      threadId: "p",
+      threadType: "user",
+      senderId: "p",
+      recipientId: "s",
+      timestampMs: 1,
+      msgType: "webchat",
+      isSelf: false,
+      text: "hello",
+      attachments: [],
+    },
+    { ...context, accountId: "a", inboxId: "i", epoch: 1, fenceToken: "1" },
+  )
+  expect(appendIfOwned.mock.calls.length - start).toBe(2)
+  expect(appendIfOwned.mock.calls[start][2].fields).toEqual(
+    appendIfOwned.mock.calls[start + 1][2].fields,
+  )
 })

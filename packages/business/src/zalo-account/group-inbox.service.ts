@@ -11,8 +11,13 @@ import {
   type ZaloAccountGroupMessage,
   zaloAccountGroupMessageSchema,
 } from "@chatbotx.io/sdk"
+import { captureZaloAccountMessage } from "../media/zalo-account-ingress"
 import { withResolvedAttachmentUrls } from "../message/list-for-conversation"
 import { queueMessageCreatedEvent } from "../platform/realtime-broadcast"
+import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
+import { zaloAccountMediaService } from "../zalo-account-media/service"
+import { projectZaloAccountRetainedMessage } from "./message-projection"
+
 import { zaloAccountService } from "./service"
 
 export const zaloAccountGroupInboxService = {
@@ -65,24 +70,80 @@ export const zaloAccountGroupInboxService = {
       }
       return
     }
+    const conversationId = group.conversationId
     const result = await zaloAccountGroupInboxRepository.persist({
       ...input,
       message,
       groupId: group.id,
       contactInboxId: group.contactInboxId,
       conversationId: group.conversationId,
+      beforeMessageReconcile: async (pointer) => {
+        await zaloAccountMediaService.bindMessageAliases({
+          workspaceId: input.workspaceId,
+          accountId: input.accountId,
+          messageId: pointer.id,
+          messageCreatedAt: pointer.createdAt,
+          conversationId,
+          aliases: pointer.providerMessageIds,
+          preserveAttachmentIds: true,
+        })
+      },
+      ...(getZaloAccountMediaPolicy().enabled
+        ? {
+            beforeMessageWrite: async (pointer: {
+              id: string
+              createdAt: Date
+            }) => {
+              await captureZaloAccountMessage({
+                workspaceId: input.workspaceId,
+                accountId: input.accountId,
+                inboxId: input.inboxId,
+                channel: "zaloAccount",
+                conversationId,
+                messageId: pointer.id,
+                messageCreatedAt: pointer.createdAt,
+                threadType: "group",
+                threadId: message.threadId,
+                providerMessageId: message.providerMessageId,
+                descriptors: message.mediaResources,
+                attachments: message.attachments.map((attachment) => ({
+                  fileType: attachment.kind,
+                  url: attachment.url,
+                  name: attachment.name,
+                })),
+              })
+            },
+          }
+        : {}),
     })
     if (result.isNew && result.message && result.conversation) {
+      await captureZaloAccountMessage({
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+        channel: "zaloAccount",
+        conversationId: group.conversationId,
+        messageId: result.message.id,
+        messageCreatedAt: result.message.createdAt,
+        threadType: "group",
+        threadId: message.threadId,
+        providerMessageId: message.providerMessageId,
+        descriptors: message.mediaResources,
+        attachments: result.message.attachments,
+      })
       await queueMessageCreatedEvent(
         input.workspaceId,
-        await withResolvedAttachmentUrls(result.message, {
-          workspaceId: input.workspaceId,
-          channel: "zaloAccount",
-        }),
+        await withResolvedAttachmentUrls(
+          projectZaloAccountRetainedMessage(result.message),
+          {
+            workspaceId: input.workspaceId,
+            channel: "zaloAccount",
+          },
+        ),
         result.conversation,
         input.inboxId,
       )
-      if (onMessage && result.contactInbox) {
+      if (onMessage && result.contactInbox && !result.recalled) {
         await onMessage({
           message: result.message,
           conversation: result.conversation,

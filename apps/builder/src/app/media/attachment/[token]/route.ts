@@ -1,3 +1,4 @@
+import { zaloAccountMessageRecallService } from "@chatbotx.io/business/zalo-account/message-recall"
 import { resolveFreshMediaUrl } from "@chatbotx.io/channel-registry/media-hydration"
 import { createMessageRepository } from "@chatbotx.io/database/repositories"
 import { uploader } from "@chatbotx.io/filesystem"
@@ -75,6 +76,16 @@ export const GET = async (request: NextRequest, context: RouteContext) => {
     messageCreatedAt,
   })
   if (!lookup) {
+    return new NextResponse(null, { status: 404 })
+  }
+
+  if (
+    !(await zaloAccountMessageRecallService.isOrdinaryAttachmentVisible({
+      workspaceId: resolvedRequest.workspaceId,
+      messageId: lookup.messageId,
+      messageCreatedAt: lookup.messageCreatedAt,
+    }))
+  ) {
     return new NextResponse(null, { status: 404 })
   }
 

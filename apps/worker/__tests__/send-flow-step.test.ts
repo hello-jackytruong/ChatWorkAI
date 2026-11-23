@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
+const mockReconcileZaloFlow = vi.hoisted(() => vi.fn().mockResolvedValue(true))
+vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
+  zaloAccountCanonicalSendService: { reconcileMessage: mockReconcileZaloFlow },
+}))
+
 const HTTP_URL_RE = /^https?:\/\//i
 
 // ---------------------------------------------------------------------------
@@ -487,6 +492,12 @@ describe("sendFlowStep", () => {
       },
     })
     expect(mockSendFlowStepToChannel).toHaveBeenCalledTimes(1)
+    expect(mockReconcileZaloFlow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        messageId: "msg-created",
+      }),
+    )
     expect(mockRecordOutboundFlowStep).not.toHaveBeenCalled()
     expect(mockEmit).not.toHaveBeenCalled()
   })

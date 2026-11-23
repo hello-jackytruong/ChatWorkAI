@@ -36,6 +36,12 @@ import {
 import { isInboundConversationMessage } from "@chatbotx.io/business/contact-profile-rules"
 import { toContactInfoCaptureTypes } from "@chatbotx.io/business/detect-contact-info"
 import {
+  captureZaloAccountMessage,
+  redactZaloMediaLocators,
+} from "@chatbotx.io/business/zalo-account"
+import { zaloAccountMessageRecallService } from "@chatbotx.io/business/zalo-account/message-recall"
+import { getZaloAccountMediaPolicy } from "@chatbotx.io/business/zalo-account-media"
+import {
   type ChannelType,
   type CommentAutomationType,
   type ContactSource,
@@ -99,6 +105,7 @@ import {
   getInboundOrder,
   getStoryReply,
   getWhatsappFlowResponse,
+  getZaloAccountMessageEvidence,
   type IncomingContact,
   type IncomingMessage,
   isSourceUserIdKeyedIdentity,
@@ -436,7 +443,10 @@ export const receiveMessage = async (
   // instead of per-branch checks; `canAutomate` replaces `isWorkspaceActive`
   // in every automation branch below).
   const threadControl = parsedMessage.threadControl
-  const suppressAutomation = threadControl?.delivery === "standby"
+  const suppressAutomation =
+    threadControl?.delivery === "standby" ||
+    (inbox.channel === "zaloAccount" &&
+      !!getZaloAccountMessageEvidence(parsedIncomingMessage?.contentAttributes))
   const canAutomate = isWorkspaceActive && !suppressAutomation
   const appointmentCancelToken = suppressAutomation
     ? null
@@ -670,6 +680,18 @@ export const receiveMessage = async (
         contactInfoCaptureTypes,
         ...systemFieldUpdates,
       })
+
+    const retainedLifecycle = (
+      newMessage.contentAttributes?.zaloAccount as
+        | { lifecycle?: { recalled?: boolean; localHiddenAt?: string | null } }
+        | undefined
+    )?.lifecycle
+    if (
+      contactInbox.channel === "zaloAccount" &&
+      (retainedLifecycle?.recalled || retainedLifecycle?.localHiddenAt)
+    ) {
+      return null
+    }
 
     if (shouldUnarchive && isNewMessage) {
       await conversationService.unarchiveByIds({
@@ -1205,6 +1227,13 @@ const isEchoOfOwnSend = async (
 ): Promise<boolean> => {
   const { conversation, message } = props
   const { pendingOnly = false } = options
+  // Confirmed Zalo aliases are reconciled before this generic ingestion path.
+  if (
+    message.sourceId?.startsWith("za:") ||
+    message.contentAttributes?.zaloAccount
+  ) {
+    return false
+  }
   const repository = await createMessageRepository()
   const recentOutgoing = await repository.findLastByConversation(
     conversation.id,
@@ -1310,6 +1339,8 @@ export type SaveAndBroadcastMessageProps = {
 }
 
 type MessageInput = CreateMessageInput & {
+  id: string
+  createdAt: Date
   type: string
   parentId: string | null
 }
@@ -1507,18 +1538,66 @@ const persistMessage = async (
   // interaction after persistNewMessageSideEffects updates tracking.
   const isFirstIncomingMessage =
     inbound && contactInbox.lastIncomingMessageAt === null
+  const archiveZalo =
+    inbox.channel === "zaloAccount" && getZaloAccountMediaPolicy().enabled
   const messageInput = buildMessageInput({ ...props, inbound })
+  if (archiveZalo && messageInput.contentAttributes) {
+    messageInput.contentAttributes = redactZaloMediaLocators(
+      messageInput.contentAttributes,
+    )
+  }
   const attachmentInputs = buildAttachmentInputs({
     incomingMessage,
     workspaceId: inbox.workspaceId,
     conversationId: conversation.id,
   })
-  const { message, isNew } = await upsertMessage({
-    repository,
-    messageInput,
-    attachmentInputs,
-  })
-  if (isNew) {
+  if (archiveZalo) {
+    for (const attachment of attachmentInputs) {
+      attachment.keepOriginal = true
+    }
+  }
+  const persist = () =>
+    upsertMessage({ repository, messageInput, attachmentInputs })
+  const { message, isNew } =
+    contactInbox.channel === "zaloAccount"
+      ? await zaloAccountMessageRecallService.persistOriginal({
+          inboxId: inbox.id,
+          message: {
+            ...messageInput,
+            id: messageInput.id,
+            createdAt: messageInput.createdAt,
+          },
+          attachments: attachmentInputs,
+          persist,
+        })
+      : await persist()
+  if (archiveZalo) {
+    const attributes = incomingMessage.contentAttributes as
+      | Record<string, unknown>
+      | undefined
+    const metadata = attributes?.zaloAccount as
+      | Record<string, unknown>
+      | undefined
+    await captureZaloAccountMessage({
+      workspaceId: inbox.workspaceId,
+      inboxId: inbox.id,
+      channel: inbox.channel,
+      conversationId: conversation.id,
+      messageId: message.id,
+      messageCreatedAt: message.createdAt,
+      threadId: String(metadata?.threadId ?? contactInbox.sourceId),
+      threadType: "user",
+      providerMessageId:
+        typeof metadata?.providerMessageId === "string"
+          ? metadata.providerMessageId
+          : undefined,
+      attributes,
+      attachments: message.attachments.length
+        ? message.attachments
+        : attachmentInputs,
+    })
+  }
+  if (isNew && !archiveZalo) {
     await enqueuePhotoOptimizations({
       incomingMessage,
       message,

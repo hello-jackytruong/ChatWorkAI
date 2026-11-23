@@ -1,0 +1,13 @@
+# Final runtime and archive alias review
+
+Date: 2026-11-23. Review is source/test inspection of the integration working tree; no new test run or live-provider claim is made here.
+
+## Result
+
+Both previously reported findings are fixed. No remaining finding in this final, bounded review scope.
+
+- **Reference truncation:** `packages/database/src/repositories/zalo-account-media/repository.ts:1104` reads at most 301 references; lines 1108–1111 throw before any reference mutation when more than 300 match. Callers await this operation before destructive Message reconciliation. Oversized input therefore leaves echo parents intact rather than partially rebinding and deleting them. `packages/database/__tests__/zalo-account-media-persistence.test.ts:336` covers 301 references and asserts no updates; preceding cases cover distinct assets sharing the same slot and preservation of attachment identities.
+- **Transfers-disabled maintenance:** `packages/business/src/message/service.ts:419` now performs Zalo alias binding independently of the transfer flag, before calling the shard repository. `packages/business/src/zalo-account/message-recall.service.ts:546` does likewise for confirmed DM echoes using the exact canonical Message ID, conversation and creation timestamp, the acknowledged provider ID list, and preserved attachment IDs. The transfer flag continues to control capture/claim rather than existing-reference maintenance.
+- **Group ordering:** `packages/business/src/zalo-account/group-inbox.service.ts:80` always supplies `beforeMessageReconcile`, while new capture remains under the transfer flag at line 91. The repository selects the scoped identity pointer and awaits that callback at `packages/database/src/repositories/integration-zalo-account/group-inbox-repository.ts:193`–209 before its shard reconciliation. Confirmed applied attempts seed the identity with the local canonical ID/time (lines 131–160); destructive reconciliation is only entered when that identity matches the local canonical message (line 255). The callback receives those exact ID/time values plus the attempt provider aliases, and preserves attachment IDs. The disabled-transfer regression in `packages/business/__tests__/zalo-account-media-group-capture.test.ts:119` asserts aliases run before the shard operation and capture is absent.
+
+The earlier pre-merge binding omission is also closed by the shared Message service hook. Main-store alias maintenance commits before shard cleanup; failure propagates and prevents that cleanup. This review does not replace the PostgreSQL race or live Zalo/R2 release gates recorded in the integration report.

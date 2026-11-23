@@ -19,11 +19,16 @@ import {
   sql,
 } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
+import { db as primaryDb } from "../../../client"
 import {
   isMessageStorageError,
   MessageShardUnavailableError,
 } from "../../../errors"
 import { logger } from "../../../logger"
+import type {
+  ZaloAccountLifecycle,
+  ZaloAccountRecallScanCursor,
+} from "../../../partials/zalo-account-recall"
 import { getSafeSinceTime } from "../../../repositories"
 import type {
   AttachmentLookupRow,
@@ -62,14 +67,17 @@ import type {
   ReconcileOutgoingSourceIdResult,
   TranslationContextMessage,
   UpdateAttachmentParams,
+  ZaloAccountExactTarget,
 } from "../../../repositories/message/message-repository"
 import type { RichResponseContentAttributes } from "../../../schema"
+import { messageTranslationModel } from "../../../schema/message-translation"
 import type { AttachmentModel, MessageModel } from "../../../types"
 import {
   endOfHour,
   rehydrateTimeRangeDates,
   startOfHour,
   withShardRetry,
+  workspaceShardIndex,
 } from "../../shared"
 import type { MessageShardDatabaseClient } from "../client"
 import type { MessageShardConnectionManager } from "../connection-manager"
@@ -560,6 +568,26 @@ export class ShardedMessageRepository implements IMessageRepository {
     })
   }
 
+  updateZaloSendAttemptEvidence(params: {
+    workspaceId: string
+    accountId: string
+    id: string
+    createdAt: Date
+    evidence: Record<string, unknown>
+    revision: number
+  }): Promise<{ id: string } | null> {
+    return this.updateAcrossShards(
+      params.id,
+      params.workspaceId,
+      {
+        contentAttributes: sql`COALESCE(${messageModel.contentAttributes}, '{}'::jsonb) || jsonb_build_object('zaloAccount', COALESCE(${messageModel.contentAttributes}->'zaloAccount', '{}'::jsonb) || jsonb_build_object('accountId', ${params.accountId}::text, 'sendAttempt', ${JSON.stringify(params.evidence)}::jsonb))`,
+      },
+      "updateZaloSendAttemptEvidence",
+      params.createdAt,
+      sql`COALESCE((${messageModel.contentAttributes} #>> '{zaloAccount,sendAttempt,reconciliation,revision}')::int, 0) <= ${params.revision}`,
+    )
+  }
+
   updateContentAttributes(
     messageId: string,
     workspaceId: string,
@@ -886,6 +914,9 @@ export class ShardedMessageRepository implements IMessageRepository {
   async reconcileOutgoingSourceId(
     params: ReconcileOutgoingSourceIdParams,
   ): Promise<ReconcileOutgoingSourceIdResult> {
+    if (params.aliasSources) {
+      return await this.reconcileOutgoingAliases(params)
+    }
     const lockKey = this.buildLockKey(params.conversationId, params.sourceId)
 
     return await this.executeWithLock(lockKey, async () => {
@@ -980,6 +1011,280 @@ export class ShardedMessageRepository implements IMessageRepository {
         }
       })
     })
+  }
+
+  private async reconcileOutgoingAliases(
+    params: ReconcileOutgoingSourceIdParams,
+  ): Promise<ReconcileOutgoingSourceIdResult> {
+    const review = { message: null, removedEchoes: [], needsReview: true }
+    const sources = [...new Set(params.aliasSources)]
+    if (
+      !sources.length ||
+      sources.length > 10 ||
+      !sources.includes(params.sourceId) ||
+      sources.some((id) => !id || id.length > 1000) ||
+      (params.echoAddresses?.length ?? 0) > 20
+    ) {
+      return review
+    }
+    const keys = sources
+      .map((source) => this.buildLockKey(params.conversationId, source))
+      .sort()
+    const locked = async (
+      i: number,
+    ): Promise<ReconcileOutgoingSourceIdResult> =>
+      keys[i]
+        ? await this.executeWithLock(keys[i], () => locked(i + 1))
+        : await merge()
+    const merge = async (): Promise<ReconcileOutgoingSourceIdResult> => {
+      // Probe only the canonical window and current ingestion window. A source
+      // outside these addresses needs review, never an unbounded history scan.
+      const windows = [
+        params.createdAt,
+        ...(params.echoAddresses ?? []).map((row) => row.createdAt),
+        new Date(),
+      ]
+      const ranges = (
+        await Promise.all(
+          windows.map((date) =>
+            this.getShardsForRange(startOfHour(date), endOfHour(date)),
+          ),
+        )
+      ).flat()
+      const shards = dedupeShardsByPhysicalId(ranges)
+      if (!shards.length || shards.length > 2) {
+        return review
+      }
+      const snapshots: Array<{
+        client: MessageShardDatabaseClient
+        rows: MessageModel[]
+      }> = []
+      for (const shard of shards) {
+        const client = await this.shardManager.getShardClient(shard.shard)
+        const rows = await client
+          .select()
+          .from(messageModel)
+          .where(
+            and(
+              eq(messageModel.workspaceId, params.workspaceId),
+              eq(messageModel.conversationId, params.conversationId),
+              eq(messageModel.contactInboxId, params.contactInboxId),
+              isNull(messageModel.deletedAt),
+              or(
+                and(
+                  eq(messageModel.id, params.id),
+                  matchesCreatedAt(messageModel.createdAt, params.createdAt),
+                ),
+                inArray(messageModel.sourceId, sources),
+              ),
+            ),
+          )
+          .limit(22)
+        if (rows.length > 21) {
+          return review
+        }
+        snapshots.push({ client, rows })
+      }
+      const canonical = snapshots.find(({ rows }) =>
+        rows.some(
+          (row) =>
+            row.id === params.id &&
+            row.createdAt.getTime() === params.createdAt.getTime(),
+        ),
+      )
+      if (!canonical) {
+        return review
+      }
+      const echoes = snapshots.flatMap(({ rows }) =>
+        rows.filter((row) => row.id !== params.id),
+      )
+      if (
+        echoes.length > 20 ||
+        echoes.some(
+          (row) =>
+            row.messageType !== "outgoing" ||
+            !row.sourceId ||
+            !sources.includes(row.sourceId),
+        )
+      ) {
+        return review
+      }
+      // Cross-store moves cannot be committed together. Keep their evidence for
+      // inspection instead of deleting a remote row or its attachments.
+      if (
+        snapshots.some(
+          (snapshot) => snapshot !== canonical && snapshot.rows.length,
+        )
+      ) {
+        return review
+      }
+      // Replies may have arrived on an intermediate historical shard. With
+      // distinct canonical/current stores, bounded windows cannot prove their
+      // absence; retain the echo for review instead of creating dangling refs.
+      if (snapshots.length > 1 && echoes.length) {
+        return review
+      }
+      const echoIds = echoes.map((row) => row.id)
+      if (echoIds.length) {
+        for (const snapshot of snapshots) {
+          const replies = await snapshot.client
+            .select({ id: messageModel.id })
+            .from(messageModel)
+            .where(
+              and(
+                eq(messageModel.workspaceId, params.workspaceId),
+                eq(messageModel.conversationId, params.conversationId),
+                inArray(messageModel.parentId, echoIds),
+              ),
+            )
+            .limit(101)
+          const attachments = await snapshot.client
+            .select({ id: attachmentModel.id })
+            .from(attachmentModel)
+            .where(
+              and(
+                eq(attachmentModel.workspaceId, params.workspaceId),
+                eq(attachmentModel.conversationId, params.conversationId),
+                inArray(attachmentModel.messageId, echoIds),
+              ),
+            )
+            .limit(101)
+          if (
+            replies.length > 100 ||
+            attachments.length > 100 ||
+            (snapshot !== canonical && (replies.length || attachments.length))
+          ) {
+            return review
+          }
+        }
+      }
+      if (echoIds.length) {
+        const translations = await primaryDb
+          .select({ id: messageTranslationModel.id })
+          .from(messageTranslationModel)
+          .where(
+            and(
+              eq(messageTranslationModel.workspaceId, params.workspaceId),
+              inArray(messageTranslationModel.messageId, echoIds),
+            ),
+          )
+          .limit(1)
+        if (translations.length) {
+          return review
+        }
+      }
+      return await canonical.client.transaction(async (tx) => {
+        await tx.execute(sql`SET LOCAL lock_timeout = '500ms'`)
+        await tx.execute(sql`SET LOCAL statement_timeout = '1s'`)
+
+        const rows = await tx
+          .select()
+          .from(messageModel)
+          .where(
+            and(
+              eq(messageModel.workspaceId, params.workspaceId),
+              eq(messageModel.conversationId, params.conversationId),
+              eq(messageModel.contactInboxId, params.contactInboxId),
+              isNull(messageModel.deletedAt),
+              or(
+                and(
+                  eq(messageModel.id, params.id),
+                  matchesCreatedAt(messageModel.createdAt, params.createdAt),
+                ),
+                inArray(messageModel.sourceId, sources),
+              ),
+            ),
+          )
+          .limit(22)
+          .for("update")
+        const local = rows.find(
+          (row) =>
+            row.id === params.id &&
+            row.createdAt.getTime() === params.createdAt.getTime(),
+        )
+        const currentEchoes = rows.filter((row) => row.id !== params.id)
+        if (
+          !local ||
+          currentEchoes.length !== echoes.length ||
+          currentEchoes.some((row) => !echoIds.includes(row.id))
+        ) {
+          return review
+        }
+        const overlay = Object.assign(
+          {},
+          ...currentEchoes.map((row) => row.contentAttributes ?? {}),
+          local.contentAttributes ?? {},
+          params.contentAttributesOverlay ?? {},
+        )
+        const accountMetadata = Object.assign(
+          {},
+          ...currentEchoes.map(
+            (row) => row.contentAttributes?.zaloAccount ?? {},
+          ),
+          local.contentAttributes?.zaloAccount ?? {},
+          params.contentAttributesOverlay?.zaloAccount ?? {},
+        )
+        if (Object.keys(accountMetadata).length) {
+          overlay.zaloAccount = accountMetadata
+        }
+        // Reparent, rather than delete, every echo attachment and reply before
+        // deleting the duplicate Message. The transaction rolls all steps back.
+        if (echoIds.length) {
+          await tx
+            .update(attachmentModel)
+            .set({ messageId: params.id, messageCreatedAt: params.createdAt })
+            .where(
+              and(
+                eq(attachmentModel.workspaceId, params.workspaceId),
+                eq(attachmentModel.conversationId, params.conversationId),
+                inArray(attachmentModel.messageId, echoIds),
+              ),
+            )
+          await tx
+            .update(messageModel)
+            .set({ parentId: params.id })
+            .where(
+              and(
+                eq(messageModel.workspaceId, params.workspaceId),
+                eq(messageModel.conversationId, params.conversationId),
+                inArray(messageModel.parentId, echoIds),
+              ),
+            )
+        }
+        const [message] = await tx
+          .update(messageModel)
+          .set({ sourceId: params.sourceId, contentAttributes: overlay })
+          .where(
+            and(
+              eq(messageModel.workspaceId, params.workspaceId),
+              eq(messageModel.id, params.id),
+              matchesCreatedAt(messageModel.createdAt, params.createdAt),
+            ),
+          )
+          .returning({ id: messageModel.id })
+        if (echoIds.length) {
+          await tx
+            .delete(messageModel)
+            .where(
+              and(
+                eq(messageModel.workspaceId, params.workspaceId),
+                eq(messageModel.conversationId, params.conversationId),
+                eq(messageModel.contactInboxId, params.contactInboxId),
+                inArray(messageModel.id, echoIds),
+                inArray(messageModel.sourceId, sources),
+              ),
+            )
+        }
+        return {
+          message: message ?? null,
+          removedEchoes: currentEchoes.map(({ id, createdAt }) => ({
+            id,
+            createdAt,
+          })),
+        }
+      })
+    }
+    return await locked(0)
   }
 
   updateSourceIdAndEmail(
@@ -1624,9 +1929,15 @@ export class ShardedMessageRepository implements IMessageRepository {
       CreateAttachmentInput,
       "messageId" | "messageCreatedAt"
     >[],
-    options?: { ignoreConflict?: boolean; stableIdentity?: boolean },
+    options?: {
+      ignoreConflict?: boolean
+      stableIdentity?: boolean
+      client?: MessageShardDatabaseClient
+    },
   ): Promise<MessageWithAttachments | null> {
-    const db = await this.shardManager.getShardForWrite(message.workspaceId)
+    const db =
+      options?.client ??
+      (await this.shardManager.getShardForWrite(message.workspaceId))
 
     return db.transaction(async (tx) => {
       // When ignoreConflict is set (create-or-update path), a duplicate row must
@@ -1811,6 +2122,270 @@ export class ShardedMessageRepository implements IMessageRepository {
     return { result: created, isNew: true }
   }
 
+  private zaloAccountExactWhere(input: ZaloAccountExactTarget) {
+    if (!input.sourceId.startsWith("za:")) {
+      throw new Error("Zalo lifecycle requires scoped source identity")
+    }
+    return and(
+      eq(messageModel.workspaceId, input.workspaceId),
+      eq(messageModel.conversationId, input.conversationId),
+      eq(messageModel.contactInboxId, input.contactInboxId),
+      eq(messageModel.sourceId, input.sourceId),
+      eq(messageModel.id, input.id),
+      matchesCreatedAt(messageModel.createdAt, input.createdAt),
+    )
+  }
+
+  async applyZaloAccountLifecycleExact(
+    input: ZaloAccountExactTarget & { lifecycle: ZaloAccountLifecycle },
+  ): Promise<MessageModel | null> {
+    const primary = await this.shardManager.getShardForWrite(input.workspaceId)
+    const update = async (client: MessageShardDatabaseClient) => {
+      const [row] = await client
+        .update(messageModel)
+        .set({
+          contentAttributes: sql`jsonb_set(COALESCE(${messageModel.contentAttributes}, '{}'::jsonb), '{zaloAccount}', COALESCE(${messageModel.contentAttributes}->'zaloAccount','{}'::jsonb) || jsonb_build_object('lifecycle', ${JSON.stringify(input.lifecycle)}::jsonb), true)`,
+          ...(input.lifecycle.recalled || input.lifecycle.localHiddenAt
+            ? { deletedAt: sql`COALESCE(${messageModel.deletedAt}, now())` }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            this.zaloAccountExactWhere(input),
+            sql`COALESCE((${messageModel.contentAttributes} #>> '{zaloAccount,lifecycle,lifecycleRevision}')::integer, 0) <= ${input.lifecycle.lifecycleRevision}`,
+          ),
+        )
+        .returning()
+      return row ?? null
+    }
+    const row = await update(primary)
+    if (row) {
+      return row as MessageModel
+    }
+    const ranges = await this.getShardsForRange(
+      input.createdAt,
+      input.createdAt,
+    )
+    for (const range of ranges) {
+      const client = await this.shardManager.getShardClient(range.shard)
+      if (client === primary) {
+        continue
+      }
+      const historical = await update(client)
+      if (historical) {
+        return historical as MessageModel
+      }
+    }
+    // A newer lifecycle revision already applied is success for this exact row;
+    // the main ledger CAS prevents acknowledging a newer transition.
+    const existing = await this.findById({
+      ...input,
+      primaryAndFailOnError: true,
+    })
+    const lifecycle = (
+      existing?.contentAttributes?.zaloAccount as
+        | { lifecycle?: ZaloAccountLifecycle }
+        | undefined
+    )?.lifecycle
+    const applied =
+      !!lifecycle &&
+      lifecycle.recallId === input.lifecycle.recallId &&
+      lifecycle.lifecycleRevision >= input.lifecycle.lifecycleRevision &&
+      (!input.lifecycle.recalled || lifecycle.recalled) &&
+      (!input.lifecycle.localHiddenAt || !!lifecycle.localHiddenAt) &&
+      (!input.lifecycle.providerDeletedForMeAt ||
+        !!lifecycle.providerDeletedForMeAt) &&
+      (!input.lifecycle.originalObserved || lifecycle.originalObserved) &&
+      (input.lifecycle.placeholder || !lifecycle.placeholder)
+    return existing &&
+      existing.contactInboxId === input.contactInboxId &&
+      existing.sourceId === input.sourceId &&
+      applied
+      ? existing
+      : null
+  }
+
+  async fillZaloAccountOriginalExact(
+    input: ZaloAccountExactTarget & {
+      message: CreateMessageInput
+      attachments: Omit<
+        CreateAttachmentInput,
+        "messageId" | "messageCreatedAt"
+      >[]
+    },
+  ): Promise<MessageWithAttachments | null> {
+    const primary = await this.shardManager.getShardForWrite(input.workspaceId)
+    const fill = async (
+      client: MessageShardDatabaseClient,
+    ): Promise<MessageWithAttachments | null> =>
+      await client.transaction(async (tx) => {
+        const [row] = await tx
+          .update(messageModel)
+          .set({
+            text: input.message.text ?? null,
+            contentType: input.message.contentType,
+            contentAttributes: sql`COALESCE(${messageModel.contentAttributes}, '{}'::jsonb) || (${JSON.stringify(input.message.contentAttributes ?? {})}::jsonb - 'zaloAccount') || jsonb_build_object('zaloAccount', COALESCE(${JSON.stringify(input.message.contentAttributes ?? {})}::jsonb->'zaloAccount','{}'::jsonb) || COALESCE(${messageModel.contentAttributes}->'zaloAccount','{}'::jsonb) || jsonb_build_object('lifecycle', COALESCE(${messageModel.contentAttributes} #> '{zaloAccount,lifecycle}','{}'::jsonb) || '{"placeholder":false,"originalObserved":true}'::jsonb))`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              this.zaloAccountExactWhere(input),
+              sql`${messageModel.contentAttributes} #>> '{zaloAccount,lifecycle,placeholder}' = 'true'`,
+            ),
+          )
+          .returning()
+        if (!row) {
+          return null
+        }
+        let attachments: AttachmentModel[] = []
+        if (input.attachments.length) {
+          attachments = await tx
+            .insert(attachmentModel)
+            .values(
+              input.attachments.map((attachment) => ({
+                ...attachment,
+                messageId: input.id,
+                messageCreatedAt: input.createdAt,
+                createdAt: attachment.createdAt ?? new Date(),
+              })) as (typeof attachmentModel.$inferInsert)[],
+            )
+            .returning()
+        }
+        return { ...row, attachments } as MessageWithAttachments
+      })
+    const filled = await fill(primary)
+    if (filled) {
+      return filled
+    }
+    const ranges = await this.getShardsForRange(
+      input.createdAt,
+      input.createdAt,
+    )
+    for (const range of ranges) {
+      const client = await this.shardManager.getShardClient(range.shard)
+      if (client === primary) {
+        continue
+      }
+      const historical = await fill(client)
+      if (historical) {
+        return historical
+      }
+    }
+    // A retry may find an original already committed by the previous attempt.
+    // A still-empty placeholder is an unresolved write, never a saved original.
+    const existing = await this.findById({
+      ...input,
+      primaryAndFailOnError: true,
+    })
+    const za = existing?.contentAttributes?.zaloAccount as
+      | { lifecycle?: { placeholder?: boolean } }
+      | undefined
+    if (
+      !existing ||
+      existing.contactInboxId !== input.contactInboxId ||
+      existing.sourceId !== input.sourceId ||
+      za?.lifecycle?.placeholder === true
+    ) {
+      return null
+    }
+    return existing
+  }
+
+  async locateZaloAccountTarget(input: {
+    workspaceId: string
+    conversationId: string
+    contactInboxId: string
+    sourceId: string
+    cursor?: ZaloAccountRecallScanCursor | null
+    maxRanges?: number
+    maxCandidates?: number
+    deadline: number | Date
+  }): Promise<{
+    message?: MessageWithAttachments
+    complete: boolean
+    cursor?: ZaloAccountRecallScanCursor
+  }> {
+    if (!input.sourceId.startsWith("za:")) {
+      throw new Error("Zalo locator requires scoped source identity")
+    }
+    const deadline = Number(input.deadline)
+    let progressCursor = input.cursor ?? undefined
+    const ranges = this.mergeWriteShard(
+      await this.getShardsForRange(new Date(0), new Date()),
+      await this.shardManager.getWriteShardInfo(input.workspaceId),
+    ).sort(
+      (a, b) =>
+        a.startTime.getTime() - b.startTime.getTime() ||
+        a.shard.id.localeCompare(b.shard.id),
+    )
+    let start = input.cursor
+      ? ranges.findIndex(
+          (range) =>
+            range.shard.id === input.cursor?.shardId &&
+            range.startTime.toISOString() === input.cursor.rangeStart,
+        ) + 1
+      : 0
+    if (start < 0) {
+      start = 0
+    }
+    const cap = Math.max(1, Math.min(input.maxRanges ?? 2, 2))
+    for (let n = 0; start < ranges.length && n < cap; start++, n++) {
+      const range = ranges[start]
+      if (!range) {
+        break
+      }
+      if (Date.now() >= deadline) {
+        return { complete: false, cursor: progressCursor }
+      }
+      const client = await this.shardManager.getShardClient(range.shard)
+      const rows = await client.transaction(async (tx) => {
+        await tx.execute(sql`SET LOCAL statement_timeout = '2s'`)
+        return await tx
+          .select()
+          .from(messageModel)
+          .where(
+            and(
+              eq(messageModel.workspaceId, input.workspaceId),
+              eq(messageModel.conversationId, input.conversationId),
+              eq(messageModel.contactInboxId, input.contactInboxId),
+              eq(messageModel.sourceId, input.sourceId),
+            ),
+          )
+          .limit(Math.max(1, Math.min(input.maxCandidates ?? 50, 50)))
+      })
+      if (rows.length > 1) {
+        throw new Error("Ambiguous Zalo canonical target")
+      }
+      if (rows[0]) {
+        return {
+          message: {
+            ...rows[0],
+            attachments: await this.queryAttachmentsForMessages(
+              client,
+              [rows[0].id],
+              [rows[0].createdAt],
+            ),
+          } as MessageWithAttachments,
+          complete: true,
+        }
+      }
+      const cursor = {
+        shardId: range.shard.id,
+        rangeStart: range.startTime.toISOString(),
+        rangeEnd: (range.endTime ?? new Date()).toISOString(),
+      }
+      if (start + 1 === ranges.length) {
+        return { complete: true }
+      }
+      progressCursor = cursor
+    }
+    return {
+      complete: start >= ranges.length,
+      cursor: progressCursor,
+    }
+  }
+
   async createWithStableIdentity(
     message: CreateMessageInput & { id: string; createdAt: Date },
     attachments: Omit<
@@ -1818,10 +2393,39 @@ export class ShardedMessageRepository implements IMessageRepository {
       "messageId" | "messageCreatedAt"
     >[],
   ): Promise<{ result: MessageWithAttachments; isNew: boolean }> {
+    let client: MessageShardDatabaseClient | undefined
+    if (message.sourceId?.startsWith("za:")) {
+      // A delayed recall keeps its observed timeline tuple. Persist it on a
+      // covering primary so later rotations can still route exact updates.
+      const ranges = dedupeShardsByPhysicalId(
+        await this.shardManager.getShardsForTimeRange(
+          message.createdAt,
+          message.createdAt,
+        ),
+      )
+        .filter(
+          (range) =>
+            range.startTime <= message.createdAt &&
+            (!range.endTime || range.endTime >= message.createdAt),
+        )
+        .sort(
+          (left, right) =>
+            left.startTime.getTime() - right.startTime.getTime() ||
+            left.shard.id.localeCompare(right.shard.id),
+        )
+      const range =
+        ranges[workspaceShardIndex(message.workspaceId, ranges.length)]
+      if (!range) {
+        throw new MessageShardUnavailableError(
+          "No registered primary covers the Zalo message identity",
+        )
+      }
+      client = await this.shardManager.getShardClient(range.shard)
+    }
     const created = await this.createWithAttachmentsInternal(
       message,
       attachments,
-      { ignoreConflict: true, stableIdentity: true },
+      { ignoreConflict: true, stableIdentity: true, client },
     )
     if (created) {
       return { result: created, isNew: true }
@@ -2639,6 +3243,7 @@ export class ShardedMessageRepository implements IMessageRepository {
   }
 
   async updateAttachment({
+    expectedOriginPath,
     id,
     workspaceId,
     createdAt,
@@ -2665,6 +3270,9 @@ export class ShardedMessageRepository implements IMessageRepository {
               and(
                 eq(attachmentModel.id, id),
                 eq(attachmentModel.workspaceId, workspaceId),
+                expectedOriginPath === undefined
+                  ? undefined
+                  : eq(attachmentModel.originPath, expectedOriginPath),
                 matchesCreatedAt(attachmentModel.createdAt, createdAt),
               ),
             )
@@ -3080,6 +3688,7 @@ export class ShardedMessageRepository implements IMessageRepository {
                   contentType: messageModel.contentType,
                   text: messageModel.text,
                   deletedAt: messageModel.deletedAt,
+                  sourceId: messageModel.sourceId,
                 })
                 .from(messageModel)
                 .where(

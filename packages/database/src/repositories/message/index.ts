@@ -35,6 +35,7 @@ export type {
   ReconcileOutgoingSourceIdResult,
   TranslationContextMessage,
   UpdateAttachmentParams,
+  ZaloAccountExactTarget,
 } from "./message-repository"
 export * from "./message-repository.factory"
 

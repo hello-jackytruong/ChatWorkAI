@@ -1,10 +1,12 @@
 import { pathToFileURL } from "node:url"
 import {
+  takeDirectSendCapacity,
   zaloAccountGroupService,
   zaloAccountLabelService,
   zaloAccountSendAttemptService,
   zaloAccountService,
 } from "@chatbotx.io/business/zalo-account"
+import { zaloAccountMessageOperationsService } from "@chatbotx.io/business/zalo-account/native-operations"
 import { zaloAccountRuntimeStateService } from "@chatbotx.io/business/zalo-account/runtime-state"
 import { getChildLogger } from "@chatbotx.io/logger"
 import { createRedisConnection } from "@chatbotx.io/redis"
@@ -49,6 +51,7 @@ export const main = async (): Promise<void> => {
   const leaseStore = new RedisAccountLeaseStore(redis)
   const eventSink = env.enabled
     ? new FencedEventPublisher({
+        messageIntegrityEnabled: env.messageIntegrityEnabled,
         appendPort: leaseStore,
         eventStreamKey: zaloAccountTransportKeys.eventStream,
         maxLen: 100_000,
@@ -58,6 +61,8 @@ export const main = async (): Promise<void> => {
       })
     : disabledEventSink
   const pool = new ZaloAccountPool({
+    messageIntegrityEnabled: env.messageIntegrityEnabled,
+    admitDirectSend: takeDirectSendCapacity,
     onLeaseLost: () => scheduleRecovery(0),
     claim: (input) => zaloAccountRuntimeStateService.claim(input),
     hold: (input) => zaloAccountRuntimeStateService.hold(input),
@@ -79,6 +84,19 @@ export const main = async (): Promise<void> => {
       ? new RedisCommandConsumer({
           executor: new ZaloAccountCommandExecutor({
             admission: new ZaloAccountProviderAdmission(),
+            nativeEnabled: env.nativeMessageOperationsEnabled,
+            nativeOperations: {
+              claimDispatch: (command) =>
+                zaloAccountMessageOperationsService.gatewayClaim(command),
+              settle: (command, status, providerStatus) =>
+                zaloAccountMessageOperationsService.gatewaySettle(
+                  command,
+                  status,
+                  providerStatus,
+                ),
+              outcome: (command) =>
+                zaloAccountMessageOperationsService.gatewayOutcome(command),
+            },
             ownerId,
             ownsTarget: async (command: ZaloAccountCommandEnvelope) => {
               if (command.kind === "start_qr" || !command.target) {
@@ -189,7 +207,8 @@ export const main = async (): Promise<void> => {
       !shuttingDown &&
       !transportFailed &&
       redis.status === "ready" &&
-      consumer?.isReady() === true,
+      consumer?.isReady() === true &&
+      pool.isMessageReady(),
   })
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => reject(error)

@@ -123,3 +123,8 @@ describe("MessageItem view-catalog message", () => {
     expect(el.querySelector('[data-slot="view-catalog-button"]')).toBeNull()
   })
 })
+
+// Evidence inspection is a server action, outside this rendering test.
+vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
+  inspectZaloAccountMessageAction: vi.fn(),
+}))

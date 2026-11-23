@@ -1388,7 +1388,24 @@ vi.mock("../src/integration/handlers/zalo-account-group-refresh", () => ({
 vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountGroupService: {},
   zaloAccountGroupTagService: {},
+  captureZaloAccountMessage: vi.fn(),
+  redactZaloMediaLocators: (attributes: unknown) => attributes,
+}))
+vi.mock("@chatbotx.io/business/zalo-account-media", () => ({
+  getZaloAccountMediaPolicy: () => ({ enabled: false }),
 }))
 vi.mock("../src/integration/handlers/zalo-account-thread-event", () => ({
   handleZaloAccountThreadEvent: vi.fn(),
+}))
+
+// ZA retention has dedicated service tests; keep this generic ingestion characterization isolated.
+vi.mock("@chatbotx.io/business/zalo-account/message-recall", () => ({
+  zaloAccountMessageRecallService: {
+    persistOriginal: async ({ persist }: { persist: () => Promise<unknown> }) =>
+      await persist(),
+  },
+}))
+
+vi.mock("@chatbotx.io/business/zalo-account/lifecycle", () => ({
+  zaloAccountMessageLifecycleService: { handle: vi.fn().mockResolvedValue({}) },
 }))

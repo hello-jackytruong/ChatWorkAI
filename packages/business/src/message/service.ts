@@ -14,11 +14,18 @@ import {
   type ReconcileOutgoingSourceIdResult,
 } from "@chatbotx.io/database/repositories"
 import type { MessageModel } from "@chatbotx.io/database/types"
+import {
+  RealtimeEventType,
+  routeForConversation,
+} from "@chatbotx.io/realtime-protocol"
 import { withCache } from "@chatbotx.io/redis"
 import { BaseService } from "../base.service"
 import { ChatbotXException } from "../errors"
 import { logger } from "../logger"
+import { queueWorkspaceRealtimeEvent } from "../platform/realtime-broadcast"
 import { inboxTranslationSettingsService } from "../translation/settings-service"
+import { parseZaloAccountSourceId } from "../zalo-account/message-projection"
+import { zaloAccountMediaService } from "../zalo-account-media/service"
 import { createOutgoing } from "./create-outgoing"
 import {
   findByIdWithUrls,
@@ -365,10 +372,72 @@ class MessageService extends BaseService {
     )
   }
 
+  async updateSendAttemptEvidence(props: {
+    accountId: string
+    workspaceId: string
+    id: string
+    createdAt: Date
+    evidence: Record<string, unknown>
+    revision: number
+  }): Promise<void> {
+    const repo = await createMessageRepository()
+    const message = await repo.findById({
+      ...props,
+      primaryAndFailOnError: true,
+    })
+    if (!message) {
+      return
+    }
+    const changed = await repo.updateZaloSendAttemptEvidence(props)
+    if (!changed) {
+      return
+    }
+    const updated = await repo.findById({
+      ...props,
+      primaryAndFailOnError: true,
+    })
+    const conversation = await db.query.conversationModel.findFirst({
+      where: { workspaceId: props.workspaceId, id: message.conversationId },
+    })
+    if (updated && conversation) {
+      await queueWorkspaceRealtimeEvent(props.workspaceId, {
+        eventType: RealtimeEventType.messageContentUpdated,
+        data: {
+          messageId: updated.id,
+          contentAttributes: updated.contentAttributes ?? {},
+        },
+        route: routeForConversation(conversation),
+      })
+    }
+  }
+
   async reconcileOutgoingSourceId(
     props: ReconcileOutgoingSourceIdParams & { tx?: DatabaseClient },
   ): Promise<ReconcileOutgoingSourceIdResult> {
     const { tx = db, ...params } = props
+    // Commit cross-store aliases before shard reconciliation can remove echo rows.
+    if (params.sourceId.startsWith("za:")) {
+      const [, account, , , provider] = params.sourceId.split(":")
+      if (account && provider) {
+        await zaloAccountMediaService.bindMessageAliases({
+          workspaceId: params.workspaceId,
+          accountId: decodeURIComponent(account),
+          messageId: params.id,
+          conversationId: params.conversationId,
+          messageCreatedAt: params.createdAt,
+          aliases: (params.aliasSources ?? [params.sourceId]).flatMap(
+            (source) => {
+              const decoded = parseZaloAccountSourceId(source)
+              return decoded &&
+                decoded.accountId === decodeURIComponent(account)
+                ? [decoded.providerMessageId]
+                : []
+            },
+          ),
+          preserveAttachmentIds: Boolean(params.aliasSources),
+        })
+      }
+    }
     const repo = await createMessageRepository(tx)
     return await repo.reconcileOutgoingSourceId(params)
   }

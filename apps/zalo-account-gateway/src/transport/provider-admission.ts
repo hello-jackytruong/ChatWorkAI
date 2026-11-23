@@ -1,6 +1,7 @@
 type FailureWindow = {
   failures: number[]
   openUntil: number
+  expiresAt?: number
 }
 
 type AdmissionOptions = {
@@ -20,6 +21,8 @@ export type ProviderAdmissionPort = {
 
 export class ZaloAccountProviderAdmission implements ProviderAdmissionPort {
   private readonly accounts = new Map<string, FailureWindow>()
+  private lastSweep = 0
+  private sweep: IterableIterator<[string, FailureWindow]> | undefined
   private readonly now: () => number
   private readonly options: Required<Omit<AdmissionOptions, "now">>
   private readonly provider: FailureWindow = { failures: [], openUntil: 0 }
@@ -37,6 +40,16 @@ export class ZaloAccountProviderAdmission implements ProviderAdmissionPort {
 
   check(accountId?: string): number {
     const now = this.now()
+    this.prune(now)
+    if (accountId) {
+      const existing = this.accounts.get(accountId)
+      if (existing && (existing.expiresAt ?? Number.POSITIVE_INFINITY) <= now) {
+        this.accounts.delete(accountId)
+      }
+      if (!this.accounts.has(accountId) && this.accounts.size >= 4096) {
+        return 30_000
+      }
+    }
     const providerDelay = Math.max(0, this.provider.openUntil - now)
     const account = accountId ? this.accounts.get(accountId) : undefined
     const accountDelay = Math.max(0, (account?.openUntil ?? 0) - now)
@@ -50,10 +63,17 @@ export class ZaloAccountProviderAdmission implements ProviderAdmissionPort {
       this.options.providerCooldownMs,
     )
     if (accountId) {
+      this.prune(this.now())
+      if (!this.accounts.has(accountId) && this.accounts.size >= 4096) {
+        return
+      }
       const account = this.accounts.get(accountId) ?? {
         failures: [],
         openUntil: 0,
       }
+      account.expiresAt =
+        this.now() +
+        Math.max(this.options.windowMs, this.options.accountCooldownMs)
       this.accounts.set(accountId, account)
       this.addFailure(
         account,
@@ -68,6 +88,25 @@ export class ZaloAccountProviderAdmission implements ProviderAdmissionPort {
     this.provider.openUntil = 0
     if (accountId) {
       this.accounts.delete(accountId)
+    }
+  }
+
+  private prune(now: number): void {
+    if (now - this.lastSweep < 30_000) {
+      return
+    }
+    this.lastSweep = now
+    this.sweep ??= this.accounts.entries()
+    for (let i = 0; i < 64; i++) {
+      const next = this.sweep.next()
+      if (next.done) {
+        this.sweep = undefined
+        break
+      }
+      const [key, entry] = next.value
+      if ((entry.expiresAt ?? Number.POSITIVE_INFINITY) <= now) {
+        this.accounts.delete(key)
+      }
     }
   }
 

@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner"
 import { TranslatedMessage } from "@/features/translation/components/translated-message"
 import { useRequestTranslations } from "@/features/translation/hooks/use-request-translations"
+import { useZaloInspectPermission } from "@/features/zalo-accounts/components/zalo-inspect-permission"
 import { useWorkspaceId } from "@/hooks/routing"
 import { INBOX_MESSAGES_PER_PAGE } from "../chat/store/chat-store"
 import { useChatStore } from "../chat/store/chat-store-provider"
@@ -29,12 +30,14 @@ import { deleteMessageAction } from "./actions/delete-message.action"
 import { editMessageAction } from "./actions/edit-message.action"
 import { MessageItem } from "./components/message-item"
 import { ResendMessageButton } from "./components/resend-message-button"
+import { ZaloAccountMessageActions } from "./components/zalo-account-message-actions"
 import { canPrivateReplyToComment } from "./lib/private-reply"
 import type { MessageResourceWithRelations } from "./schema/resource"
 
 const START_INDEX = 100_000
 
 export function MessageList() {
+  const canInspectZalo = useZaloInspectPermission()
   const workspaceId = useWorkspaceId()
   const t = useTranslations()
 
@@ -368,8 +371,35 @@ export function MessageList() {
                   renderResend={(failed) => (
                     <ResendMessageButton message={failed} />
                   )}
+                  renderZaloActions={
+                    activeChannel === "zaloAccount"
+                      ? (target) => (
+                          <ZaloAccountMessageActions
+                            key={`${workspaceId}:${target.conversationId}:${target.id}:${new Date(target.createdAt).toISOString()}`}
+                            message={target}
+                            workspaceId={workspaceId}
+                          />
+                        )
+                      : undefined
+                  }
                   translation={translation}
                   zaloGroup={!!groupAudience}
+                  zaloInspect={
+                    activeChannel === "zaloAccount"
+                      ? {
+                          accountId:
+                            getZaloAccountId(message.contentAttributes) ??
+                            groupAudience?.accountId ??
+                            "",
+                          canInspect:
+                            canInspectZalo &&
+                            Boolean(
+                              getZaloAccountId(message.contentAttributes) ??
+                                groupAudience?.accountId,
+                            ),
+                        }
+                      : undefined
+                  }
                   zaloState={
                     groupAudience
                       ? {
@@ -470,3 +500,16 @@ const MessageComponentList: GridComponents["List"] = ({
     {children}
   </div>
 )
+
+const ZALO_ACCOUNT_ID = /^\d{1,200}$/
+function getZaloAccountId(attributes: unknown): string | undefined {
+  if (!attributes || typeof attributes !== "object") {
+    return
+  }
+  const account = (attributes as { zaloAccount?: unknown }).zaloAccount
+  if (!account || typeof account !== "object") {
+    return
+  }
+  const id = (account as { accountId?: unknown }).accountId
+  return typeof id === "string" && ZALO_ACCOUNT_ID.test(id) ? id : undefined
+}

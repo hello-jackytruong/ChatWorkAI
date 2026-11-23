@@ -80,6 +80,52 @@
       "closeCode": "Close code",
       "issue": "Connection issue",
       "requiresAction": "Reconnect this account to resume automatic connections."
+    },
+    "messageActions": "訊息操作",
+    "viewSavedContent": "檢視已儲存的原始內容",
+    "hideLocally": "在ChatbotX中隱藏",
+    "recallOnZalo": "在Zalo收回",
+    "deleteOnMyZalo": "從我的Zalo刪除",
+    "nativeOperationsDisabled": "Zalo原生操作目前無法使用。",
+    "retainOriginalNotice": "已儲存的原始內容仍可供獲得授權的收件匣成員檢視。",
+    "operationFailed": "操作失敗。",
+    "operationApplied": "操作已確認。",
+    "operationUnconfirmed": "結果尚未確認。請先檢查狀態再執行其他操作。",
+    "confirmOperation": "確認操作",
+    "inspectOperation": "檢查狀態",
+    "savedContent": "已儲存的原始內容",
+    "savedLoading": "正在載入已儲存的內容…",
+    "savedDenied": "您已無權存取，或此內容無法使用。",
+    "originalNotCaptured": "未擷取原始內容。",
+    "providerRecallTime": "Zalo收回時間",
+    "observedRecallTime": "收回偵測時間",
+    "recallActor": "收回者",
+    "unknownActor": "未知",
+    "savedFile": "已儲存的檔案",
+    "fileNotArchived": "檔案未封存或無法使用。",
+    "openSavedFile": "開啟已儲存的檔案",
+    "getSavedFile": "取得檔案連結",
+    "savedFileUnavailable": "此已儲存的檔案無法使用。",
+    "recalled": "已在 Zalo 收回",
+    "hiddenLocally": "已在CRM中隱藏",
+    "deleteChatOnZalo": "從我的Zalo刪除歷史記錄",
+    "deleteChatConfirm": "刪除截至所選訊息的Zalo歷史記錄？CRM中儲存的歷史記錄將保留以供追蹤。",
+    "deleteChatNoBoundary": "沒有可用於刪除Zalo歷史記錄的訊息邊界。",
+    "deletedOnMyZalo": "已從我的 Zalo 刪除",
+    "deleteChatBoundary": "歷史記錄刪除邊界",
+    "evidence": {
+      "unsupportedContent": "不支援的 Zalo 訊息",
+      "invalidContent": "無法讀取 Zalo 訊息",
+      "unsupportedSchema": "不支援此 Zalo 訊息格式",
+      "pending": "等待確認",
+      "unknown": "結果未知 — 請檢查狀態",
+      "failed": "訊息未傳送",
+      "applied": "已傳送",
+      "appliedPending": "已傳送，正在本地核對",
+      "needsReview": "結果需要檢查",
+      "safeFailure": "無法安全完成 Zalo 操作",
+      "unavailable": "狀態無法使用，請重試。",
+      "inspect": "檢查狀態"
     }
   },
   "fields": {
@@ -1332,7 +1378,7 @@
     },
     "fromName": {
       "label": "寄件人姓名",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "messageTemplate": {
       "label": "訊息範本"
@@ -4041,7 +4087,7 @@
     "title": "常規"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "這會刪除 Meta 訊息廣告活動，並從 ChatbotX 移除該廣告活動。如果 Meta 拒絕刪除，則會保留該廣告活動。",
+    "deleteWarning": "這會刪除 Meta 訊息廣告活動，並從 ChatWorkAI 移除該廣告活動。如果 Meta 拒絕刪除，則會保留該廣告活動。",
     "title": "Facebook 行銷訊息",
     "description": "透過 Messenger 上的個人化推廣訊息提升互動與銷售。",
     "create": "新增",
@@ -4082,7 +4128,7 @@
       "tosNotAccepted": "若要使用此功能，請於 {url} 接受自訂物件條款",
       "notFound": "找不到行銷訊息。",
       "audienceNotTargetable": "所選自訂目標受眾尚未就緒，或不屬於此粉絲專頁和廣告帳號。",
-      "connectFirst": "請先在 ChatbotX 應用程式中連接行銷訊息。",
+      "connectFirst": "請先在 ChatWorkAI 應用程式中連接行銷訊息。",
       "mmInvalidState": "目前的活動狀態下無法執行此操作。",
       "mmCampaignEnded": "Meta 訊息廣告活動已結束，因此無法傳送或恢復。",
       "mmPageNotConnected": "此廣告活動的粉絲專頁未連接到此工作區。",
@@ -4102,7 +4148,7 @@
       "uploadMore": "上傳更多列",
       "empty": "尚無自訂目標受眾。",
       "deleteTitle": "刪除自訂目標受眾",
-      "deleteWarning": "此操作會在 Meta 和 ChatbotX 中刪除自訂目標受眾「{name}」，且無法復原。",
+      "deleteWarning": "此操作會在 Meta 和 ChatWorkAI 中刪除自訂目標受眾「{name}」，且無法復原。",
       "deleted": "自訂目標受眾已刪除。",
       "pageDisconnected": "粉絲專頁已中斷連結",
       "status": {
@@ -5723,7 +5769,7 @@
         "title": "通話資格",
         "appSubscriptionMissing": "請先在 Meta 應用程式儀表板中為此應用程式設定 WhatsApp webhook，然後再試一次。",
         "appSubscriptionFailed": "無法驗證應用程式的「calls」webhook 訂閱狀態，請稍後再試。",
-        "callsNotSubscribed": "此應用程式未訂閱「calls」webhook 欄位，因此通話事件無法傳送至 ChatbotX（Meta 錯誤 138018：未滿足技術先決條件 — 請確保訂閱 WABA 的至少一個應用程式也具有通話 webhook 欄位）。",
+        "callsNotSubscribed": "此應用程式未訂閱「calls」webhook 欄位，因此通話事件無法傳送至 ChatWorkAI（Meta 錯誤 138018：未滿足技術先決條件 — 請確保訂閱 WABA 的至少一個應用程式也具有通話 webhook 欄位）。",
         "fixButton": "修復",
         "fixSuccess": "此應用程式現已訂閱 WhatsApp 通話 webhook。",
         "manualIntegrationNotice": "此號碼是手動連接的，此處沒有應用程式憑證。請在 Meta 應用程式儀表板中為您的應用程式訂閱「calls」webhook 欄位。",
@@ -9105,7 +9151,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "動作來源",
@@ -9600,8 +9646,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11123,7 +11169,7 @@
         "label": "商店來源",
         "description": "選擇用於管理商品、庫存和訂單的商店來源。設為 Shopify / WooCommerce 後，所有商品和訂單都將直接在您的 Shopify / WooCommerce 商店中管理。",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11292,7 +11338,7 @@
       },
       "authKind": {
         "label": "驗證",
-        "description": "ChatbotX 登入您商店的方式：使用自訂應用程式的 Admin API 存取權杖，或使用在 Shopify Dev Dashboard 中建立的應用程式的 Client ID 和密鑰。",
+        "description": "ChatWorkAI 登入您商店的方式：使用自訂應用程式的 Admin API 存取權杖，或使用在 Shopify Dev Dashboard 中建立的應用程式的 Client ID 和密鑰。",
         "options": {
           "token": "Admin API 存取權杖",
           "clientCredentials": "Client ID 和密鑰（Dev Dashboard 應用程式）"
@@ -12204,7 +12250,7 @@
     "noWorkspaces": "你不是任何工作區的管理員，因此無法授權此應用程式。"
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12394,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12511,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "刪除您的 ChatbotX 帳號",
+    "title": "刪除您的 ChatWorkAI 帳號",
     "intro": "您可以透過以下任一方式刪除帳號及其資料。",
     "waysTitle": "如何刪除帳號",
     "wayMobile": "在行動應用程式中：設定 → 刪除帳號。",

@@ -55,6 +55,7 @@ import {
   validationException,
 } from "../errors"
 import { logger } from "../logger"
+import { captureZaloAccountMessage } from "../media/zalo-account-ingress"
 import {
   queueMessageCreatedEvent,
   queueWorkspaceRealtimeEvent,
@@ -65,6 +66,7 @@ import { getPublicFileUrl } from "../utils"
 import { recordAgentReply } from "../working-hours/agent-reply-metric"
 import { zaloAccountGroupService } from "../zalo-account/group.service"
 import { zaloAccountService } from "../zalo-account/service"
+import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
 
 type CreateOutgoingInput = (
   | { flowId: string; nodeId?: string }
@@ -702,12 +704,29 @@ export const createOutgoing = async (props: {
       zaloAccountQuote: groupQuote,
     }
   }
-  const contentAttributes = props.deliveryIdentity?.commandId
+  let contentAttributes = props.deliveryIdentity?.commandId
     ? {
         ...replyContentAttributes,
         zaloAccountCommandId: props.deliveryIdentity.commandId,
       }
     : replyContentAttributes
+  if (contactInbox.channel === "zaloAccount") {
+    const accountId =
+      groupAudience?.accountId ??
+      (
+        await zaloAccountService.findByInboxId({
+          workspaceId: conversation.workspaceId,
+          inboxId: contactInbox.inboxId,
+        })
+      )?.id
+    if (!accountId) {
+      throw notFoundException("Zalo Account not found")
+    }
+    contentAttributes = {
+      ...contentAttributes,
+      zaloAccount: { accountId, sendAttempt: { status: "pending" } },
+    }
+  }
   const messageInput = {
     ...(props.deliveryIdentity ? { id: props.deliveryIdentity.id } : {}),
     text: productMessage ? productMessage.text : plainText,
@@ -731,6 +750,10 @@ export const createOutgoing = async (props: {
     workspaceId: conversation.workspaceId,
     conversationId: targetConversation.id,
     ...file,
+    ...(contactInbox.channel === "zaloAccount" &&
+    getZaloAccountMediaPolicy().enabled
+      ? { keepOriginal: true }
+      : {}),
   }))
 
   const prepared = props.deliveryIdentity
@@ -773,6 +796,22 @@ export const createOutgoing = async (props: {
       ...attachment,
       url: getPublicFileUrl(attachment.originPath, storageUrl),
     })),
+  }
+
+  if (contactInbox.channel === "zaloAccount") {
+    await captureZaloAccountMessage({
+      workspaceId: conversation.workspaceId,
+      inboxId: contactInbox.inboxId,
+      channel: contactInbox.channel,
+      conversationId: targetConversation.id,
+      messageId: message.id,
+      messageCreatedAt: message.createdAt,
+      threadType: isGroup ? "group" : "user",
+      threadId: groupAudience?.providerGroupId ?? contactInbox.sourceId,
+      accountId: groupAudience?.accountId,
+      outgoing: true,
+      attachments,
+    })
   }
 
   if (prepared?.isNew !== false) {

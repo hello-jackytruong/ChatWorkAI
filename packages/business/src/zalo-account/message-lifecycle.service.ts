@@ -3,6 +3,7 @@ import {
   createMessageRepository,
   integrationZaloAccountGroupRepository,
   zaloAccountMessageStateRepository,
+  zaloAccountSendAttemptRepository,
 } from "@chatbotx.io/database/repositories"
 import {
   RealtimeEventType,
@@ -13,8 +14,8 @@ import {
   zaloAccountThreadEventSchema,
 } from "@chatbotx.io/sdk"
 import { conversationService } from "../conversation/service"
-import { messageService } from "../message/service"
 import { queueWorkspaceRealtimeEvent } from "../platform/realtime-broadcast"
+import { zaloAccountMessageRecallService } from "./message-recall.service"
 import { zaloAccountService } from "./service"
 
 export type ZaloAccountThreadEventInput = {
@@ -36,6 +37,10 @@ export const zaloAccountMessageLifecycleService = {
       id: input.accountId,
     })
     if (!account || account.inboxId !== input.inboxId) {
+      return {}
+    }
+    if (event.type === "undo") {
+      await zaloAccountMessageRecallService.recall({ ...input, event })
       return {}
     }
     const group =
@@ -125,7 +130,16 @@ export const zaloAccountMessageLifecycleService = {
     ) {
       return {}
     }
-    const sourceId = `za:${encodeURIComponent(input.accountId)}:${event.threadType}:${encodeURIComponent(event.threadId)}:${encodeURIComponent(event.providerMessageId)}`
+    const ownAttempt =
+      await zaloAccountSendAttemptRepository.findByProviderMessage({
+        ...input,
+        threadType: event.threadType,
+        threadId: event.threadId,
+        providerMessageId: event.providerMessageId,
+      })
+    const providerMessageId =
+      ownAttempt?.providerMessageIds[0] ?? event.providerMessageId
+    const sourceId = `za:${encodeURIComponent(input.accountId)}:${event.threadType}:${encodeURIComponent(event.threadId)}:${encodeURIComponent(providerMessageId)}`
     const scope = {
       workspaceId: input.workspaceId,
       accountId: input.accountId,
@@ -133,40 +147,6 @@ export const zaloAccountMessageLifecycleService = {
       groupId: group?.id,
       accountPolicyEpoch: input.accountPolicyEpoch,
       groupPolicyEpoch: input.groupPolicyEpoch,
-    }
-    if (event.type === "undo") {
-      if (
-        group &&
-        !(await zaloAccountMessageStateRepository.recordGroupUndo({
-          ...scope,
-          groupId: group.id,
-          accountPolicyEpoch: account.groupPolicyEpoch,
-          groupPolicyEpoch: group.policyEpoch,
-          event,
-        }))
-      ) {
-        return {}
-      }
-      const removed = await messageService.deleteBySourceId({
-        sourceId,
-        workspaceId: input.workspaceId,
-        createdAtHint: new Date(event.timestampMs),
-      })
-      await zaloAccountMessageStateRepository.clearTarget({
-        ...scope,
-        threadType: event.threadType,
-        threadId: event.threadId,
-        providerMessageId: event.providerMessageId,
-      })
-      if (!removed.length) {
-        return { missingTarget: true }
-      }
-      await queueWorkspaceRealtimeEvent(input.workspaceId, {
-        eventType: RealtimeEventType.messageDeleted,
-        data: { messageIds: removed.map((row) => row.id) },
-        route: routeForConversation(conversation),
-      })
-      return {}
     }
     const changed =
       event.type === "receipt"
@@ -186,12 +166,17 @@ export const zaloAccountMessageLifecycleService = {
       new Date(Date.now() - RETENTION_MS),
     )
     if (changed && message) {
+      const [projected] =
+        await zaloAccountMessageRecallService.projectMessagesForRead({
+          workspaceId: input.workspaceId,
+          messages: [message],
+        })
       await queueWorkspaceRealtimeEvent(input.workspaceId, {
         eventType: RealtimeEventType.messageContentUpdated,
         data: {
           messageId: message.id,
           contentAttributes: {
-            ...message.contentAttributes,
+            ...projected?.contentAttributes,
             zaloAccountStateUpdatedAt: new Date().toISOString(),
           },
         },

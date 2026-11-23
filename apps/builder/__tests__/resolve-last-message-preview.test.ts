@@ -327,3 +327,31 @@ describe("resolveLastMessagePreview — conversation routing rows", () => {
     expect(result).toBe("Conversation context")
   })
 })
+
+test("Zalo recalled and locally hidden previews never expose originals", () => {
+  const base = {
+    sourceId: "za:1:user:2:3",
+    text: "original-secret",
+    deletedAt: new Date(),
+  }
+  expect(
+    resolveLastMessagePreview(
+      {
+        ...base,
+        contentAttributes: { zaloAccount: { lifecycle: { recalled: true } } },
+      } as never,
+      t,
+    ),
+  ).toBe(t("zaloAccount.recalled"))
+  expect(
+    resolveLastMessagePreview(
+      {
+        ...base,
+        contentAttributes: {
+          zaloAccount: { lifecycle: { localHiddenAt: "2026-11-23" } },
+        },
+      } as never,
+      t,
+    ),
+  ).toBe(t("zaloAccount.hiddenLocally"))
+})

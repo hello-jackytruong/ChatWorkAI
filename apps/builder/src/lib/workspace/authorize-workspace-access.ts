@@ -213,6 +213,11 @@ export const CONTACT_SCAN_CANCEL_TOKEN_PATH = "/v1/contact-scans/cancel"
 const CONTACT_SYNC_CANCEL_TOKEN_PATH = "/v1/contact-syncs/{runId}/cancel"
 
 const READ_ONLY_POST_PATHS = new Set<string>([
+  // Delete-only operations: bypass owner quota expiry, never token write authorization.
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/hide-locally",
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/recall",
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/delete-on-zalo",
+  "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/delete-on-zalo",
   CONVERSATIONS_LIST_POST_PATH,
   FILTER_VALUE_LABELS_POST_PATH,
   FILTER_VALUE_LABELS_TOKEN_PATH,

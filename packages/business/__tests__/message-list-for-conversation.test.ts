@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => {
     listByConversation: vi.fn(),
   }
   return {
+    projectMedia: vi.fn().mockResolvedValue(new Map()),
     repo,
     createMessageRepository: vi.fn().mockResolvedValue(repo),
     getSafeSinceTime: vi.fn((value: Date | undefined) => value),
@@ -26,6 +27,10 @@ const mocks = vi.hoisted(() => {
     uploader: { getPresignedDownload: vi.fn() },
   }
 })
+
+vi.mock("../src/zalo-account-media/read-service", () => ({
+  zaloAccountMediaReadService: { projectMessages: mocks.projectMedia },
+}))
 
 vi.mock("@chatbotx.io/encryption", () => ({
   signMediaToken: mocks.signMediaToken,
@@ -65,6 +70,26 @@ const {
 } = await import("../src/message/list-for-conversation")
 
 describe("message list-for-conversation", () => {
+  test("redacts legacy raw send errors only on Zalo Account without extra lookups", async () => {
+    const message = {
+      id: "m",
+      createdAt: new Date(),
+      attachments: [],
+      sendError: "SECRET https://private.invalid/token",
+    }
+    const zalo = await withResolvedAttachmentUrls(message as never, {
+      channel: "zaloAccount",
+      workspaceId: "w",
+    })
+    const other = await withResolvedAttachmentUrls(message as never, {
+      channel: "messenger",
+      workspaceId: "w",
+    })
+    expect(zalo.sendError).not.toContain("SECRET")
+    expect(other.sendError).toBe(message.sendError)
+    expect(mocks.createMessageRepository).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.createMessageRepository.mockResolvedValue(mocks.repo)
@@ -495,4 +520,78 @@ describe("message list-for-conversation", () => {
       expect(result.data[0].attachments[0].url).toBeNull()
     })
   })
+})
+
+test("projects stored Zalo originals in one batch and never exposes source locators", async () => {
+  const time = new Date("2026-11-23T00:00:00Z")
+  const message = {
+    id: "media-message",
+    createdAt: time,
+    contactInboxId: "ci-z",
+    conversationId: "c",
+    workspaceId: "ws-1",
+    deletedAt: null,
+    attachments: [
+      {
+        id: "att",
+        originPath: "https://provider.test/a?token=secret",
+        thumbnailPath: "https://provider.test/thumb?token=secret",
+      },
+    ],
+  }
+  mocks.repo.listByConversation.mockResolvedValue({
+    data: [message],
+    nextCursor: null,
+  })
+  mocks.contactInboxService.findManyByIds.mockResolvedValue([
+    { id: "ci-z", channel: "zaloAccount", inboxId: "za-inbox" },
+  ])
+  mocks.projectMedia.mockResolvedValue(
+    new Map([
+      [
+        message.id,
+        [
+          {
+            referenceId: "ref",
+            attachmentId: "att",
+            role: "original",
+            state: "stored",
+            url: "https://signed.test/a",
+          },
+        ],
+      ],
+    ]),
+  )
+  const result = await listForConversation({ workspaceId: "ws-1", limit: 50 })
+  expect(result.data[0]?.attachments[0]).toMatchObject({
+    url: "https://signed.test/a",
+    originPath: "",
+    fallbackUrl: null,
+  })
+  expect(JSON.stringify(result)).not.toContain("token=secret")
+  expect(mocks.projectMedia).toHaveBeenCalledTimes(1)
+})
+
+test("keeps authorized legacy Zalo storage reads when capture is disabled and there is no ledger", async () => {
+  process.env.ZALO_ACCOUNT_MEDIA_STORAGE_ENABLED = "false"
+  mocks.projectMedia.mockResolvedValue(new Map())
+  mocks.contactInboxService.findManyByIds.mockResolvedValue([
+    { id: "ci-z", channel: "zaloAccount", inboxId: "i" },
+  ])
+  mocks.uploader.getPresignedDownload.mockResolvedValue(
+    "https://signed.test/legacy",
+  )
+  const result = await withResolvedAttachmentUrls(
+    {
+      id: "m",
+      createdAt: new Date(),
+      contactInboxId: "ci-z",
+      deletedAt: null,
+      attachments: [
+        { id: "legacy", originPath: "workspace/ws-1/uploads/a.png" },
+      ],
+    } as never,
+    { channel: "zaloAccount", workspaceId: "ws-1" },
+  )
+  expect(result.attachments[0]?.url).toBe("https://signed.test/legacy")
 })

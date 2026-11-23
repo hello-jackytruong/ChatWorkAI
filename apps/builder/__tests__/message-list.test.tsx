@@ -269,3 +269,8 @@ vi.mock("@/features/zalo-accounts/queries/use-group-message-state", () => ({
     workspaceId,
   ],
 }))
+
+// Server actions are transformed by Next in production; dedicated ZA action tests cover them.
+vi.mock("@/features/messages/components/zalo-account-message-actions", () => ({
+  ZaloAccountMessageActions: () => null,
+}))

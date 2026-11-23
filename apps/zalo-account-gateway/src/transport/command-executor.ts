@@ -1,11 +1,13 @@
 import {
   parseZaloAccountCommandEnvelope,
   type ZaloAccountCommandEnvelope,
+  type ZaloAccountErrorInfo,
   type ZaloAccountFriendSync,
   type ZaloAccountGroup,
   type ZaloAccountGroupSync,
   type ZaloAccountLabelSnapshot,
   ZaloAccountPreDispatchError,
+  type ZaloAccountStickerResource,
 } from "@chatbotx.io/sdk"
 import type { ZaloAccountPool } from "../runtime/zalo-account-pool"
 import type { ProviderAdmissionPort } from "./provider-admission"
@@ -13,6 +15,7 @@ import type { ProviderAdmissionPort } from "./provider-admission"
 type PoolPort = Pick<
   ZaloAccountPool,
   | "getLabels"
+  | "getStickerResources"
   | "listGroups"
   | "listFriends"
   | "reconnect"
@@ -22,7 +25,8 @@ type PoolPort = Pick<
   | "startQr"
   | "stop"
   | "updateLabels"
->
+> &
+  Partial<Pick<ZaloAccountPool, "nativeOperation">>
 
 export type CommandExecutionOutcome =
   | {
@@ -35,11 +39,12 @@ export type CommandExecutionOutcome =
         groupSync?: ZaloAccountGroupSync
         friendSync?: ZaloAccountFriendSync
         labels?: ZaloAccountLabelSnapshot
+        stickerResources?: ZaloAccountStickerResource[]
       }
     }
   | { status: "rejected_stale" }
   | { status: "unknown" }
-  | { status: "failed"; error: string }
+  | { status: "failed"; error: string; errorInfo?: ZaloAccountErrorInfo }
 
 type CommandState =
   | { status: "pending" }
@@ -89,7 +94,27 @@ export class InMemoryCommandStateStore implements CommandStateStore {
   }
 }
 
+type NativeCommand = Extract<
+  ZaloAccountCommandEnvelope,
+  { kind: "native_operation" }
+>
+export type NativeOperationDurabilityPort = {
+  claimDispatch: (command: NativeCommand) => Promise<boolean>
+  settle: (
+    command: NativeCommand,
+    status: "applied" | "unknown" | "failed",
+    providerStatus?: number,
+  ) => Promise<void>
+  outcome: (command: NativeCommand) => Promise<CommandExecutionOutcome>
+}
+
 type ExecutorOptions = {
+  nativeStatusProof?: (
+    operation: NativeCommand["nativeOperation"]["operation"],
+    status: number,
+  ) => "applied" | "failed" | "unknown"
+  nativeEnabled?: boolean
+  nativeOperations?: NativeOperationDurabilityPort
   admission?: ProviderAdmissionPort
   now?: () => Date
   ownsTarget?: (command: ZaloAccountCommandEnvelope) => Promise<boolean>
@@ -97,6 +122,33 @@ type ExecutorOptions = {
   pool: PoolPort
   stateStore: CommandStateStore
   stateTtlMs?: number
+}
+
+const operationSafety = (
+  kind: ZaloAccountCommandEnvelope["kind"],
+): "read" | "write" | "typing" | "lifecycle" => {
+  switch (kind) {
+    case "sync_groups":
+    case "sync_friends":
+    case "get_labels":
+    case "get_sticker_resources":
+      return "read"
+    case "send_direct":
+    case "send_group":
+    case "update_labels":
+    case "native_operation":
+      return "write"
+    case "send_typing":
+      return "typing"
+    case "start_qr":
+    case "reconnect":
+    case "stop":
+      return "lifecycle"
+    default: {
+      const exhaustive: never = kind
+      return exhaustive
+    }
+  }
 }
 
 export class ZaloAccountCommandExecutor {
@@ -129,6 +181,10 @@ export class ZaloAccountCommandExecutor {
       return { status: "rejected_stale" }
     }
 
+    if (command.kind === "native_operation") {
+      return await this.executeNative(command)
+    }
+
     const key = commandStateKey(command)
     if (!(await this.options.stateStore.claim(key, this.options.stateTtlMs))) {
       const existing = await this.options.stateStore.get(key)
@@ -140,11 +196,20 @@ export class ZaloAccountCommandExecutor {
 
     const accountId =
       command.route.kind === "account" ? command.route.accountId : undefined
-    const retryAfterMs = this.options.admission?.check(accountId) ?? 0
+    const retryAfterMs =
+      command.kind === "stop"
+        ? 0
+        : (this.options.admission?.check(accountId) ?? 0)
     if (retryAfterMs > 0) {
       const outcome: CommandExecutionOutcome = {
         status: "failed",
         error: `Zalo Account provider admission is paused; retry after ${retryAfterMs}ms`,
+        errorInfo: {
+          code: "admission_paused",
+          phase: "admission",
+          retryAfterMs: Math.min(60_000, retryAfterMs),
+          safeAction: "new_attempt",
+        },
       }
       await this.options.stateStore.complete(
         key,
@@ -155,8 +220,10 @@ export class ZaloAccountCommandExecutor {
     }
 
     try {
-      const result = await this.dispatch(command)
-      this.options.admission?.recordSuccess(accountId)
+      const result = await this.dispatchWithReadRetry(command)
+      if (command.kind !== "stop") {
+        this.options.admission?.recordSuccess(accountId)
+      }
       const outcome: CommandExecutionOutcome = { status: "applied", result }
       await this.options.stateStore.complete(
         key,
@@ -165,21 +232,34 @@ export class ZaloAccountCommandExecutor {
       )
       return outcome
     } catch (error) {
-      if (!(error instanceof ZaloAccountPreDispatchError)) {
+      if (
+        command.kind !== "stop" &&
+        !(error instanceof ZaloAccountPreDispatchError)
+      ) {
         this.options.admission?.recordFailure(accountId)
       }
       const outcome: CommandExecutionOutcome = {
         ...(!(error instanceof ZaloAccountPreDispatchError) &&
-        (command.kind === "send_direct" ||
-          command.kind === "send_group" ||
-          command.kind === "update_labels")
+        operationSafety(command.kind) === "write"
           ? { status: "unknown" as const }
           : {
               status: "failed" as const,
               error:
-                error instanceof Error
-                  ? error.message
-                  : "Unknown command error",
+                error instanceof ZaloAccountPreDispatchError
+                  ? "Zalo Account command rejected before dispatch"
+                  : "Zalo Account provider operation failed",
+              errorInfo:
+                error instanceof ZaloAccountPreDispatchError
+                  ? (error.errorInfo ?? {
+                      code: "pre_dispatch_failed" as const,
+                      phase: "validation" as const,
+                      safeAction: "new_attempt" as const,
+                    })
+                  : {
+                      code: "provider_failed" as const,
+                      phase: "dispatch" as const,
+                      safeAction: "retry_read" as const,
+                    },
             }),
       }
       await this.options.stateStore.complete(
@@ -193,6 +273,133 @@ export class ZaloAccountCommandExecutor {
     }
   }
 
+  private async executeNative(
+    command: NativeCommand,
+  ): Promise<CommandExecutionOutcome> {
+    const durable = this.options.nativeOperations
+    if (
+      !(
+        this.options.nativeEnabled &&
+        durable &&
+        this.options.pool.nativeOperation
+      )
+    ) {
+      return { status: "failed", error: "native_operations_unavailable" }
+    }
+    let dispatched = false
+    try {
+      const result = await this.options.pool.nativeOperation({
+        workspaceId: command.route.workspaceId,
+        runtime: { kind: "account", id: command.route.accountId },
+        inboxId: command.route.inboxId,
+        commandId: command.commandId,
+        nativeOperation: command.nativeOperation,
+        beforeDispatch: async () => {
+          if (
+            new Date(command.expiresAt).getTime() <=
+            this.options.now().getTime()
+          ) {
+            throw new ZaloAccountPreDispatchError(
+              "Native operation expired before dispatch",
+            )
+          }
+          if (
+            this.options.ownsTarget &&
+            !(await this.options.ownsTarget(command))
+          ) {
+            throw new ZaloAccountPreDispatchError(
+              "Native operation lease is stale",
+            )
+          }
+          if (
+            (this.options.admission?.check(command.route.accountId) ?? 0) > 0
+          ) {
+            throw new ZaloAccountPreDispatchError(
+              "Native operation provider admission is paused",
+            )
+          }
+          dispatched = await durable.claimDispatch(command)
+          return dispatched
+        },
+      })
+      if (!result) {
+        return await durable.outcome(command)
+      }
+      // SDK numeric statuses are not live-proven confirmation. Preserve the response without claiming success.
+      const status =
+        this.options.nativeStatusProof?.(
+          command.nativeOperation.operation,
+          result.status,
+        ) ?? "unknown"
+      await durable.settle(command, status, result.status)
+      if (status === "applied") {
+        return { status: "applied", result: { status: "native_applied" } }
+      }
+      if (status === "failed") {
+        return { status: "failed", error: "provider_rejected" }
+      }
+      return { status: "unknown" }
+    } catch (error) {
+      if (dispatched) {
+        this.options.admission?.recordFailure(command.route.accountId)
+        await durable.settle(command, "unknown")
+        return { status: "unknown" }
+      }
+      return {
+        status: "failed",
+        error:
+          error instanceof ZaloAccountPreDispatchError
+            ? error.message
+            : "native_operation_rejected",
+      }
+    }
+  }
+
+  private async dispatchWithReadRetry(command: ZaloAccountCommandEnvelope) {
+    const pureRead = operationSafety(command.kind) === "read"
+    try {
+      return await this.dispatch(command)
+    } catch (error) {
+      if (!pureRead || error instanceof ZaloAccountPreDispatchError) {
+        throw error
+      }
+      if (this.options.now().getTime() + 100 >= Date.parse(command.expiresAt)) {
+        throw error
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 100))
+      if (this.options.now().getTime() >= Date.parse(command.expiresAt)) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account read deadline expired",
+        )
+      }
+      if (
+        command.kind !== "start_qr" &&
+        command.target &&
+        this.options.ownsTarget &&
+        !(await this.options.ownsTarget(command))
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account read ownership changed",
+        )
+      }
+      const delay =
+        this.options.admission?.check(
+          command.route.kind === "account"
+            ? command.route.accountId
+            : undefined,
+        ) ?? 0
+      if (delay > 0) {
+        throw new ZaloAccountPreDispatchError("Zalo Account admission paused", {
+          code: "admission_paused",
+          phase: "admission",
+          retryAfterMs: Math.min(60_000, delay),
+          safeAction: "retry_read",
+        })
+      }
+      return await this.dispatch(command)
+    }
+  }
+
   private async dispatch(command: ZaloAccountCommandEnvelope): Promise<{
     status: string
     messageIds?: string[]
@@ -201,7 +408,11 @@ export class ZaloAccountCommandExecutor {
     groupSync?: ZaloAccountGroupSync
     friendSync?: ZaloAccountFriendSync
     labels?: ZaloAccountLabelSnapshot
+    stickerResources?: ZaloAccountStickerResource[]
   }> {
+    if (command.kind === "native_operation") {
+      throw new Error("Native operations require durable dispatch")
+    }
     if (command.kind === "start_qr") {
       return await this.options.pool.startQr({
         deadlineAt: Date.parse(command.expiresAt),
@@ -222,6 +433,9 @@ export class ZaloAccountCommandExecutor {
       throw new Error("Account command requires an account route")
     }
     const poolCommand = {
+      ...(command.kind === "reconnect" || command.kind === "stop"
+        ? {}
+        : { deadlineAt: Date.parse(command.expiresAt) }),
       workspaceId: command.route.workspaceId,
       runtime: { kind: "account" as const, id: command.route.accountId },
       inboxId: command.route.inboxId,
@@ -278,6 +492,15 @@ export class ZaloAccountCommandExecutor {
         groupId: command.groupId,
         message: command.message,
       })
+    }
+    if (command.kind === "get_sticker_resources") {
+      return {
+        status: "synced",
+        stickerResources: await this.options.pool.getStickerResources({
+          ...poolCommand,
+          stickerIds: command.stickerIds,
+        }),
+      }
     }
     if (command.kind === "get_labels") {
       return {

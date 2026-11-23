@@ -2562,3 +2562,76 @@ describe("chat store send queues", () => {
     expect(store.getState()).toBe(before)
   })
 })
+
+test("an attachment readiness patch preserves text, translation and other attachments", () => {
+  const store = createChatStore()
+  const original = {
+    ...makeMessage("c", new Date(), "m"),
+    text: "current edit",
+    translation: { translatedText: "kept" },
+    attachments: [
+      { id: "a", name: "file.jpg", size: 0, originPath: "", url: null },
+      { id: "b", name: "other.jpg", url: "other" },
+    ],
+  }
+  store.setState({ messages: [original] } as never)
+  store.getState().updateMessageText("m", "stale text", {
+    attachmentId: "a",
+    newAttachmentPath: null,
+    newAttachmentPublicUrl: "signed",
+    newAttachmentMimeType: "image/jpeg",
+    newAttachmentSize: 30,
+    removedAttachment: false,
+  })
+  const message = store.getState().messages[0]
+  expect(message?.text).toBe("current edit")
+  expect(message?.translation).toEqual(original.translation)
+  expect(message?.attachments?.[0]).toMatchObject({
+    id: "a",
+    name: "file.jpg",
+    size: 30,
+    url: "signed",
+    originPath: "",
+  })
+  expect(message?.attachments?.[1]).toEqual(original.attachments[1])
+})
+test("an attachment readiness patch cannot restore a recalled message", () => {
+  const store = createChatStore()
+  const original = {
+    ...makeMessage("c", new Date(), "m"),
+    deletedAt: new Date(),
+    attachments: [{ id: "a", url: null }],
+  }
+  store.setState({ messages: [original] } as never)
+  store.getState().updateMessageText("m", "stale", {
+    attachmentId: "a",
+    newAttachmentPath: null,
+    newAttachmentPublicUrl: "signed",
+    removedAttachment: false,
+  })
+  expect(store.getState().messages[0]).toEqual(original)
+})
+test("late Zalo send evidence cannot replace a newer conflict revision", () => {
+  const store = createChatStore()
+  const evidence = (revision: number, state: string) => ({
+    zaloAccount: {
+      sendAttempt: { status: "applied", reconciliation: { revision, state } },
+    },
+  })
+  const current = evidence(5, "needs_review")
+  store.setState({
+    messages: [
+      { ...makeMessage("c", new Date(), "m"), contentAttributes: current },
+    ] as never,
+  })
+  store.getState().updateMessageContentAttributes("m", evidence(4, "completed"))
+  expect(store.getState().messages[0]?.contentAttributes).toEqual(current)
+  store.getState().updateMessageContentAttributes("m", {
+    zaloAccount: { providerMessageId: "legacy" },
+  })
+  expect(store.getState().messages[0]?.contentAttributes).toEqual(current)
+  store.getState().updateMessageContentAttributes("m", evidence(6, "completed"))
+  expect(store.getState().messages[0]?.contentAttributes).toEqual(
+    evidence(6, "completed"),
+  )
+})

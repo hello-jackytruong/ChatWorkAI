@@ -203,16 +203,66 @@ recovery; dispatched work is never automatically replayed.
 Delivered/seen receipts, typing, reaction add/remove and inbound undo enter the
 typed lifecycle path. Group receipts never mark customer activity. Group undo
 records a durable tombstone before resolving a missing Message, preventing late
-messages or reactions from restoring it. Direct missing targets use bounded
-lookup retries. Receipt/reaction detail is retained for 90 days and purged in
+messages or reactions from restoring it. Direct missing targets also retain durable recall intent; bounded repair resolves an existing anchor before creating a stable placeholder. Receipt/reaction detail is retained for 90 days and purged in
 bounded batches; durable dedupe identities remain compacted.
 
 `GET /v1/zalo-accounts/{accountId}/message-state` reads at most 50 provider
 message IDs per request (reaction aggregates are bounded to 2,500 rows).
 `POST /v1/zalo-accounts/{accountId}/typing` is ephemeral, throttled to one call
-per thread per five seconds; the Inbox expires the indicator locally. Outbound
-reaction/revoke/delete remain unavailable until live provider proof. Local
-delete is rejected before mutation so it cannot appear to unsend a Zalo message.
+per thread per five seconds; the Inbox expires the indicator locally. Outbound reactions remain unavailable. Native recall/delete dispatch is default-off until controlled live provider proof; dedicated local hide retains originals and makes no provider call. Generic delete remains rejected for this channel.
+
+### Message integrity and bounded recovery
+
+The normalized message reader accepts legacy payloads and optional
+`schemaVersion: 1` evidence. Deploy compatible SDK, worker and Inbox readers
+before setting gateway `ZALO_ACCOUNT_MESSAGE_INTEGRITY_ENABLED=true` (default
+`false`). With the producer gate off, new message fields are omitted. A message
+with valid identity but unsupported content is retained as a localized
+placeholder, without synthetic customer text, attachments or automation. Invalid
+identity is diagnosed without retaining the raw provider body. Minute diagnostics
+use fixed reason codes and bounded callback backlog counts/bytes.
+
+Confirmed ACKs retain up to ten provider IDs, with a stable primary ID. An exact
+alias may reconcile own-echo rows to the canonical Message; matching text, time
+or client command ID alone does not prove ownership. Native-phone echoes remain
+visible. Merges preserve attachments and reply references; unsafe shard or
+translation cases retain data and become `needs_review`. Provider send status
+and local reconciliation status are separate.
+
+Inspect an Inbox/flow send with
+`GET /v1/zalo-accounts/{accountId}/messages/{messageId}/send-attempt`, passing
+`messageCreatedAt` from `messages.list`. This complements the command-ID route;
+both return the same bounded outcome projection and remain readable when sending
+is disabled. The Inbox inspect action requires workspace `superAdmin`; the
+public read requires the existing `channels` token scope. Inspect is on demand,
+with no per-message polling. Pending, unknown and accepted sends are not
+resendable. Errors expose safe enum codes, phase, action and optional
+`retryAfterMs`; arbitrary provider errors are not displayed.
+
+Local repair reuses the existing recovery scheduler: at most 20 rows, a five-second admission budget per tick and at
+most three repair attempts. New ACK/claim/merge transactions bound lock waits to
+500 ms and individual SQL statements to one second; existing account/shard
+registry reads mean the tick is not a hard five-second wall-clock deadline. It never invokes a provider
+send. Legacy attempts without reconciliation JSON do not become a new backlog.
+The nullable reconciliation column and partial index require the reviewed core
+migration before deploying these readers/writers. Do not apply it automatically.
+
+Operational send defaults are 60 direct sends per account/minute; groups retain
+60/account/minute and 10/group/minute. These are application limits, not published
+Zalo quotas. Capacity is checked immediately before dispatch after preparation;
+groups are not charged twice. Admission fails closed when Redis is unavailable.
+Only pure reads (`sync_groups`, `sync_friends`, `get_labels`) may retry once,
+within the original deadline and after rechecking ownership/admission. Writes
+with uncertain dispatch remain unknown and are never replayed automatically.
+
+Rollback: disable the integrity message producer gate and drain new-format events
+before downgrading strict readers. Structured command-result errors also need
+compatible readers; retain them until new-format retained results are drained
+or expired. The message gate only controls normalized message fields. Retain reconciliation and message evidence. Stop
+repair before rolling back its consumer; preserve the additive column/index
+until a separately approved data-retention decision. Automated evidence and
+remaining database/live-provider gates are tracked in the
+[implementation report](../plans/261123-0500-zalo-account-message-integrity-recovery-tdd/reports/implementation.md).
 
 ## Friend sync and safe status
 
@@ -315,6 +365,77 @@ and account selects now read the new columns. Keep group flags off during rollou
 Enable only a bounded staging account
 after redacted live fixtures verify the pinned provider contract; static tests
 do not authorize production enablement.
+
+## Retained originals and recall tracking
+
+Zalo Account recall changes only the exact account/thread/message tuple. It retains
+Message text, Attachment records and already stored object bytes. Replies remain
+independent messages; quoted originals are removed from ordinary projections.
+Direct and group recall-before-original use durable intent and a stable placeholder;
+a late original fills that tuple without restarting automation. Receipt/reaction
+latest-state retention remains 90 days. Recall/original data has no new automatic
+TTL; explicit contact/account/workspace purge still wins.
+
+Ordinary list/detail/sidebar/realtime/translation projections remove recalled or
+locally hidden bodies, filenames, provider URLs and raw payloads. The Inbox shows
+distinct recalled/local-hidden labels. Loaded state keeps a monotone fence against
+late pages and echoes. Existing ordinary media proxy tokens are rejected after
+recall/hide. URLs or bytes already issued to a client cannot be revoked instantly.
+
+**View saved content** fetches on demand after the existing conversation ACL and
+exact workspace/account/Inbox/thread binding checks. Reads work after disconnect
+or group-policy disablement. Signed links are issued only for objects already in
+R2/S3, expire after 60 seconds, and never fall back to provider URLs. Missing
+originals return `notCaptured`; files return `not_archived`/`unavailable` honestly.
+Media ingestion (checklist P0 · 2) is separate. Query data and local download links
+are cleared on dialog close or tuple change; reopen authorizes again. Audit writes
+are best effort and record access/link issuance, not completed download, with no
+message body, filename, storage path, or signed URL.
+
+All procedures require the `inbox` token scope and normal conversation access:
+
+| Method | Suffix under `/v1/zalo-accounts/{accountId}/conversations/{conversationId}` | Result |
+| --- | --- | --- |
+| GET | `/messages/{messageId}/capabilities` | Native gate and own-message eligibility |
+| GET | `/messages/{messageId}/saved-content` | Saved original and attachment availability |
+| GET | `/messages/{messageId}/saved-content/attachments/{attachmentId}` | Authorized stored-only URL |
+| POST | `/messages/{messageId}/hide-locally` | Local hide; no Zalo call |
+| POST | `/messages/{messageId}/recall` | Verified own-message undo attempt |
+| POST | `/messages/{messageId}/delete-on-zalo` | Delete only for the connected account |
+| POST | `/delete-on-zalo` | Clear provider history through the selected immutable boundary |
+| GET | `/message-operations/{attemptId}` | Durable status; never replays |
+
+Message targets require exact `createdAt` from `messages.list`. Native mutations
+require a stable `commandId`; changed input with the same ID conflicts. Native
+outcomes are `pending`, `dispatched`, `applied`, `failed` or `unknown`. A durable
+main-DB CAS admits one provider call even after Redis dedupe expires. Unknown or
+dispatched attempts must only be inspected. Provider delete-only-me and deleteChat
+retain all CRM data and do not fabricate a recall marker. DeleteChat confirmation
+pins the selected boundary so newer incoming messages do not widen the operation.
+Read-only tokens cannot mutate; expired-owner deletion exceptions do not grant
+read-only tokens write access. Scheduled workspace deletion still blocks mutation.
+
+`ZALO_ACCOUNT_NATIVE_MESSAGE_OPERATIONS_ENABLED=false` is the default in builder
+and gateway. Keep it false: production gateway does not yet install a verified
+provider-status proof classifier. Even an enabled gate cannot treat an unproven
+SDK response as confirmed success. Before enabling a disposable pilot, collect
+sanitized DM/group proof for the pinned SDK's status, own-message/time-window
+rules, onlyMe flag, history boundary, echoes and timeout behavior, then implement
+the verified classifier. Unit fixtures are not that evidence.
+
+The additive migration
+`packages/database/drizzle/20261123081746_add_zalo_account_recall_tracking/migration.sql`
+creates only two main-DB metadata tables; it changes no Message/shard schema and
+copies no bodies/blobs. It has been generated, not applied. Obtain separate
+approval before applying it. Deploy schema, safe readers/lifecycle/recovery, then
+UI; keep native off during rollout. Existing group recovery hosts recall repair
+with caps (25 intents, 2 ranges/50 candidates per lookup) and a deadline; no new
+queue, scheduler or full-history backfill was added. Stable Zalo placeholders select a registered primary covering their reserved timestamp, so delayed creation remains routable after subsequent shard rotations; non-Zalo stable creation retains its existing write route. Out-of-range historical rows
+that cannot be safely updated remain pending rather than falsely acknowledged.
+
+Rollback starts by disabling native dispatch. Preserve safe projections and
+ledger tables while bounded repair drains pending work. Do not revert to readers
+that expose retained originals, and do not automatically drop retained data.
 
 ## Operations and rollback
 

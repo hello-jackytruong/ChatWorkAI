@@ -5,6 +5,8 @@ import {
   queueWorkspaceRealtimeEvent,
   translationService,
 } from "@chatbotx.io/business"
+import { zaloAccountMessageLifecycleService } from "@chatbotx.io/business/zalo-account/lifecycle"
+import { parseZaloAccountSourceId } from "@chatbotx.io/business/zalo-account/message-projection"
 import type { IntegrationType } from "@chatbotx.io/database/partials"
 import {
   type RealtimeEventRoute,
@@ -268,24 +270,40 @@ export const deleteIncomingMessage = async (
 ): Promise<void> => {
   const { integrationType, integrationIdentifier, messageId } = props
   const action = "deleteIncomingMessage"
+  if (integrationType === "zaloAccount") {
+    const target = parseZaloAccountSourceId(messageId)
+    if (
+      !target ||
+      target.accountId !== integrationIdentifier ||
+      !props.zaloAccountRoute ||
+      props.zaloAccountRoute.accountId !== integrationIdentifier
+    ) {
+      throw new Error("Zalo Account undo target is invalid")
+    }
+    const { inbox } = await integrationService.identifyZaloAccountFromRoute(
+      props.zaloAccountRoute,
+    )
+    await zaloAccountMessageLifecycleService.handle({
+      workspaceId: inbox.workspaceId,
+      accountId: target.accountId,
+      inboxId: inbox.id,
+      event: {
+        type: "undo",
+        threadType: target.threadType,
+        threadId: target.threadId,
+        providerMessageId: target.providerMessageId,
+        timestampMs: Date.now(),
+        timestampSource: "observed",
+      },
+    })
+    return
+  }
 
   const { inbox } =
-    integrationType === "zaloAccount"
-      ? await (async () => {
-          if (
-            !props.zaloAccountRoute ||
-            props.zaloAccountRoute.accountId !== integrationIdentifier
-          ) {
-            throw new Error("Zalo Account undo route is missing or invalid")
-          }
-          return await integrationService.identifyZaloAccountFromRoute(
-            props.zaloAccountRoute,
-          )
-        })()
-      : await integrationService.identifyInboxAndIntegrationAuthFromIdentifier(
-          integrationType as IntegrationType,
-          integrationIdentifier,
-        )
+    await integrationService.identifyInboxAndIntegrationAuthFromIdentifier(
+      integrationType as IntegrationType,
+      integrationIdentifier,
+    )
 
   const deleted = await messageService.deleteBySourceId({
     sourceId: messageId,

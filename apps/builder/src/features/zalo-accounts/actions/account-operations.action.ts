@@ -5,6 +5,7 @@ import {
   zaloAccountGroupService,
   zaloAccountService,
 } from "@chatbotx.io/business/zalo-account"
+import { zaloAccountCanonicalSendService } from "@chatbotx.io/business/zalo-account/canonical-send"
 import { z } from "zod"
 import { workspaceIdAndIdRequestParams } from "@/features/common/schema"
 import { requireWorkspacePermission } from "@/lib/auth/require-workspace-permission"
@@ -13,6 +14,10 @@ import {
   zaloAccountGroupResource,
   zaloAccountStatusResource,
 } from "../schema/resource"
+import {
+  zaloMessageSendAttemptInput,
+  zaloSendAttemptResource,
+} from "../schema/send-attempt"
 
 export const getZaloAccountStatusAction = workspaceActionClient
   .bindArgsSchemas(workspaceIdAndIdRequestParams)
@@ -69,5 +74,21 @@ export const syncZaloAccountFriendsAction = workspaceActionClient
         accountId,
         ...parsedInput,
       })
+    },
+  )
+
+export const inspectZaloAccountMessageAction = workspaceActionClient
+  .bindArgsSchemas(workspaceIdAndIdRequestParams)
+  .inputSchema(zaloMessageSendAttemptInput)
+  .action(
+    async ({ bindArgsParsedInputs: [workspaceId, accountId], parsedInput }) => {
+      await requireWorkspacePermission(workspaceId, "superAdmin")
+      return zaloSendAttemptResource.parse(
+        await zaloAccountCanonicalSendService.getOutcomeByMessage({
+          workspaceId,
+          accountId,
+          ...parsedInput,
+        }),
+      )
     },
   )

@@ -1,12 +1,12 @@
-# ChatbotX MCP Server
+# ChatWorkAI MCP Server
 
-[Model Context Protocol](https://modelcontextprotocol.io) server for ChatbotX. Gives AI agents (Claude, Cursor, ChatGPT, etc.) access to your ChatbotX workspace through tools that are **automatically generated** from the ChatbotX OpenAPI spec — no manual tool definitions needed.
+[Model Context Protocol](https://modelcontextprotocol.io) server for ChatWorkAI. Gives AI agents (Claude, Cursor, ChatGPT, etc.) access to your ChatWorkAI workspace through tools that are **automatically generated** from the ChatWorkAI OpenAPI spec — no manual tool definitions needed.
 
 Published skill/agent distribution docs live in the separate `chatbotx-agent` package; this repo owns the MCP server implementation and README.
 
 ## How it works
 
-On startup the server fetches `{CHATBOTX_API_URL}/public-spec.json` and registers one MCP tool per API operation the spec marks `x-mcp.visibility: "default"`. `CHATBOTX_API_URL` is the origin **including** the `/api` path prefix (e.g. `https://app.chatbotx.io/api`). Adding a new default-visible API endpoint in ChatbotX automatically makes it available as a tool — the spec is re-fetched in the background whenever it's older than `CHATBOTX_SPEC_TTL_MS` (default 5 minutes), so a new/changed operation shows up on the next `tools/list` call without a server restart.
+On startup the server fetches `{CHATBOTX_API_URL}/public-spec.json` and registers one MCP tool per API operation the spec marks `x-mcp.visibility: "default"`. `CHATBOTX_API_URL` is the origin **including** the `/api` path prefix (e.g. `https://app.chatbotx.io/api`). Adding a new default-visible API endpoint in ChatWorkAI automatically makes it available as a tool — the spec is re-fetched in the background whenever it's older than `CHATBOTX_SPEC_TTL_MS` (default 5 minutes), so a new/changed operation shows up on the next `tools/list` call without a server restart.
 
 
 ## OAuth 2.1
@@ -21,13 +21,13 @@ An explicit `?workspace_id=<id>` (or `x-workspace-id` header) may select a
 workspace only for legacy connections that predate the picker. A different
 workspace than the one consented for a new connection is rejected; disconnect
 and connect again to switch.
-The builder settings block **Settings → Integrations → ChatbotX MCP** provides the exact
+The builder settings block **Settings → Integrations → ChatWorkAI MCP** provides the exact
 connection URL and lets each user revoke their OAuth grants.
 
 Legacy workspace tokens remain supported for stdio and existing connections.
 ### Default tools vs. the full API
 
-ChatbotX's public API has ~350 operations. Listing all of them as MCP tools overwhelms an agent's context and its ability to pick the right one, so `tools/list` returns only a curated default set (see below) plus three meta-tools:
+ChatWorkAI's public API has ~350 operations. Listing all of them as MCP tools overwhelms an agent's context and its ability to pick the right one, so `tools/list` returns only a curated default set (see below) plus three meta-tools:
 
 | Tool | Description |
 |---|---|
@@ -339,7 +339,7 @@ cp .env.example .env
 | Variable | Description | Default | Required |
 |---|---|---|---|
 | `CHATBOTX_API_KEY` | Workspace token for stdio only; leave empty on shared HTTP deployments | — | Yes (stdio) |
-| `CHATBOTX_API_URL` | ChatbotX API origin, including `/api` (e.g. `https://app.chatbotx.io/api`) | `https://app.chatbotx.io/api` | Yes |
+| `CHATBOTX_API_URL` | ChatWorkAI API origin, including `/api` (e.g. `https://app.chatbotx.io/api`) | `https://app.chatbotx.io/api` | Yes |
 | `CHATBOTX_ALLOW_SELF_SIGNED_CERT` | Disable TLS verification (`true`/`false`) | — | No |
 | `CHATBOTX_SPEC_TTL_MS` | How long the fetched OpenAPI spec/tool list and a token's introspected scopes are trusted before a background re-fetch | `300000` | No |
 | `CHATBOTX_HTTP_TIMEOUT_MS` | Maximum duration for each OpenAPI, token introspection, or tool-call HTTP request | `30000` | No |

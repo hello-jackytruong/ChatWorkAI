@@ -5,6 +5,22 @@ const AVATAR_STORAGE_PATH_PATTERN = /^public\/space\/ws-1\/avatars\//
 
 const mockContactInfoCaptureAdd = vi.hoisted(() => vi.fn())
 
+const mediaRetentionMocks = vi.hoisted(() => ({
+  capture: vi.fn(),
+  policy: vi.fn(() => ({ enabled: false })),
+  persistOriginal: vi.fn(
+    async ({ persist }: { persist: () => Promise<unknown> }) => await persist(),
+  ),
+}))
+
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  captureZaloAccountMessage: mediaRetentionMocks.capture,
+  redactZaloMediaLocators: (attributes: unknown) => attributes,
+}))
+vi.mock("@chatbotx.io/business/zalo-account-media", () => ({
+  getZaloAccountMediaPolicy: mediaRetentionMocks.policy,
+}))
+
 const mockLockContentionPolicy = vi.hoisted(() => ({
   lockWaitSeconds: 10,
   maxDeferrals: 8,
@@ -723,8 +739,12 @@ vi.mock(
 // Import after mocks
 // ---------------------------------------------------------------------------
 
-const { metaReferralToContactSource, receiveComment, receiveMessage } =
-  await import("../src/integration/handlers/received-message")
+const {
+  metaReferralToContactSource,
+  receiveComment,
+  receiveMessage,
+  saveAndBroadcastMessage,
+} = await import("../src/integration/handlers/received-message")
 const { encodeButtonPayload } = await import("@chatbotx.io/flow-config")
 const { logger } = await import("../src/lib/logger")
 const { allIntegrations, integrationService } = await import(
@@ -901,6 +921,55 @@ describe("receiveMessage — message repository branch", () => {
     })
     mockWorkspaceIsActiveNow.mockReturnValue(true)
     mockMarkReadByOutbound.mockResolvedValue(true)
+  })
+
+  test("archives a late retained original even when the normal message projection removes attachments", async () => {
+    const attachment = {
+      fileType: "image" as const,
+      originPath: "https://cdn.example.test/retained.jpg",
+      name: "retained.jpg",
+    }
+    mediaRetentionMocks.policy.mockReturnValue({ enabled: true })
+    mediaRetentionMocks.persistOriginal.mockResolvedValueOnce({
+      message: {
+        ...fakeCreatedMessage,
+        text: null,
+        deletedAt: new Date(),
+        attachments: [],
+      },
+      isNew: false,
+    })
+    try {
+      await saveAndBroadcastMessage({
+        inbox: { ...fakeInbox, channel: "zaloAccount" },
+        contactInbox: { ...fakeContactInbox, channel: "zaloAccount" },
+        conversation: fakeConversation,
+        storageUrl: "https://files.example.test",
+        incomingMessage: {
+          ...baseIncomingMessage,
+          sourceId: "za:account-1:user:thread-1:provider-1",
+          contentAttributes: {
+            zaloAccount: {
+              threadId: "thread-1",
+              providerMessageId: "provider-1",
+            },
+          },
+          attachments: [attachment],
+        },
+      })
+      expect(mediaRetentionMocks.capture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messageId: fakeCreatedMessage.id,
+          attachments: [
+            expect.objectContaining({ ...attachment, keepOriginal: true }),
+          ],
+        }),
+      )
+      expect(mockEmit).not.toHaveBeenCalled()
+      expect(mockCreateOrUpdateWithAttachments).not.toHaveBeenCalled()
+    } finally {
+      mediaRetentionMocks.policy.mockReturnValue({ enabled: false })
+    }
   })
 
   test("skips without failing the job when the channel parser returns nothing to store", async () => {
@@ -8433,3 +8502,14 @@ describe("receiveMessage — inbound commerce events", () => {
     expect(mockEmitShoppingCartSent).not.toHaveBeenCalled()
   })
 })
+
+// ZA retention has dedicated service tests; keep this generic ingestion characterization isolated.
+vi.mock("@chatbotx.io/business/zalo-account/message-recall", () => ({
+  zaloAccountMessageRecallService: {
+    persistOriginal: mediaRetentionMocks.persistOriginal,
+  },
+}))
+
+vi.mock("@chatbotx.io/business/zalo-account/lifecycle", () => ({
+  zaloAccountMessageLifecycleService: { handle: vi.fn().mockResolvedValue({}) },
+}))

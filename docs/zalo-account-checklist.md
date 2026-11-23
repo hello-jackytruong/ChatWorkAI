@@ -51,6 +51,8 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P0 · 2. Lưu ảnh/file và media trên R2/S3
 
+**Cập nhật 2026-11-23:** phần code P0 · 2 đã triển khai và qua lint, typecheck, regression local trên nhánh `feat/zalo-account-media-r2`; xem [báo cáo kiểm chứng](../plans/261123-0500-zalo-account-media-r2-tdd/reports/implementation-and-verification.md). Cờ lưu trữ mặc định tắt, migration chưa áp dụng và các gate staging/R2 thật còn chờ. Checkbox vận hành dưới đây được giữ cho đến khi có bằng chứng chạy thực tế.
+
 - [x] File gửi từ ChatbotX có đường upload/lưu storage; API gửi bằng URL có bước tải về storage.
 - [ ] Tự tải **ảnh/file nhận từ Zalo** về R2/S3.
 - [ ] Tự lưu media từ **own-echo**: tài khoản gửi bằng điện thoại/Zalo PC/Web.
@@ -78,6 +80,8 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P0 · 3. Thu hồi, xóa và xem lại để tracking
 
+**Cập nhật triển khai 2026-11-23:** đã thêm ledger DM/nhóm, giữ original/attachment đã có, API + UI xem lại theo quyền, local hide riêng, native undo/delete-only-me/deleteChat, projection server/client và recovery hữu hạn. Xem [bằng chứng triển khai](../plans/261123-0500-zalo-account-recall-tracking-tdd/reports/implementation-api-ui.md) và [review](../plans/261123-0500-zalo-account-recall-tracking-tdd/reports/implementation-review.md). Giữ các mục hoàn thiện dưới đây chưa tick đến khi đủ final gate, migration và kiểm chứng disposable DM/group; không coi mock/unit test là live provider proof. Native mặc định tắt. File chưa ingest thuộc P0 · 2, không thể tải lại sau thu hồi. Receipt/reaction vẫn latest-state 90 ngày; không có lịch sử sự kiện vô hạn mới.
+
 - [x] Nhận sự kiện undo; Message được đánh dấu xóa mềm.
 - [x] Có tombstone cho undo nhóm để tin đến muộn không khôi phục tin đã thu hồi.
 - [ ] Phân biệt rõ **thu hồi trên Zalo / xóa phía mình trên Zalo / xóa nội bộ ChatbotX**.
@@ -96,6 +100,8 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 - [ ] Kiểm chứng và mở thao tác `undo`, `deleteMessage`, `deleteChat` theo đúng ngữ nghĩa từng API.
 
 ## P0 · 4. Toàn vẹn tin nhắn và khả năng phục hồi
+
+**Cập nhật triển khai 2026-11-23:** đã thêm metadata có version, placeholder hữu hạn, đối soát nhiều provider ID với primary ổn định, repair local không gửi lại, admission và lỗi an toàn, API/Inbox xem trạng thái theo yêu cầu. Xem [bằng chứng nhánh nguồn](../plans/261123-0500-zalo-account-message-integrity-recovery-tdd/reports/implementation.md) và [đối soát tích hợp](../plans/261123-zalo-account-p0-integration/reports/integration.md). Cờ producer mặc định tắt; giữ checkbox hoàn thiện chưa tick đến khi đủ gate DB, coverage và live provider; chưa áp migration.
 
 - [x] Canonical send, command ID, send-attempt và trạng thái `pending / applied / failed / unknown`.
 - [x] Chống tự gửi lại khi kết quả gửi chưa xác định.

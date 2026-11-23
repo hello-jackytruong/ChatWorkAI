@@ -94,6 +94,24 @@ describe("group Inbox persistence gate", () => {
     await zaloAccountGroupInboxService.receive(input)
     expect(mocks.publish).toHaveBeenCalledTimes(1)
   })
+  it("retains a late recalled original without running message side effects", async () => {
+    const onMessage = vi.fn()
+    mocks.persist.mockResolvedValue({
+      isNew: true,
+      recalled: true,
+      message: {
+        id: "7",
+        sourceId: "za:2:group:g1:m1",
+        text: "secret",
+        contentAttributes: { zaloAccount: { lifecycle: { recalled: true } } },
+        attachments: [],
+      },
+      conversation: { id: "6" },
+      contactInbox: { id: "5" },
+    })
+    await zaloAccountGroupInboxService.receive(input, onMessage)
+    expect(onMessage).not.toHaveBeenCalled()
+  })
   it("drops disabled or stale queued work without persisting or publishing", async () => {
     for (const override of [
       { groupMessagingEnabled: false },

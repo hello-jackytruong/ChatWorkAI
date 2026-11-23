@@ -36,6 +36,7 @@ type FencedAppendPort = {
 }
 
 type PublisherOptions = {
+  messageIntegrityEnabled?: boolean
   resolveGroupReceivePolicy?: (input: {
     workspaceId: string
     accountId: string
@@ -167,9 +168,21 @@ export class FencedEventPublisher implements RuntimeEventSink {
   }
 
   async publishDirectMessage(
-    message: ZaloAccountDirectMessage,
+    inputMessage: ZaloAccountDirectMessage,
     context: RuntimeEventContext & { epoch: number; fenceToken: string },
   ): Promise<void> {
+    let message = inputMessage
+    if (!this.options.messageIntegrityEnabled) {
+      if (message.unsupported) {
+        return
+      }
+      const {
+        schemaVersion: _version,
+        unsupported: _unsupported,
+        ...legacy
+      } = message
+      message = legacy
+    }
     if (!context.inboxId) {
       throw new Error("Zalo Account direct event requires an Inbox route")
     }
@@ -219,9 +232,21 @@ export class FencedEventPublisher implements RuntimeEventSink {
   }
 
   async publishGroupMessage(
-    message: ZaloAccountGroupMessage,
+    inputMessage: ZaloAccountGroupMessage,
     context: RuntimeEventContext & { epoch: number; fenceToken: string },
   ): Promise<void> {
+    let message = inputMessage
+    if (!this.options.messageIntegrityEnabled) {
+      if (message.unsupported) {
+        return
+      }
+      const {
+        schemaVersion: _version,
+        unsupported: _unsupported,
+        ...legacy
+      } = message
+      message = legacy
+    }
     if (!context.inboxId) {
       throw new Error("Zalo group message requires an Inbox route")
     }
@@ -364,22 +389,64 @@ export class FencedEventPublisher implements RuntimeEventSink {
     context: RuntimeEventContext & { epoch: number; fenceToken: string },
     envelope: ZaloAccountTransportEvent,
   ): Promise<void> {
-    const result = await this.options.appendPort.appendIfOwned(
-      { workspaceId: context.workspaceId, runtime },
-      { ownerId: this.options.ownerId, fenceToken: context.fenceToken },
-      {
-        streamKey: this.options.eventStreamKey,
-        maxLen: this.options.maxLen,
-        fields: [
-          "type",
-          "transport",
-          "payload",
-          JSON.stringify(envelope),
-          "timestamp",
-          Date.now().toString(),
-        ],
-      },
-    )
+    const input = {
+      streamKey: this.options.eventStreamKey,
+      maxLen: this.options.maxLen,
+      fields: [
+        "type",
+        "transport",
+        "payload",
+        JSON.stringify(envelope),
+        "timestamp",
+        Date.now().toString(),
+      ],
+    }
+    const append = () =>
+      this.options.appendPort.appendIfOwned(
+        { workspaceId: context.workspaceId, runtime },
+        { ownerId: this.options.ownerId, fenceToken: context.fenceToken },
+        input,
+      )
+    let result: string | null
+    if (
+      envelope.kind === "direct_message" ||
+      envelope.kind === "group_message"
+    ) {
+      const deadline = Date.now() + 2000
+      const boundedAppend = async () => {
+        const remaining = deadline - Date.now()
+        if (remaining <= 0) {
+          throw new Error("Zalo Account event publish deadline exceeded")
+        }
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          return await Promise.race([
+            append(),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () =>
+                  reject(
+                    new Error("Zalo Account event publish deadline exceeded"),
+                  ),
+                remaining,
+              )
+            }),
+          ])
+        } finally {
+          if (timer) {
+            clearTimeout(timer)
+          }
+        }
+      }
+      try {
+        result = await boundedAppend()
+      } catch {
+        result = await boundedAppend()
+      }
+    } else {
+      result = await append()
+    }
+
     if (!result) {
       throw new Error("Zalo Account event rejected by stale fence")
     }

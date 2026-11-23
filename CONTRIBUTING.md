@@ -1,6 +1,6 @@
-# Contributing to ChatbotX
+# Contributing to ChatWorkAI
 
-Thank you for your interest in contributing to ChatbotX! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing to ChatWorkAI! This document provides guidelines and instructions for contributing to the project.
 
 ## Read the developers guide
 
@@ -81,4 +81,4 @@ We aim to foster an inclusive and welcoming community. Harassment and abusive be
 
 ## License
 
-By contributing to ChatbotX, you agree that your contributions will be licensed under the MIT License.
+By contributing to ChatWorkAI, you agree that your contributions will be licensed under the MIT License.

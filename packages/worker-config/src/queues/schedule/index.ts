@@ -56,6 +56,7 @@ export const ScheduleJobData = {
   purgeErrorLogs: "purgeErrorLogs",
   redispatchInboundWebhookRequests: "redispatchInboundWebhookRequests",
   recoverZaloGroupInbox: "recoverZaloGroupInbox",
+  recoverZaloAccountMedia: "recoverZaloAccountMedia",
   reconcileZaloLabels: "reconcileZaloLabels",
   purgeZaloMessageState: "purgeZaloMessageState",
   redispatchTemplateJobs: "redispatchTemplateJobs",
@@ -456,6 +457,10 @@ export type ScheduleJobFinalizeMarketingMessages = {
 }
 
 export type ScheduleJobData =
+  | {
+      type: typeof ScheduleJobData.recoverZaloAccountMedia
+      data: Record<string, never>
+    }
   | {
       type: typeof ScheduleJobData.purgeZaloMessageState
       data: Record<string, never>

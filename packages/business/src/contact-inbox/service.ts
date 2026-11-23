@@ -95,7 +95,7 @@ export const getContactInboxSinceTime = (
 
 export type ContactInboxWithAnalytics = Pick<
   ContactInboxModel,
-  "id" | "contactId" | "sourceId" | "channel"
+  "id" | "contactId" | "sourceId" | "channel" | "inboxId"
 > & {
   contact: Pick<
     ContactModel,
@@ -956,7 +956,13 @@ class ContactInboxService extends BaseService {
     const { workspaceId, ids } = props
     return (await db.query.contactInboxModel.findMany({
       where: { id: { in: ids }, contact: { workspaceId } },
-      columns: { id: true, contactId: true, sourceId: true, channel: true },
+      columns: {
+        id: true,
+        contactId: true,
+        sourceId: true,
+        channel: true,
+        inboxId: true,
+      },
       with: {
         contact: {
           columns: {

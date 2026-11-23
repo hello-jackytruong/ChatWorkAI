@@ -34,6 +34,7 @@ import {
   compensateWorkspaceQuotaConsumption,
   type WorkspaceQuotaConsumption,
 } from "@chatbotx.io/business/workspace"
+import { zaloAccountService } from "@chatbotx.io/business/zalo-account"
 import { type DatabaseClient, db } from "@chatbotx.io/database/client"
 import type {
   ConnectSessionPurpose,
@@ -42,6 +43,7 @@ import type {
 import {
   connectionRepository,
   integrationInstagramRepository,
+  workspaceRepository,
 } from "@chatbotx.io/database/repositories"
 import type {
   ConnectionModel,
@@ -55,6 +57,7 @@ import type {
   ConnectionDescriptor,
   ConnectSessionNextAction,
 } from "@chatbotx.io/sdk"
+import { zaloAccountAuthSchema } from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import { connectFailureCauseOf } from "@chatbotx.io/utils/connection"
 import { failSession } from "./connect-targets"
@@ -309,9 +312,10 @@ export const completeAuthorization = async (input: {
 export const continueAuthorization = async (
   session: ConnectSessionModel,
   auth: AuthValue,
+  trustedProfile?: { displayName: string; avatarUrl?: string },
 ): Promise<ConnectSessionModel> => {
   if (isReconnectSession(session)) {
-    return await completeReconnect({ session, auth })
+    return await completeReconnect({ session, auth, trustedProfile })
   }
 
   let authorizedSession: ConnectSessionModel
@@ -329,7 +333,7 @@ export const continueAuthorization = async (
     await failSession(session, "internal_error", ["authorized"])
     throw err
   }
-  return await listAndAttachCandidates(authorizedSession, auth)
+  return await listAndAttachCandidates(authorizedSession, auth, trustedProfile)
 }
 
 /**
@@ -362,6 +366,7 @@ const sessionAuthorizationRecord = (
 export const listAndAttachCandidates = async (
   session: ConnectSessionModel,
   auth: AuthValue,
+  trustedProfile?: { displayName: string; avatarUrl?: string },
 ): Promise<ConnectSessionModel> => {
   const adapter = resolveAdapter(session.provider)
 
@@ -371,7 +376,15 @@ export const listAndAttachCandidates = async (
   try {
     candidates = adapter.provider.listCandidates
       ? await adapter.provider.listCandidates({ auth })
-      : [{ ...adapter.provider.describe(auth), auth }]
+      : [
+          {
+            ...adapter.provider.describe(auth),
+            ...(session.provider === "zaloAccount" && trustedProfile
+              ? trustedProfile
+              : {}),
+            auth,
+          },
+        ]
   } catch (err) {
     const providerError = toConnectionProviderError(err)
     const retryStatus = providerFailureStatus(providerError)
@@ -544,6 +557,7 @@ export const listAndAttachCandidates = async (
 const completeReconnect = async (input: {
   session: ConnectSessionModel & { targetConnectionId: string }
   auth: AuthValue
+  trustedProfile?: { displayName: string; avatarUrl?: string }
 }): Promise<ConnectSessionModel> => {
   const { session, auth } = input
   const connection = await connectionRepository.findByIdForWorkspace({
@@ -655,6 +669,15 @@ const completeReconnect = async (input: {
         },
         async () =>
           await db.transaction(async (tx) => {
+            if (
+              session.provider === "zaloAccount" &&
+              !(await workspaceRepository.lockWorkspaceForChildWrite(
+                { workspaceId: session.workspaceId },
+                tx,
+              ))
+            ) {
+              throw notFoundException("Workspace not found")
+            }
             const integrationId = await saveOrInsertSatellite({
               tx,
               workspaceId: connection.workspaceId,
@@ -685,6 +708,22 @@ const completeReconnect = async (input: {
             if (!updatedConnectionRow) {
               throw notFoundException("Connection not found")
             }
+            if (
+              session.provider === "zaloAccount" &&
+              input.trustedProfile &&
+              updatedConnectionRow.inboxId
+            ) {
+              await zaloAccountService.saveAuthorization({
+                workspaceId: session.workspaceId,
+                inboxId: updatedConnectionRow.inboxId,
+                auth: zaloAccountAuthSchema.parse(reconnectAuth),
+                name: input.trustedProfile.displayName,
+                avatarUrl: input.trustedProfile.avatarUrl ?? null,
+                sessionVerifiedAt: new Date(),
+                tx,
+              })
+            }
+
             const transitioned = await connectionStateService.transition({
               connectionId: connection.id,
               event: "connect.completed",

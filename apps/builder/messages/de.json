@@ -80,6 +80,52 @@
       "closeCode": "Close code",
       "issue": "Connection issue",
       "requiresAction": "Reconnect this account to resume automatic connections."
+    },
+    "messageActions": "Nachrichtenaktionen",
+    "viewSavedContent": "Gespeichertes Original anzeigen",
+    "hideLocally": "In ChatbotX ausblenden",
+    "recallOnZalo": "Auf Zalo zurückrufen",
+    "deleteOnMyZalo": "Aus meinem Zalo löschen",
+    "nativeOperationsDisabled": "Native Zalo-Aktionen sind derzeit nicht verfügbar.",
+    "retainOriginalNotice": "Das gespeicherte Original bleibt für berechtigte Posteingangsmitglieder zugänglich.",
+    "operationFailed": "Die Aktion ist fehlgeschlagen.",
+    "operationApplied": "Die Aktion wurde bestätigt.",
+    "operationUnconfirmed": "Das Ergebnis ist unbestätigt. Prüfen Sie den Status vor weiteren Aktionen.",
+    "confirmOperation": "Aktion bestätigen",
+    "inspectOperation": "Status prüfen",
+    "savedContent": "Gespeichertes Original",
+    "savedLoading": "Gespeicherter Inhalt wird geladen…",
+    "savedDenied": "Sie haben keinen Zugriff mehr oder der Inhalt ist nicht verfügbar.",
+    "originalNotCaptured": "Der Originalinhalt wurde nicht erfasst.",
+    "providerRecallTime": "Zalo-Rückrufzeit",
+    "observedRecallTime": "Rückruf beobachtet um",
+    "recallActor": "Zurückgerufen von",
+    "unknownActor": "Unbekannt",
+    "savedFile": "Gespeicherte Datei",
+    "fileNotArchived": "Die Datei wurde nicht archiviert oder ist nicht verfügbar.",
+    "openSavedFile": "Gespeicherte Datei öffnen",
+    "getSavedFile": "Dateilink abrufen",
+    "savedFileUnavailable": "Diese gespeicherte Datei ist nicht verfügbar.",
+    "recalled": "Auf Zalo zurückgerufen",
+    "hiddenLocally": "Im CRM ausgeblendet",
+    "deleteChatOnZalo": "Verlauf aus meinem Zalo löschen",
+    "deleteChatConfirm": "Zalo-Verlauf bis einschließlich der ausgewählten Nachricht löschen? Der gespeicherte CRM-Verlauf bleibt zur Nachverfolgung erhalten.",
+    "deleteChatNoBoundary": "Es ist keine Nachrichtengrenze zum Löschen des Zalo-Verlaufs verfügbar.",
+    "deletedOnMyZalo": "Auf meinem Zalo gelöscht",
+    "deleteChatBoundary": "Grenze für die Verlaufslöschung",
+    "evidence": {
+      "unsupportedContent": "Nicht unterstützte Zalo-Nachricht",
+      "invalidContent": "Zalo-Nachricht konnte nicht gelesen werden",
+      "unsupportedSchema": "Zalo-Nachrichtenformat wird nicht unterstützt",
+      "pending": "Bestätigung ausstehend",
+      "unknown": "Ergebnis unbekannt — Status prüfen",
+      "failed": "Nachricht wurde nicht gesendet",
+      "applied": "Gesendet",
+      "appliedPending": "Gesendet, lokaler Abgleich läuft",
+      "needsReview": "Ergebnis muss geprüft werden",
+      "safeFailure": "Zalo-Vorgang konnte nicht sicher abgeschlossen werden",
+      "unavailable": "Status nicht verfügbar. Erneut versuchen.",
+      "inspect": "Status prüfen"
     }
   },
   "actions": {
@@ -2614,7 +2660,7 @@
     },
     "fromName": {
       "label": "Absendername",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "messageTemplate": {
       "label": "Nachrichtenvorlage"
@@ -3601,7 +3647,7 @@
     "title": "Allgemein"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "Dadurch wird die Meta-Nachrichtenkampagne gelöscht und die Kampagne aus ChatbotX entfernt. Lehnt Meta das Löschen ab, bleibt die Kampagne erhalten.",
+    "deleteWarning": "Dadurch wird die Meta-Nachrichtenkampagne gelöscht und die Kampagne aus ChatWorkAI entfernt. Lehnt Meta das Löschen ab, bleibt die Kampagne erhalten.",
     "title": "Facebook Marketing Messages",
     "description": "Steigern Sie Engagement und Umsatz mit personalisierten Werbenachrichten auf Messenger.",
     "create": "Neu erstellen",
@@ -3642,7 +3688,7 @@
       "tosNotAccepted": "Um diese Funktion zu nutzen, akzeptieren Sie bitte die Bedingungen für benutzerdefinierte Objekte unter {url}",
       "notFound": "Marketing-Nachricht nicht gefunden.",
       "audienceNotTargetable": "Die ausgewählte Custom Audience ist nicht bereit oder gehört nicht zu dieser Seite und diesem Werbekonto.",
-      "connectFirst": "Verbinde Marketing Messages zuerst in der ChatbotX-App.",
+      "connectFirst": "Verbinde Marketing Messages zuerst in der ChatWorkAI-App.",
       "mmInvalidState": "Diese Aktion ist im aktuellen Status der Kampagne nicht verfügbar.",
       "mmCampaignEnded": "Die Meta-Nachrichtenkampagne ist beendet und kann daher nicht gesendet oder fortgesetzt werden.",
       "mmPageNotConnected": "Die Seite dieser Kampagne ist nicht mit diesem Workspace verbunden.",
@@ -3662,7 +3708,7 @@
       "uploadMore": "Weitere Zeilen hochladen",
       "empty": "Noch keine Custom Audiences vorhanden.",
       "deleteTitle": "Custom Audience löschen",
-      "deleteWarning": "Dadurch wird die Custom Audience \"{name}\" bei Meta und in ChatbotX gelöscht. Dies kann nicht rückgängig gemacht werden.",
+      "deleteWarning": "Dadurch wird die Custom Audience \"{name}\" bei Meta und in ChatWorkAI gelöscht. Dies kann nicht rückgängig gemacht werden.",
       "deleted": "Custom Audience gelöscht.",
       "pageDisconnected": "Seite getrennt",
       "status": {
@@ -5677,7 +5723,7 @@
         "title": "Anrufberechtigung",
         "appSubscriptionMissing": "Zuerst den WhatsApp-Webhook für diese App im Meta App Dashboard konfigurieren und es dann erneut versuchen.",
         "appSubscriptionFailed": "Das 'calls'-Webhook-Abonnement der App konnte nicht überprüft werden. In Kürze erneut versuchen.",
-        "callsNotSubscribed": "Diese App ist nicht für das 'calls'-Webhook-Feld abonniert, daher können Anrufereignisse ChatbotX nicht erreichen (Meta-Fehler 138018: technische Voraussetzungen sind nicht erfüllt — mindestens eine für die WABA abonnierte App muss auch das Anruf-Webhook-Feld haben).",
+        "callsNotSubscribed": "Diese App ist nicht für das 'calls'-Webhook-Feld abonniert, daher können Anrufereignisse ChatWorkAI nicht erreichen (Meta-Fehler 138018: technische Voraussetzungen sind nicht erfüllt — mindestens eine für die WABA abonnierte App muss auch das Anruf-Webhook-Feld haben).",
         "fixButton": "Beheben",
         "fixSuccess": "Die App ist jetzt für WhatsApp-Anruf-Webhooks abonniert.",
         "manualIntegrationNotice": "Diese Nummer wurde manuell verbunden und hat hier keine App-Anmeldedaten. Das 'calls'-Webhook-Feld für die App im Meta App Dashboard abonnieren.",
@@ -9105,7 +9151,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "Aktionsquelle",
@@ -9600,8 +9646,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11123,7 +11169,7 @@
         "label": "Shop-Quelle",
         "description": "Wählen Sie die Shop-Quelle, über die Produkte, Bestand und Bestellungen verwaltet werden. Bei Shopify / WooCommerce werden alle Produkte und Bestellungen direkt in Ihrem Shopify / WooCommerce-Shop verwaltet.",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11292,7 +11338,7 @@
       },
       "authKind": {
         "label": "Authentifizierung",
-        "description": "Wie sich ChatbotX bei Ihrem Shop anmeldet: mit dem Admin-API-Zugriffstoken einer benutzerdefinierten App oder mit der Client ID und dem Secret einer im Shopify Dev Dashboard erstellten App.",
+        "description": "Wie sich ChatWorkAI bei Ihrem Shop anmeldet: mit dem Admin-API-Zugriffstoken einer benutzerdefinierten App oder mit der Client ID und dem Secret einer im Shopify Dev Dashboard erstellten App.",
         "options": {
           "token": "Admin-API-Zugriffstoken",
           "clientCredentials": "Client ID und Secret (Dev-Dashboard-App)"
@@ -12204,7 +12250,7 @@
     "noWorkspaces": "Du bist in keinem Workspace Administrator und kannst diese Anwendung daher nicht autorisieren."
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12394,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12511,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "Löschen Sie Ihr ChatbotX-Konto",
+    "title": "Löschen Sie Ihr ChatWorkAI-Konto",
     "intro": "Sie können Ihr Konto und seine Daten auf einem der folgenden Wege löschen.",
     "waysTitle": "So löschen Sie Ihr Konto",
     "wayMobile": "In der mobilen App: Einstellungen → Konto löschen.",

@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
     accountCredentialsEmailTemplate: null,
     appUrl: "https://app.test/",
     logoLightUrl: "https://app.test/logo.svg",
-    name: "ChatbotX",
+    name: "ChatWorkAI",
   })),
   resolvePlatformSmtpTransport: vi.fn(),
   sendAccountCredentials: vi.fn(),
@@ -36,7 +36,7 @@ vi.mock("@chatbotx.io/database/repositories", () => ({
   },
 }))
 vi.mock("@chatbotx.io/mail", () => ({
-  DEFAULT_ACCOUNT_CREDENTIALS_SUBJECT: "Your ChatbotX account is ready",
+  DEFAULT_ACCOUNT_CREDENTIALS_SUBJECT: "Your ChatWorkAI account is ready",
   sendAccountCredentials: mocks.sendAccountCredentials,
 }))
 vi.mock("../src/logger", () => ({

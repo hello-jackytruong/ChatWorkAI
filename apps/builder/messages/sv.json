@@ -80,6 +80,52 @@
       "closeCode": "Close code",
       "issue": "Connection issue",
       "requiresAction": "Reconnect this account to resume automatic connections."
+    },
+    "messageActions": "Meddelandeåtgärder",
+    "viewSavedContent": "Visa sparat original",
+    "hideLocally": "Dölj i ChatbotX",
+    "recallOnZalo": "Återkalla på Zalo",
+    "deleteOnMyZalo": "Ta bort från mitt Zalo",
+    "nativeOperationsDisabled": "Zalos inbyggda åtgärder är inte tillgängliga.",
+    "retainOriginalNotice": "Det sparade originalet är fortsatt tillgängligt för behöriga inkorgsmedlemmar.",
+    "operationFailed": "Åtgärden misslyckades.",
+    "operationApplied": "Åtgärden har bekräftats.",
+    "operationUnconfirmed": "Resultatet är obekräftat. Kontrollera status innan du gör något mer.",
+    "confirmOperation": "Bekräfta åtgärd",
+    "inspectOperation": "Kontrollera status",
+    "savedContent": "Sparat original",
+    "savedLoading": "Läser in sparat innehåll…",
+    "savedDenied": "Du saknar nu åtkomst eller innehållet är inte tillgängligt.",
+    "originalNotCaptured": "Det ursprungliga innehållet sparades inte.",
+    "providerRecallTime": "Återkallelsetid på Zalo",
+    "observedRecallTime": "Återkallelse observerad",
+    "recallActor": "Återkallat av",
+    "unknownActor": "Okänd",
+    "savedFile": "Sparad fil",
+    "fileNotArchived": "Filen arkiverades inte eller är inte tillgänglig.",
+    "openSavedFile": "Öppna sparad fil",
+    "getSavedFile": "Hämta fillänk",
+    "savedFileUnavailable": "Den här sparade filen är inte tillgänglig.",
+    "recalled": "Återkallat på Zalo",
+    "hiddenLocally": "Dolt i CRM",
+    "deleteChatOnZalo": "Ta bort historik från mitt Zalo",
+    "deleteChatConfirm": "Ta bort Zalo-historik till och med det valda meddelandet? Den sparade CRM-historiken finns kvar för uppföljning.",
+    "deleteChatNoBoundary": "Ingen meddelandegräns finns för att ta bort Zalo-historik.",
+    "deletedOnMyZalo": "Borttaget på min Zalo",
+    "deleteChatBoundary": "Gräns för borttagning av historik",
+    "evidence": {
+      "unsupportedContent": "Zalo-meddelandet stöds inte",
+      "invalidContent": "Zalo-meddelandet kunde inte läsas",
+      "unsupportedSchema": "Zalo-meddelandeformatet stöds inte",
+      "pending": "Väntar på bekräftelse",
+      "unknown": "Okänt resultat — kontrollera status",
+      "failed": "Meddelandet skickades inte",
+      "applied": "Skickat",
+      "appliedPending": "Skickat, stämmer av lokalt",
+      "needsReview": "Resultatet behöver granskas",
+      "safeFailure": "Zalo-åtgärden kunde inte slutföras säkert",
+      "unavailable": "Status är inte tillgänglig. Försök igen.",
+      "inspect": "Kontrollera status"
     }
   },
   "QRCode": {
@@ -1968,7 +2014,7 @@
     "unknown": "Okänt"
   },
   "facebookMarketingMessages": {
-    "deleteWarning": "Detta tar bort Metas meddelandekampanj och tar bort kampanjen från ChatbotX. Om Meta nekar borttagningen behålls kampanjen.",
+    "deleteWarning": "Detta tar bort Metas meddelandekampanj och tar bort kampanjen från ChatWorkAI. Om Meta nekar borttagningen behålls kampanjen.",
     "title": "Facebook Marketing Messages",
     "description": "Öka engagemang och försäljning med personliga kampanjmeddelanden på Messenger.",
     "create": "Skapa ny",
@@ -2009,7 +2055,7 @@
       "tosNotAccepted": "För att använda den här funktionen behöver du godkänna villkoren för anpassade objekt på {url}",
       "notFound": "Marknadsföringsmeddelandet hittades inte.",
       "audienceNotTargetable": "Den valda anpassade målgruppen är inte redo eller tillhör inte den här sidan och annonskontot.",
-      "connectFirst": "Anslut Marketing Messages i ChatbotX-appen först.",
+      "connectFirst": "Anslut Marketing Messages i ChatWorkAI-appen först.",
       "mmInvalidState": "Den här åtgärden är inte tillgänglig i kampanjens nuvarande tillstånd.",
       "mmCampaignEnded": "Metas meddelandekampanj har avslutats och kan därför inte skickas eller återupptas.",
       "mmPageNotConnected": "Kampanjens sida är inte ansluten till den här arbetsytan.",
@@ -2029,7 +2075,7 @@
       "uploadMore": "Ladda upp fler rader",
       "empty": "Inga anpassade målgrupper ännu.",
       "deleteTitle": "Ta bort anpassad målgrupp",
-      "deleteWarning": "Detta tar bort den anpassade målgruppen \"{name}\" på Meta och i ChatbotX. Det går inte att ångra.",
+      "deleteWarning": "Detta tar bort den anpassade målgruppen \"{name}\" på Meta och i ChatWorkAI. Det går inte att ångra.",
       "deleted": "Anpassad målgrupp borttagen.",
       "pageDisconnected": "Sidan är frånkopplad",
       "status": {
@@ -3022,7 +3068,7 @@
     },
     "fromName": {
       "label": "Avsändarnamn",
-      "placeholder": "ChatbotX"
+      "placeholder": "ChatWorkAI"
     },
     "fullName": {
       "label": "Fullständigt namn"
@@ -8408,7 +8454,7 @@
         "title": "Samtalsbehörighet",
         "appSubscriptionMissing": "Konfigurera först WhatsApp-webhooken för denna app i Meta App Dashboard och försök sedan igen.",
         "appSubscriptionFailed": "Kunde inte verifiera appens prenumeration på 'calls'-webhooken. Försök igen om en stund.",
-        "callsNotSubscribed": "Denna app prenumererar inte på webhookfältet 'calls', så samtalshändelser kan inte nå ChatbotX (Meta-fel 138018: tekniska förutsättningar är inte uppfyllda — se till att minst en app som prenumererar på WABA:n också har webhookfältet för samtal).",
+        "callsNotSubscribed": "Denna app prenumererar inte på webhookfältet 'calls', så samtalshändelser kan inte nå ChatWorkAI (Meta-fel 138018: tekniska förutsättningar är inte uppfyllda — se till att minst en app som prenumererar på WABA:n också har webhookfältet för samtal).",
         "fixButton": "Åtgärda",
         "fixSuccess": "Appen prenumererar nu på WhatsApp-samtalswebhooks.",
         "manualIntegrationNotice": "Detta nummer anslöts manuellt och har inga appuppgifter här. Prenumerera på webhookfältet 'calls' för din app i Meta App Dashboard.",
@@ -9105,7 +9151,7 @@
     },
     "limitedDataUse": {
       "label": "Limited Data Use (US privacy)",
-      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatbotX."
+      "description": "Restrict Meta's use of event data for users in applicable US states. Meta auto-detects the user's location from this event; no location data is sent by ChatWorkAI."
     },
     "actionSource": {
       "label": "Åtgärdskälla",
@@ -9600,8 +9646,8 @@
       },
       "googleReport": {
         "title": "Reported by Google Ads",
-        "description": "Conversions Google Ads itself recorded for these days, next to what ChatbotX sent and Google confirmed.",
-        "sent": "Confirmed by ChatbotX",
+        "description": "Conversions Google Ads itself recorded for these days, next to what ChatWorkAI sent and Google confirmed.",
+        "sent": "Confirmed by ChatWorkAI",
         "reported": "Reported by Google",
         "note": "Google can take hours to update its reports, and counts follow the action's own settings, so small gaps are normal.",
         "unavailable": "Google Ads reporting is not available right now."
@@ -11123,7 +11169,7 @@
         "label": "Butikskälla",
         "description": "Välj den butikskälla som används för att hantera dina produkter, lager och beställningar. När Shopify / WooCommerce är valt hanteras alla produkter och beställningar direkt från din Shopify / WooCommerce-butik.",
         "options": {
-          "chatbotx": "ChatbotX",
+          "chatbotx": "ChatWorkAI",
           "shopify": "Shopify",
           "woocommerce": "WooCommerce"
         }
@@ -11292,7 +11338,7 @@
       },
       "authKind": {
         "label": "Autentisering",
-        "description": "Hur ChatbotX loggar in i din butik: med Admin API-åtkomsttoken från en anpassad app eller med Client ID och secret från en app som skapats i Shopify Dev Dashboard.",
+        "description": "Hur ChatWorkAI loggar in i din butik: med Admin API-åtkomsttoken från en anpassad app eller med Client ID och secret från en app som skapats i Shopify Dev Dashboard.",
         "options": {
           "token": "Admin API-åtkomsttoken",
           "clientCredentials": "Client ID och secret (Dev Dashboard-app)"
@@ -12204,7 +12250,7 @@
     "noWorkspaces": "Du är inte administratör för någon arbetsyta och kan därför inte auktorisera den här applikationen."
   },
   "chatbotxMcp": {
-    "title": "ChatbotX MCP",
+    "title": "ChatWorkAI MCP",
     "workspaceId": "Workspace ID",
     "streamableUrl": "Streamable HTTP URL",
     "sseUrl": "Legacy SSE URL",
@@ -12394,7 +12440,7 @@
     "channelSecretLabel": "Channel secret",
     "credentialsHelp": "Find both values in the LINE Developers console: open your Messaging API channel and go to Basic settings.",
     "webhookNotEnabled": "LINE is not delivering messages yet. In LINE Official Account Manager, turn on \"Use webhook\" and turn off \"Auto-reply messages\", then press Test webhook.",
-    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatbotX's.",
+    "webhookReplaced": "The webhook URL previously set on this LINE channel ({url}) was replaced with ChatWorkAI's.",
     "testWebhook": "Test webhook",
     "testWebhookSuccess": "LINE webhook is working.",
     "webhookTestFailed": "LINE's webhook test failed: {reason}",
@@ -12511,7 +12557,7 @@
     }
   },
   "deleteAccountPage": {
-    "title": "Radera ditt ChatbotX-konto",
+    "title": "Radera ditt ChatWorkAI-konto",
     "intro": "Du kan radera ditt konto och dess data på något av följande sätt.",
     "waysTitle": "Så raderar du ditt konto",
     "wayMobile": "I mobilappen: Inställningar → Radera konto.",

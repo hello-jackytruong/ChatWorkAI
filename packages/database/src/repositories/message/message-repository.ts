@@ -1,3 +1,7 @@
+import type {
+  ZaloAccountLifecycle,
+  ZaloAccountRecallScanCursor,
+} from "../../partials/zalo-account-recall"
 import type { RichResponseContentAttributes } from "../../schema"
 import type { AttachmentModel, MessageModel } from "../../types"
 
@@ -22,6 +26,7 @@ export type MessageForTranslation = Pick<
   | "deletedAt"
   | "type"
 > & {
+  sourceId?: MessageModel["sourceId"]
   /** `Message.messageType`: `incoming` | `outgoing` | `activity`. */
   direction: MessageModel["messageType"]
 }
@@ -57,10 +62,12 @@ export interface CreateMessageResult {
 }
 
 export interface ReconcileOutgoingSourceIdParams {
+  aliasSources?: string[]
   contactInboxId: string
   contentAttributesOverlay?: Record<string, unknown>
   conversationId: string
   createdAt: Date
+  echoAddresses?: Array<{ id: string; createdAt: Date }>
   id: string
   sourceId: string
   workspaceId: string
@@ -68,6 +75,7 @@ export interface ReconcileOutgoingSourceIdParams {
 
 export interface ReconcileOutgoingSourceIdResult {
   message: { id: string } | null
+  needsReview?: boolean
   removedEchoes: Array<{ id: string; createdAt: Date }>
 }
 
@@ -296,7 +304,9 @@ export type AttachmentLookupRow = Pick<
 
 export interface UpdateAttachmentParams {
   createdAt: Date
+  expectedOriginPath?: string
   fields: {
+    thumbnailPath?: string
     height?: number
     mimeType: string
     originPath: string
@@ -315,7 +325,19 @@ export interface DistributedLock {
   }): Promise<T>
 }
 
+export type ZaloAccountExactTarget = {
+  workspaceId: string
+  conversationId: string
+  contactInboxId: string
+  sourceId: string
+  id: string
+  createdAt: Date
+}
 export interface IMessageRepository {
+  applyZaloAccountLifecycleExact(
+    params: ZaloAccountExactTarget & { lifecycle: ZaloAccountLifecycle },
+  ): Promise<MessageModel | null>
+
   bulkCreate(
     messages: CreateMessageInput[],
   ): Promise<{ id: string; sourceId: string | null }[]>
@@ -402,6 +424,15 @@ export interface IMessageRepository {
     workspaceId: string,
     createdAt: Date,
   ): Promise<{ conversationId: string; id: string }[]>
+  fillZaloAccountOriginalExact(
+    params: ZaloAccountExactTarget & {
+      message: CreateMessageInput
+      attachments: Omit<
+        CreateAttachmentInput,
+        "messageId" | "messageCreatedAt"
+      >[]
+    },
+  ): Promise<MessageWithAttachments | null>
 
   findAIContextMessages(
     options: FindAIContextMessagesOptions,
@@ -540,6 +571,20 @@ export interface IMessageRepository {
   listIncomingTextsByContactInbox(
     params: ListIncomingTextsByContactInboxParams,
   ): Promise<string[]>
+  locateZaloAccountTarget(params: {
+    workspaceId: string
+    conversationId: string
+    contactInboxId: string
+    sourceId: string
+    cursor?: ZaloAccountRecallScanCursor | null
+    maxRanges?: number
+    maxCandidates?: number
+    deadline: number | Date
+  }): Promise<{
+    message?: MessageWithAttachments
+    complete: boolean
+    cursor?: ZaloAccountRecallScanCursor
+  }>
 
   /**
    * Atomically merges `overlay` into `contentAttributes` via a DB-side `jsonb ||`
@@ -634,4 +679,14 @@ export interface IMessageRepository {
     workspaceId: string,
     newText: string,
   ): Promise<{ conversationId: string; id: string } | null>
+
+  /** Atomically merges Zalo send evidence unless a newer revision is stored. */
+  updateZaloSendAttemptEvidence(params: {
+    workspaceId: string
+    accountId: string
+    id: string
+    createdAt: Date
+    evidence: Record<string, unknown>
+    revision: number
+  }): Promise<{ id: string } | null>
 }

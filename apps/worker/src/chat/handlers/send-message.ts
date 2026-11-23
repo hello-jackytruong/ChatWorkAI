@@ -12,6 +12,7 @@ import {
   zaloAccountGroupService,
   zaloAccountSendAttemptService,
 } from "@chatbotx.io/business/zalo-account"
+import { zaloAccountCanonicalSendService } from "@chatbotx.io/business/zalo-account/canonical-send"
 import {
   channelTypes,
   isLegacyMemberMessage,
@@ -43,6 +44,8 @@ import {
   ChannelError,
   ChannelErrorCategory,
   type CommentAnchor,
+  getZaloAccountErrorInfo,
+  getZaloAccountErrorMessage,
   type MessageButtonTemplate,
   type OutgoingSendResult,
   parseSdkError,
@@ -574,6 +577,9 @@ export async function sendMessageToChannel(
           message.contactInboxId,
           new Date(message.createdAt),
           result,
+          contactInbox.channel === "zaloAccount"
+            ? { inboxId: contactInbox.inboxId }
+            : undefined,
         )
 
         if (attemptsMade > 0) {
@@ -693,6 +699,12 @@ export async function sendMessageToChannel(
 
     return result
   } catch (error) {
+    const safeError =
+      contactInbox.channel === "zaloAccount"
+        ? new Error(getZaloAccountErrorMessage(getZaloAccountErrorInfo(error)))
+        : error
+    const errorMessage =
+      safeError instanceof Error ? safeError.message : "Zalo group send failed"
     // A reconciled failure is a permanent, known outcome: it is still
     if (
       contactInbox.contactKind === "channelGroup" ||
@@ -707,7 +719,10 @@ export async function sendMessageToChannel(
     ) {
       logger.error(
         {
-          err: error,
+          err:
+            contactInbox.channel === "zaloAccount"
+              ? getZaloAccountErrorInfo(error)
+              : error,
           messageId: message.id,
           workspaceId: conversation.workspaceId,
         },
@@ -718,7 +733,7 @@ export async function sendMessageToChannel(
         message.clientId,
         conversation.workspaceId,
         message.createdAt ? new Date(message.createdAt) : undefined,
-        error instanceof Error ? error.message : "Zalo group send failed",
+        errorMessage,
         { conversationId: conversation.id },
       )
       return { messageIds: [], sentCount: 0 }
@@ -731,8 +746,11 @@ export async function sendMessageToChannel(
       contentAttributes: message.contentAttributes,
       metadata,
     })
-    logger.error(error, "An error occurred while sending the message")
-    const errorData = await parseSdkError(error)
+    logger.error(
+      { err: safeError },
+      "An error occurred while sending the message",
+    )
+    const errorData = await parseSdkError(safeError)
     // A reconciled error returns instead of throwing, so it is never retried.
     const willRetry =
       !isReconciledSendError &&
@@ -757,7 +775,10 @@ export async function sendMessageToChannel(
       errorData,
       // Captured here while the throw is still in hand: `errorData` is a
       // stackless `ParsedError`, so `ErrorLog.stackTrace` has no other source.
-      errorStack: resolveStackFrames(error),
+      errorStack:
+        contactInbox.channel === "zaloAccount"
+          ? undefined
+          : resolveStackFrames(error),
       occurredAt: new Date(),
       metadata,
       willRetry,
@@ -1383,7 +1404,24 @@ async function updateMessageSourceId(
   contactInboxId: string,
   createdAt: Date | undefined,
   result: OutgoingSendResult,
+  zaloAccount?: { inboxId: string },
 ) {
+  if (zaloAccount && messageId && createdAt) {
+    try {
+      await zaloAccountCanonicalSendService.reconcileMessage({
+        workspaceId,
+        inboxId: zaloAccount.inboxId,
+        messageId,
+        createdAt,
+      })
+    } catch {
+      logger.warn(
+        { messageId, workspaceId },
+        "Zalo Account local reconciliation remains pending",
+      )
+    }
+    return
+  }
   const firstMessageId = result.messageIds[0]
   if (!(messageId && firstMessageId && createdAt)) {
     return
@@ -1704,6 +1742,9 @@ export async function sendFlowStepToChannel({
     contactInbox.id,
     messageCreatedAt,
     result,
+    contactInbox.channel === "zaloAccount"
+      ? { inboxId: contactInbox.inboxId }
+      : undefined,
   )
   if (contactInbox.contactKind === "channelGroup") {
     return result
