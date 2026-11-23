@@ -67,6 +67,7 @@ services:
     ports: [127.0.0.1:3123:3000]
     environment:
       <<: *environment
+      HOSTNAME: "0.0.0.0"
       RUN_DB_MIGRATE: "false"
       RUN_DB_SEED: "false"
       REALTIME_PROXY_URL: http://realtime:1999

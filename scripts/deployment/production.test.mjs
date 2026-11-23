@@ -256,7 +256,7 @@ test("migration fingerprint is stable and covers checked-in SQL", () => {
   )
 })
 
-test("executor tmpfs options remain one absolute mount after Compose parsing", () => {
+test("production Compose preserves builder binding and executor tmpfs options", () => {
   const dir = mkdtempSync(join(tmpdir(), "chatwork-compose-"))
   try {
     const dotenv = join(dir, "fixture.env")
@@ -298,6 +298,7 @@ test("executor tmpfs options remain one absolute mount after Compose parsing", (
         },
       ),
     )
+    assert.equal(config.services.builder.environment.HOSTNAME, "0.0.0.0")
     assert.deepEqual(config.services["javascript-executor"].tmpfs, [
       "/tmp:size=16m,noexec,nosuid,nodev",
     ])
