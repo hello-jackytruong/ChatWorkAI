@@ -12,6 +12,8 @@ export const setCoexistRequestSchema = z.object({
   workspaceId: z.string(),
   integrationId: z.string(),
   enabled: z.boolean(),
+  skipNamelessContacts: z.boolean().optional(),
+  resyncHistory: z.boolean().optional(),
   aiReadsSyncedHistory: z.boolean().optional().default(false),
 })
 export const setCoexistResponseSchema = z.discriminatedUnion("success", [

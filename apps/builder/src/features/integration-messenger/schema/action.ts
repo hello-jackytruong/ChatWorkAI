@@ -17,6 +17,7 @@ export const updateMessengerRequest = z.object({
   personas: z.array(messengerPersonaSchema),
   conversationStarters: z.array(messengerConversationStarterSchema),
   markReadOnOutbound: z.boolean().optional(),
+  coexistSkipNamelessContacts: z.boolean().optional(),
 })
 
 export type UpdateMessengerRequest = z.infer<typeof updateMessengerRequest>

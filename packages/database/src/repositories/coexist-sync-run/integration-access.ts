@@ -34,6 +34,7 @@ type IntegrationUpdateInput = IntegrationAccessInput & {
   enabled: boolean
   /** Undefined = leave `coexistAiReadsSyncedHistory` untouched. */
   aiReadsSyncedHistory?: boolean
+  skipNamelessContacts?: boolean
 }
 
 export const integrationLookups = {
@@ -82,11 +83,15 @@ export const integrationUpdates = {
     integrationId,
     enabled,
     aiReadsSyncedHistory,
+    skipNamelessContacts,
   }: IntegrationUpdateInput): Promise<CoexistIntegrationRow | null> => {
     const [row] = await tx
       .update(integrationMessengerModel)
       .set({
         coexistEnabled: enabled,
+        ...(skipNamelessContacts === undefined
+          ? {}
+          : { coexistSkipNamelessContacts: skipNamelessContacts }),
         ...(aiReadsSyncedHistory === undefined
           ? {}
           : { coexistAiReadsSyncedHistory: aiReadsSyncedHistory }),

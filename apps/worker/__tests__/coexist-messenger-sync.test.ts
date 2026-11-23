@@ -428,6 +428,230 @@ describe("coexistMessengerSync", () => {
     expect(bulkArgs.messages[0]?.sourceId).toBe("msg-xyz")
   })
 
+  it("imports a full year per conversation beyond the 100-message minimum", async () => {
+    mockFindByIdMessenger.mockResolvedValue(fakeIntegration)
+    mockFindOrFail.mockResolvedValue(fakeInbox)
+    const conversation = makeConversation("conv-year")
+    const at = (days: number) =>
+      new Date(
+        new Date(conversation.updated_time).getTime() - days * 86_400_000,
+      ).toISOString()
+    mockListConversations.mockResolvedValueOnce({ data: [conversation] })
+    mockListMessages.mockResolvedValueOnce({
+      data: [
+        ...Array.from({ length: 100 }, (_, i) => makeMessage(`recent-${i}`)),
+        makeMessage("six-months", "user-999", at(180)),
+        makeMessage("year-boundary", "user-999", at(365)),
+        makeMessage("too-old", "user-999", at(366)),
+      ],
+    })
+    await coexistMessengerSync({ runId, integrationId, workspaceId })
+    const messages = mockBulkImportMessages.mock.calls[0]?.[0].messages
+    expect(messages).toHaveLength(102)
+    expect(messages.map((m: { sourceId: string }) => m.sourceId)).toContain(
+      "year-boundary",
+    )
+    expect(messages.map((m: { sourceId: string }) => m.sourceId)).not.toContain(
+      "too-old",
+    )
+  })
+
+  it.each([
+    undefined,
+    "",
+    "   ",
+  ])("skips a participant without a name (%s) before importing contacts", async (name) => {
+    mockFindByIdMessenger.mockResolvedValue(fakeIntegration)
+    mockFindOrFail.mockResolvedValue(fakeInbox)
+    mockFindInitState.mockResolvedValue({
+      attempts: 0,
+      currentError: null,
+      messengerSyncPhase: "contacts",
+    })
+    const unnamed = {
+      ...makeConversation("unnamed"),
+      participants: {
+        data: [
+          { id: PAGE_ID, name: "Page" },
+          { id: "blank-user", name },
+        ],
+      },
+    }
+    mockListConversations
+      .mockResolvedValueOnce({ data: [unnamed, makeConversation("named")] })
+      .mockResolvedValueOnce({ data: [] })
+    await coexistMessengerSync({ runId, integrationId, workspaceId })
+    expect(mockBulkImportContacts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contacts: [
+          expect.objectContaining({ sourceId: "user-999", firstName: "Bob" }),
+        ],
+      }),
+    )
+    expect(mockIncrementProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        increments: expect.objectContaining({ skippedCount: 1 }),
+      }),
+    )
+  })
+
+  it("allows unnamed participants when the Page opts out", async () => {
+    mockFindByIdMessenger.mockResolvedValue({
+      ...fakeIntegration,
+      coexistSkipNamelessContacts: false,
+    })
+    mockFindOrFail.mockResolvedValue(fakeInbox)
+    mockFindInitState.mockResolvedValue({
+      attempts: 0,
+      currentError: null,
+      messengerSyncPhase: "contacts",
+    })
+    mockListConversations
+      .mockResolvedValueOnce({
+        data: [
+          {
+            ...makeConversation("unnamed"),
+            participants: { data: [{ id: "blank-user" }] },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ data: [] })
+    await coexistMessengerSync({ runId, integrationId, workspaceId })
+    expect(mockBulkImportContacts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contacts: [expect.objectContaining({ sourceId: "blank-user" })],
+      }),
+    )
+  })
+
+  it("ignores the prior run ceiling only for an explicit full history resync", async () => {
+    mockFindByIdMessenger.mockResolvedValue(fakeIntegration)
+    mockFindOrFail.mockResolvedValue(fakeInbox)
+    mockFindInitState.mockResolvedValue({
+      attempts: 0,
+      currentError: null,
+      messengerSyncPhase: "messages",
+      triggerSource: "manual-full-history",
+    })
+    mockFindResumeCeiling.mockResolvedValue(new Date(RECENT_TS))
+    mockListConversations.mockResolvedValueOnce({
+      data: [makeConversation("old-conv")],
+    })
+    mockListMessages.mockResolvedValueOnce({
+      data: [
+        makeMessage(
+          "older-message",
+          "user-999",
+          new Date(
+            new Date(RECENT_TS).getTime() - 180 * 86_400_000,
+          ).toISOString(),
+        ),
+      ],
+    })
+    await coexistMessengerSync({ runId, integrationId, workspaceId })
+    expect(mockBulkImportMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [expect.objectContaining({ sourceId: "older-message" })],
+      }),
+    )
+  })
+
+  it("does not fetch history for an unnamed participant even with an existing contact link", async () => {
+    mockFindByIdMessenger.mockResolvedValue({
+      ...fakeIntegration,
+      coexistSkipNamelessContacts: true,
+    })
+    mockFindOrFail.mockResolvedValue(fakeInbox)
+    mockListConversations.mockResolvedValueOnce({
+      data: [
+        {
+          ...makeConversation("unnamed"),
+          participants: { data: [{ id: "user-999", name: " " }] },
+        },
+      ],
+    })
+    await coexistMessengerSync({ runId, integrationId, workspaceId })
+    expect(mockListMessages).not.toHaveBeenCalled()
+    expect(mockBulkImportMessages).not.toHaveBeenCalled()
+  })
+
+  it("skips Page-only conversations during contact import", async () => {
+    mockFindByIdMessenger.mockResolvedValue(fakeIntegration)
+    mockFindOrFail.mockResolvedValue(fakeInbox)
+    mockFindInitState.mockResolvedValue({
+      attempts: 0,
+      currentError: null,
+      messengerSyncPhase: "contacts",
+    })
+    mockListConversations
+      .mockResolvedValueOnce({
+        data: [{ id: "page-only", participants: { data: [{ id: PAGE_ID }] } }],
+      })
+      .mockResolvedValueOnce({ data: [] })
+    await coexistMessengerSync({ runId, integrationId, workspaceId })
+    expect(mockBulkImportContacts).toHaveBeenCalledWith(
+      expect.objectContaining({ contacts: [] }),
+    )
+  })
+
+  it.each([
+    [{ failedCount: 1, importedMessageCount: 1, skippedCount: 0 }, "partial"],
+    [{ failedCount: 1, importedMessageCount: 0, skippedCount: 1 }, "partial"],
+    [{ failedCount: 1, importedMessageCount: 0, skippedCount: 0 }, "failed"],
+  ])("retains the correct terminal status after a history scan (%s)", async (counters, status) => {
+    mockFindByIdMessenger.mockResolvedValue(fakeIntegration)
+    mockFindOrFail.mockResolvedValue(fakeInbox)
+    mockListConversations.mockResolvedValueOnce({ data: [] })
+    mockFindTerminalCounters.mockResolvedValueOnce(counters)
+    await coexistMessengerSync({ runId, integrationId, workspaceId })
+    expect(mockUpdateProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fields: expect.objectContaining({ status, currentStep: "done" }),
+      }),
+    )
+  })
+
+  it.each([
+    false,
+    true,
+  ])("preserves a full resync when yielding a chunk (queue unavailable: %s)", async (queueUnavailable) => {
+    mockFindByIdMessenger.mockResolvedValue(fakeIntegration)
+    mockFindOrFail.mockResolvedValue(fakeInbox)
+    mockFindInitState.mockResolvedValue({
+      attempts: 1,
+      currentError: null,
+      messengerSyncPhase: "messages",
+      triggerSource: "manual-full-history",
+    })
+    if (queueUnavailable) {
+      mockQueueAdd.mockRejectedValueOnce(new Error("queue unavailable"))
+    }
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValue(240_001)
+    try {
+      await coexistMessengerSync({ runId, integrationId, workspaceId })
+      expect(mockQueueAdd).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          data: { runId, integrationId, workspaceId },
+        }),
+        expect.anything(),
+      )
+      expect(mockListConversations).not.toHaveBeenCalled()
+      if (queueUnavailable) {
+        expect(mockUpdateProgress).toHaveBeenCalledWith(
+          expect.objectContaining({
+            fields: expect.objectContaining({ status: "init" }),
+          }),
+        )
+      }
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
   it("does not eagerly enqueue Messenger attachment downloads after import", async () => {
     mockFindByIdMessenger.mockResolvedValue(fakeIntegration)
     mockFindOrFail.mockResolvedValue(fakeInbox)

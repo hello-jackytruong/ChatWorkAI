@@ -1475,7 +1475,11 @@
     "descriptionInstagram": "激活后，将从该 Instagram 帐户导入现有的 Instagram 联系人和最多 3 个月的对话记录。",
     "enable": "激活同步",
     "decline": "不同步",
-    "descriptionMessenger": "激活后，将从该页面导入现有的 Messenger 联系人和最多 3 个月的对话历史记录。",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "激活后，将从该页面导入现有的 Messenger 联系人和最多 365 天的对话历史记录。",
     "descriptionWhatsapp": "激活后，将从该WhatsApp号码导入联系人和最多 6 个月的聊天记录。",
     "errors": {
       "alreadyTriggered": "此号码已触发同步。请等待Meta发送历史数据。",

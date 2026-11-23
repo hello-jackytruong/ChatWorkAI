@@ -1284,7 +1284,11 @@
   },
   "coexist": {
     "billingNote": "Det kan ta flera timmar att slutföra synkroniseringen för stora sidor.",
-    "descriptionMessenger": "När detta är aktiverat importeras befintliga Messenger-kontakter och upp till 3 månaders konversationshistorik från den här sidan.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "När detta är aktiverat importeras befintliga Messenger-kontakter och upp till 365 dagars konversationshistorik från den här sidan.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Aktivera synkronisering",
     "decline": "Synkronisera inte",

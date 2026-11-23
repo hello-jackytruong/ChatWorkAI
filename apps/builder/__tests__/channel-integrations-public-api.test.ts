@@ -283,6 +283,27 @@ describe("PUT /v1/<channel>-channels/{id}/coexist", () => {
     expect(result).toEqual({ success: true, runId: "r1" })
   })
 
+  test("Messenger public callers can opt out of skipping unnamed contacts and request a full resync", async () => {
+    coexist.enable.mockResolvedValue({ success: true, runId: "r1" })
+    await handlerFor("messenger")?.({
+      context: ctx,
+      input: {
+        id: "3",
+        enabled: true,
+        skipNamelessContacts: false,
+        resyncHistory: true,
+      },
+    })
+    expect(coexist.enable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        channel: "messenger",
+        skipNamelessContacts: false,
+        resyncHistory: true,
+      }),
+    )
+  })
+
   test("instagram disable stops the sync", async () => {
     coexist.disable.mockResolvedValue({ success: true })
 

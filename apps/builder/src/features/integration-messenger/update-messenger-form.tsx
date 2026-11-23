@@ -6,6 +6,7 @@ import { fileTypes } from "@chatbotx.io/sdk"
 import { ComboboxField } from "@chatbotx.io/ui/components/form/combobox-field"
 import { InputField } from "@chatbotx.io/ui/components/form/input-field"
 import { SelectField } from "@chatbotx.io/ui/components/form/select-field"
+import { SwitchField } from "@chatbotx.io/ui/components/form/switch-field"
 import {
   Accordion,
   AccordionContent,
@@ -44,7 +45,7 @@ import {
 import { useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { useEffect } from "react"
-import { useFieldArray } from "react-hook-form"
+import { useFieldArray, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { MediaLibraryOrInsertLink } from "@/components/media-library-or-insert-link"
 import { useFlowSelectOptions } from "@/features/flows/provider/flow-hook"
@@ -52,6 +53,7 @@ import { MarkReadOnOutboundField } from "@/features/inboxes/components/mark-read
 import { useInvalidateInboxes } from "@/features/inboxes/provider/inbox-hook"
 import PersistentMenuField from "../integration-webchat/components/persistent-menu-field"
 import { updateMessengerAction } from "./actions/update-messenger-action"
+import { MessengerCoexistToggle } from "./components/messenger-coexist-toggle"
 import { TagSyncCard } from "./components/tag-sync-card"
 import { updateMessengerRequest } from "./schema/action"
 
@@ -100,10 +102,16 @@ export function UpdateMessengerForm({
           welcomeFlowId: null,
           persistentMenus: [],
           markReadOnOutbound,
+          coexistSkipNamelessContacts:
+            integrationMessenger.coexistSkipNamelessContacts,
         },
       },
     },
   )
+
+  const skipNamelessContacts =
+    useWatch({ control: form.control, name: "coexistSkipNamelessContacts" }) ??
+    true
 
   const {
     fields: conversationStarters,
@@ -151,6 +159,8 @@ export function UpdateMessengerForm({
         persistentMenus: persistentMenusArray,
         conversationStarters: conversationStartersArray,
         markReadOnOutbound,
+        coexistSkipNamelessContacts:
+          integrationMessenger.coexistSkipNamelessContacts,
         // Normalize persona ids to numeric Snowflakes. Legacy rows may carry no
         // id (backfill) or a UUID from an older ID scheme (migrate to Snowflake).
         personas: personasArray.map((persona) => ({
@@ -164,6 +174,31 @@ export function UpdateMessengerForm({
   return (
     <Form {...form}>
       <form className="space-y-6" onSubmit={handleSubmitWithAction}>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("coexist.toggleLabel")}</CardTitle>
+            <CardDescription>
+              {t("coexist.descriptionMessenger")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <SwitchField
+              description={t("coexist.skipNamelessContactsHelper")}
+              label={t("coexist.skipNamelessContactsLabel")}
+              name="coexistSkipNamelessContacts"
+            />
+            <MessengerCoexistToggle
+              initialAiReadsSyncedHistory={
+                integrationMessenger.coexistAiReadsSyncedHistory
+              }
+              initialEnabled={integrationMessenger.coexistEnabled}
+              integrationId={integrationMessenger.id}
+              skipNamelessContacts={skipNamelessContacts}
+              workspaceId={workspaceId}
+            />
+          </CardContent>
+        </Card>
+
         <ComboboxField
           allowClear
           clearLabel={t("messages.none")}

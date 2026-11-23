@@ -5498,7 +5498,11 @@
   "coexist": {
     "title": "Sync existing contacts and chat history?",
     "descriptionWhatsapp": "When enabled, contacts and up to 6 months of chat history will be imported from this WhatsApp number.",
-    "descriptionMessenger": "When enabled, existing Messenger contacts and up to 3 months of conversation history will be imported from this Page.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "When enabled, existing Messenger contacts and up to 365 days of conversation history will be imported from this Page.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Enable sync",
     "decline": "Don't sync",

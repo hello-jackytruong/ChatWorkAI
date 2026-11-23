@@ -4862,7 +4862,11 @@
   "coexist": {
     "title": "同步現有聯絡人和聊天記錄？",
     "descriptionWhatsapp": "啟用後，將從該WhatsApp號碼匯入聯絡人和最多 6 個月的聊天記錄。",
-    "descriptionMessenger": "啟用後，將從該頁面匯入現有的 Messenger 聯絡人和最多 3 個月的對話歷史記錄。",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "啟用後，將從該頁面匯入現有的 Messenger 聯絡人和最多 365 天的對話歷史記錄。",
     "descriptionInstagram": "啟用後，將從該 Instagram 帳戶匯入現有的 Instagram 聯絡人和最多 3 個月的對話記錄。",
     "enable": "啟用同步",
     "decline": "不同步",

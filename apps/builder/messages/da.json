@@ -4816,7 +4816,11 @@
   "coexist": {
     "title": "Synkroniser existing kontakter og chat historik?",
     "descriptionWhatsapp": "Når aktiveret, kontakter og up til 6 months af chat historik vil være importeret fra denne WhatsApp nummer.",
-    "descriptionMessenger": "Når aktiveret, existing Messenger kontakter og up til 3 months af samtale historik vil være importeret fra denne Page.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "Når aktiveret, existing Messenger kontakter og up til 365 dage af samtale historik vil være importeret fra denne Page.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Aktivér synkroniser",
     "decline": "Don't synkroniser",

@@ -212,6 +212,24 @@ describe("updateMessenger", () => {
     })
   })
 
+  test("persists an explicit opt-out of skipping unnamed history contacts", async () => {
+    await updateMessenger(
+      { workspaceId: "workspace-1", id: "messenger-1" },
+      {
+        welcomeFlowId: null,
+        persistentMenus: [],
+        personas: [],
+        conversationStarters: [],
+        coexistSkipNamelessContacts: false,
+      },
+    )
+    expect(mocks.updateProfileFields).toHaveBeenCalledWith(
+      { workspaceId: "workspace-1", id: "messenger-1" },
+      expect.objectContaining({ coexistSkipNamelessContacts: false }),
+      expect.anything(),
+    )
+  })
+
   test("does not update the inbox flag when the field is omitted", async () => {
     await updateMessenger(
       {

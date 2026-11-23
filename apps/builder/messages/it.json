@@ -4816,7 +4816,11 @@
   "coexist": {
     "title": "Sincronizzare i contatti esistenti e la cronologia chat?",
     "descriptionWhatsapp": "Se attivata, verranno importati da questo numero WhatsApp i contatti e fino a 6 mesi di cronologia chat.",
-    "descriptionMessenger": "Se attivata, verranno importati da questa Pagina i contatti Messenger esistenti e fino a 3 mesi di cronologia delle conversazioni.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "Se attivata, verranno importati da questa Pagina i contatti Messenger esistenti e fino a 365 giorni di cronologia delle conversazioni.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Attiva sincronizzazione",
     "decline": "Non sincronizzare",

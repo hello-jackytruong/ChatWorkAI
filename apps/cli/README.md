@@ -1185,9 +1185,10 @@ chatbotx messenger-channels list
 chatbotx messenger-channels get <id>
 chatbotx messenger-channels handover-resume-flow update <id> --handoverResumeFlowId <flowId|null>
 chatbotx messenger-channels tag-sync update <id> --enabled <enabled>
-chatbotx messenger-channels settings list <id>         # Welcome flow, persistent menu, personas, ice breakers
+chatbotx messenger-channels coexist update <id> --enabled true --skipNamelessContacts true --resyncHistory true  # Full 365-day history scan; reuses an active run
+chatbotx messenger-channels settings list <id>         # Welcome flow, persistent menu, personas, ice breakers and unnamed-contact history preference
 chatbotx messenger-channels settings update <id>       # Full replace; pushes to Facebook
-chatbotx messenger-channels settings edit <id>         # PATCH: only the fields you send; personas take {name, profilePictureUrl}
+chatbotx messenger-channels settings edit <id>         # PATCH: only the fields you send; --coexistSkipNamelessContacts true skips unnamed history contacts (default true); personas take {name, profilePictureUrl}
 chatbotx messenger-channels delete <id>                # Disconnect the Page (works after the trial ends)
 ```
 

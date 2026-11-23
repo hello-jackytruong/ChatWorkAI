@@ -5498,7 +5498,11 @@
   "coexist": {
     "title": "Mövcud kontaktlar və söhbət tarixçəsi sinxronlaşdırılsın?",
     "descriptionWhatsapp": "Aktivləşdirildikdə bu WhatsApp nömrəsindən kontaktlar və 6 aya qədər söhbət tarixçəsi idxal ediləcək.",
-    "descriptionMessenger": "Aktivləşdirildikdə bu səhifədən mövcud Messenger kontaktları və 3 aya qədər söhbət tarixçəsi idxal ediləcək.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "Aktivləşdirildikdə bu səhifədən mövcud Messenger kontaktları və 365 günə qədər söhbət tarixçəsi idxal ediləcək.",
     "descriptionInstagram": "Aktivləşdirildikdə bu Instagram hesabından mövcud Instagram kontaktları və 3 aya qədər söhbət tarixçəsi idxal ediləcək.",
     "enable": "Sinxronlaşdırmanı aktivləşdir",
     "decline": "Sinxronlaşdırma",

@@ -68,7 +68,7 @@ export const messengerChannelsPublicRouter = {
       path: "/v1/messenger-channels/{id}/settings",
       summary: "Get Messenger channel settings",
       description:
-        "Returns a Messenger page's welcome flow, persistent menu, personas and ice breakers. Use `messengerChannels.patchSettings` to change some of them, or `messengerChannels.updateSettings` to replace all of them.",
+        "Returns a Messenger page's welcome flow, persistent menu, personas, ice breakers and unnamed-contact history sync preference. Use `messengerChannels.patchSettings` to change some of them, or `messengerChannels.updateSettings` to replace all of them.",
       tags: ["Channels"],
     })
     .input(z.object({ id: messengerChannelIdSchema }))
@@ -89,7 +89,7 @@ export const messengerChannelsPublicRouter = {
       path: "/v1/messenger-channels/{id}/settings",
       summary: "Replace Messenger channel settings",
       description:
-        "Saves a Messenger page's welcome flow, persistent menu, personas and ice breakers, and pushes them to Facebook. Replaces every field, so read them with `messengerChannels.getSettings` first, or use `messengerChannels.patchSettings` to change only some.",
+        "Saves a Messenger page's welcome flow, persistent menu, personas, ice breakers and unnamed-contact history sync preference, and pushes them to Facebook. Replaces every field, so read them with `messengerChannels.getSettings` first, or use `messengerChannels.patchSettings` to change only some.",
       successStatus: 204,
       tags: ["Channels"],
     })
@@ -109,7 +109,7 @@ export const messengerChannelsPublicRouter = {
       path: "/v1/messenger-channels/{id}/settings",
       summary: "Update Messenger channel settings",
       description:
-        "Changes only the settings you send (welcome flow, persistent menu, personas, ice breakers, mark-read) and keeps the others as saved, then pushes them to Facebook. `personas`, when sent, is the full list: a persona left out is deleted. Use `messengerChannels.updateSettings` to replace everything at once.",
+        "Changes only the settings you send (welcome flow, persistent menu, personas, ice breakers, mark-read, coexistSkipNamelessContacts) and keeps the others as saved, then pushes them to Facebook. `personas`, when sent, is the full list: a persona left out is deleted. Use `messengerChannels.updateSettings` to replace everything at once.",
       successStatus: 204,
       tags: ["Channels"],
     })

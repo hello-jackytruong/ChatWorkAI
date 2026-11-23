@@ -323,7 +323,7 @@ export const createCoexistRoute = (channel: CoexistChannel) => {
         method: "PUT",
         path: `/v1/${channel}-channels/{id}/coexist` as const,
         summary: `Set ${label} coexist sync`,
-        description: `Turns coexistence history sync on or off for a ${label} channel. Enabling starts (or reuses) a sync run (\`runId\` is returned for Messenger and Instagram); \`aiReadsSyncedHistory\` lets the AI read the synced history (default false). Disabling stops active runs. Read the current state from \`${listOperation}\` (\`coexistEnabled\`).`,
+        description: `Turns coexistence history sync on or off for a ${label} channel. Enabling starts (or reuses) a sync run (\`runId\` is returned for Messenger and Instagram); \`aiReadsSyncedHistory\` lets the AI read the synced history (default false). Messenger imports 365 days per conversation; \`skipNamelessContacts\` controls unnamed participants and \`resyncHistory\` revisits history from previous runs. Disabling stops active runs. Read the current state from \`${listOperation}\` (\`coexistEnabled\`).`,
         tags: ["Channels"],
       })
       .input(
@@ -332,6 +332,18 @@ export const createCoexistRoute = (channel: CoexistChannel) => {
             `${label} channel (integration) id. Get it from \`${listOperation}\`.`,
           ),
           enabled: z.boolean().describe("Whether coexist sync is on."),
+          skipNamelessContacts: z
+            .boolean()
+            .optional()
+            .describe(
+              "Messenger only: skip Facebook participants without a non-blank name. Omit to preserve the Page setting (default true).",
+            ),
+          resyncHistory: z
+            .boolean()
+            .optional()
+            .describe(
+              "Messenger only, when enabling: revisit the full 365-day window instead of stopping at the prior run. Reuses an active run without restarting it.",
+            ),
           aiReadsSyncedHistory: z
             .boolean()
             .optional()
@@ -358,6 +370,8 @@ export const createCoexistRoute = (channel: CoexistChannel) => {
                 ? coexistService.enable({
                     ...base,
                     channel,
+                    skipNamelessContacts: input.skipNamelessContacts,
+                    resyncHistory: input.resyncHistory,
                     aiReadsSyncedHistory: input.aiReadsSyncedHistory,
                   })
                 : coexistService.disable({ ...base, channel }))

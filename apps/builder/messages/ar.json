@@ -4816,7 +4816,11 @@
   "coexist": {
     "title": "هل تريد مزامنة جهات الاتصال وسجل الدردشة الحاليين؟",
     "descriptionWhatsapp": "عند التفعيل، سيستورد ChatbotX جهات الاتصال وما يصل إلى 6 أشهر من سجل الدردشة من رقم WhatsApp هذا.",
-    "descriptionMessenger": "عند التفعيل، سيستورد ChatbotX جهات اتصال Messenger الحالية وما يصل إلى 3 أشهر من سجل المحادثات من هذه الصفحة.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "عند التفعيل، سيستورد ChatbotX جهات اتصال Messenger الحالية وما يصل إلى 365 يومًا من سجل المحادثات من هذه الصفحة.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "تفعيل المزامنة",
     "decline": "عدم المزامنة",

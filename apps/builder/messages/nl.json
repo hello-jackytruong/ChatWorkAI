@@ -4816,7 +4816,11 @@
   "coexist": {
     "title": "Bestaande contacten en chatgeschiedenis synchroniseren?",
     "descriptionWhatsapp": "Wanneer dit is ingeschakeld, worden contacten en maximaal 6 maanden chatgeschiedenis van dit WhatsApp-nummer geïmporteerd.",
-    "descriptionMessenger": "Wanneer dit is ingeschakeld, worden bestaande Messenger-contacten en maximaal 3 maanden gespreksgeschiedenis van deze pagina geïmporteerd.",
+    "skipNamelessContactsLabel": "Skip accounts without a name",
+    "skipNamelessContactsHelper": "Skip Facebook participants whose name is missing or blank during history sync. Existing contacts are kept. Save this setting, or start a sync to apply it.",
+    "resyncHistoryLabel": "Sync history again",
+    "resyncHistoryHelper": "Scan the full 365-day window again to import older messages. Existing messages are deduplicated. If a sync is already active, it continues without restarting.",
+    "descriptionMessenger": "Wanneer dit is ingeschakeld, worden bestaande Messenger-contacten en maximaal 365 dagen gespreksgeschiedenis van deze pagina geïmporteerd.",
     "descriptionInstagram": "When enabled, existing Instagram contacts and up to 3 months of conversation history will be imported from this Instagram account.",
     "enable": "Synchronisatie inschakelen",
     "decline": "Niet synchroniseren",

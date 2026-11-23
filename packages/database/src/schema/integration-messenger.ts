@@ -54,6 +54,7 @@ export const integrationMessengerModel = pgTable(
     personaId: text(),
     coexistEnabled: boolean().notNull().default(false),
     coexistAiReadsSyncedHistory: boolean().notNull().default(false),
+    coexistSkipNamelessContacts: boolean().notNull().default(true),
     hasCapiScope: boolean().notNull().default(false),
     capiScopeCheckedAt: timestamp(timestampConfig),
     datasetId: text(),

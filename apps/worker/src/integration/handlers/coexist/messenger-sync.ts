@@ -105,6 +105,7 @@ type SyncContext = {
    *  sync-inserted message id so the AI ignores this synced history; when
    *  true, the marker is left untouched and the AI reads the history. */
   aiReadsSyncedHistory: boolean
+  skipNamelessContacts: boolean
 }
 
 type PhaseResult = {
@@ -212,9 +213,14 @@ async function runContactsPhase(ctx: SyncContext): Promise<PhaseResult> {
     runRow.lastSyncedAt,
     async ({ filtered, pageNumber }) => {
       const contactBatch: IncomingContact[] = []
+      let skippedNameless = 0
       for (const conv of filtered.convsToProcess) {
         const participant = participantSourceId(conv, pageId)
         if (!participant) {
+          continue
+        }
+        if (ctx.skipNamelessContacts && !participant.name?.trim()) {
+          skippedNameless += 1
           continue
         }
         const { firstName, lastName } = splitName(participant.name)
@@ -257,7 +263,7 @@ async function runContactsPhase(ctx: SyncContext): Promise<PhaseResult> {
         increments: {
           currentScan: filtered.convsToProcess.length,
           importedContactCount: pageResult.importedContacts,
-          skippedCount: pageResult.skippedContacts,
+          skippedCount: pageResult.skippedContacts + skippedNameless,
         },
         fields: {
           lastSyncedAt: filtered.oldestConvProcessed,
@@ -303,7 +309,7 @@ async function runMessagesPhase(ctx: SyncContext): Promise<PhaseResult> {
       const convsByParticipant = new Map<string, MessengerConversation>()
       for (const conv of filtered.convsToProcess) {
         const p = participantSourceId(conv, pageId)
-        if (!p) {
+        if (!p || (ctx.skipNamelessContacts && !p.name?.trim())) {
           continue
         }
         convsByParticipant.set(p.sourceId, conv)
@@ -510,11 +516,16 @@ export const coexistMessengerSync = async (
     return
   }
 
-  const ceiling = await coexistService.findResumeCeiling({
-    integrationId,
-    channel: "messenger",
-    currentRunId: runId,
-  })
+  // A full resync still resumes within its own run; only the prior-run
+  // boundary is removed. Source-message deduplication preserves existing rows.
+  const ceiling =
+    initRow.triggerSource === "manual-full-history"
+      ? null
+      : await coexistService.findResumeCeiling({
+          integrationId,
+          channel: "messenger",
+          currentRunId: runId,
+        })
   const attempts = initRow.attempts
 
   // Optimistic claim: only one worker may flip status→running at a time.
@@ -551,6 +562,7 @@ export const coexistMessengerSync = async (
     jobStart,
     errorRef,
     aiReadsSyncedHistory: integration.coexistAiReadsSyncedHistory,
+    skipNamelessContacts: integration.coexistSkipNamelessContacts ?? true,
   }
 
   let finalStatus: "succeeded" | "failed" | "partial" | null = null
