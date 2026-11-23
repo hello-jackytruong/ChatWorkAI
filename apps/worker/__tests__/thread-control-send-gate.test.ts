@@ -1,3 +1,7 @@
+vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
+  zaloAccountCanonicalSendService: {},
+}))
+
 // Group services are outside this direct-channel unit boundary.
 vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountGroupService: {},
