@@ -178,3 +178,8 @@ describe("MessageItem call phone number buttons", () => {
     expect(onPostback).toHaveBeenCalledWith(postbackButton)
   })
 })
+
+// Evidence inspection is a server action, outside this rendering test.
+vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
+  inspectZaloAccountMessageAction: vi.fn(),
+}))

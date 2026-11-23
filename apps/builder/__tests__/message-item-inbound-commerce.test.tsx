@@ -155,3 +155,8 @@ describe("MessageItem inbound catalog messages", () => {
     expect(el.textContent).toContain("sku-unknown")
   })
 })
+
+// Evidence inspection is a server action, outside this rendering test.
+vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
+  inspectZaloAccountMessageAction: vi.fn(),
+}))

@@ -234,3 +234,8 @@ describe("MessageItem sent payment request", () => {
     expect(el.textContent).not.toContain("messages.paymentRequest.title")
   })
 })
+
+// Evidence inspection is a server action, outside this rendering test.
+vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
+  inspectZaloAccountMessageAction: vi.fn(),
+}))
