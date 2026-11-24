@@ -5896,6 +5896,7 @@
     "facebookComment": "Facebook 留言",
     "failed": "失败",
     "failedToCopy": "拷贝失败",
+    "processingImage": "正在处理图片…",
     "failedToPreviewImage": "预览影像失败",
     "featureNotFound": "{feature} 找不到",
     "flowConfigIncomplete": "部分设置不完整",

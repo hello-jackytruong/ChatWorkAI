@@ -4716,6 +4716,7 @@
     "addAttachment": "Adicionar anexo",
     "reloadAttachment": "Recarregar anexo",
     "failedToCopy": "Não foi possível copiar",
+    "processingImage": "A processar imagem…",
     "failedToPreviewImage": "Não foi possível pré-visualizar a imagem",
     "loadingData": "A carregar dados...",
     "errorLoadingData": "Não foi possível carregar os dados. Tente novamente.",

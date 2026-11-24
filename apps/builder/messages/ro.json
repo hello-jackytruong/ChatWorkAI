@@ -4716,6 +4716,7 @@
     "addAttachment": "Adaugă atașament",
     "reloadAttachment": "Reîncarcă atașamentul",
     "failedToCopy": "Copierea a eșuat",
+    "processingImage": "Se procesează imaginea…",
     "failedToPreviewImage": "Previzualizarea imaginii a eșuat",
     "loadingData": "Se încarcă datele...",
     "errorLoadingData": "Încărcarea datelor a eșuat. Te rugăm să încerci din nou.",

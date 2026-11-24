@@ -4716,6 +4716,7 @@
     "addAttachment": "Tilføj vedhæftning",
     "reloadAttachment": "Genindlæs vedhæftning",
     "failedToCopy": "Mislykkedes til kopiér",
+    "processingImage": "Behandler billede…",
     "failedToPreviewImage": "Mislykkedes til preview billede",
     "loadingData": "Indlæser data...",
     "errorLoadingData": "Mislykkedes til load data. Prøv igen.",

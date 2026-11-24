@@ -5398,6 +5398,7 @@
     "addAttachment": "Add attachment",
     "reloadAttachment": "Reload attachment",
     "failedToCopy": "Failed to copy",
+    "processingImage": "Processing image…",
     "failedToPreviewImage": "Failed to preview image",
     "loadingData": "Loading data...",
     "errorLoadingData": "Failed to load data. Please try again.",

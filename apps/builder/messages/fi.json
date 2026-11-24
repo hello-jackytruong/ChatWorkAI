@@ -4716,6 +4716,7 @@
     "addAttachment": "Lisää liite",
     "reloadAttachment": "Lataa liite uudelleen",
     "failedToCopy": "Kopiointi epäonnistui",
+    "processingImage": "Kuvaa käsitellään…",
     "failedToPreviewImage": "Kuvan esikatselu epäonnistui",
     "loadingData": "Ladataan tietoja...",
     "errorLoadingData": "Tietojen lataaminen epäonnistui. Yritä uudelleen.",

@@ -4716,6 +4716,7 @@
     "addAttachment": "Aggiungi allegato",
     "reloadAttachment": "Ricarica allegato",
     "failedToCopy": "Impossibile copiare",
+    "processingImage": "Elaborazione immagine…",
     "failedToPreviewImage": "Impossibile visualizzare l'anteprima dell'immagine",
     "loadingData": "Caricamento dati...",
     "errorLoadingData": "Impossibile caricare i dati. Riprova.",

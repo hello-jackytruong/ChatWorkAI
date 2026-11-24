@@ -4716,6 +4716,7 @@
     "addAttachment": "Ajouter une pièce jointe",
     "reloadAttachment": "Recharger la pièce jointe",
     "failedToCopy": "Échec de la copie",
+    "processingImage": "Traitement de l’image…",
     "failedToPreviewImage": "Échec de l’aperçu de l’image",
     "loadingData": "Chargement des données...",
     "errorLoadingData": "Échec du chargement des données. Veuillez réessayer.",

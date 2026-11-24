@@ -5896,6 +5896,7 @@
     "facebookComment": "Facebook-kommentar",
     "failed": "Misslyckades",
     "failedToCopy": "Det gick inte att kopiera",
+    "processingImage": "Bearbetar bild…",
     "failedToPreviewImage": "Det gick inte att förhandsgranska bilden",
     "featureNotFound": "{feature} hittades inte",
     "flowConfigIncomplete": "Vissa konfigurationer är ofullständiga",

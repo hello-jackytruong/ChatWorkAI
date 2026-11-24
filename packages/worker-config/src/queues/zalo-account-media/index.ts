@@ -1,3 +1,4 @@
+import logger from "@chatbotx.io/logger"
 import { Queue } from "bullmq"
 import {
   defaultJobOptions,
@@ -119,4 +120,52 @@ export async function enqueueZaloAccountMedia(
       token,
     )
   }
+}
+
+// Opportunistic live admission must never hold up durable message ingestion.
+// One drain and one bounded batch also cap offline Redis promises in memory.
+const liveRequests = new Map<string, ZaloAccountMediaJobData>()
+let drainingLiveRequests = false
+
+export function requestZaloAccountMedia(jobs: ZaloAccountMediaJobData[]): void {
+  if (!(mediaQueue && jobs.length)) {
+    return
+  }
+  if (getQueueConnection(queueNames.enum.zaloAccountMedia).status !== "ready") {
+    return
+  }
+  for (const job of jobs.slice(0, ZALO_MEDIA_BACKLOG_LIMIT)) {
+    const id = mediaJobId(job.data)
+    if (liveRequests.has(id) || liveRequests.size < ZALO_MEDIA_BACKLOG_LIMIT) {
+      liveRequests.set(id, job)
+    }
+  }
+  if (drainingLiveRequests) {
+    return
+  }
+  drainingLiveRequests = true
+  const drain = async () => {
+    try {
+      while (liveRequests.size) {
+        const batch = [...liveRequests.values()]
+        liveRequests.clear()
+        if (
+          getQueueConnection(queueNames.enum.zaloAccountMedia).status !==
+          "ready"
+        ) {
+          return
+        }
+        await enqueueZaloAccountMedia(batch)
+      }
+    } finally {
+      liveRequests.clear()
+      drainingLiveRequests = false
+    }
+  }
+  drain().catch((err: unknown) => {
+    logger.warn(
+      { err },
+      "Live Zalo media admission deferred to durable outbox recovery",
+    )
+  })
 }

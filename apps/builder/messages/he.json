@@ -2302,6 +2302,7 @@
     "addAttachment": "הוסף קובץ מצורף",
     "reloadAttachment": "טען מחדש את הקובץ המצורף",
     "failedToCopy": "ההעתקה נכשלה",
+    "processingImage": "מעבד תמונה…",
     "failedToPreviewImage": "התצוגה המקדימה של התמונה נכשלה",
     "loadingData": "הנתונים נטענים...",
     "errorLoadingData": "טעינת הנתונים נכשלה. נסו שוב.",

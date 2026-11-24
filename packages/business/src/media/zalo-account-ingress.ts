@@ -1,5 +1,9 @@
 import { zaloAccountMediaResourcesSchema } from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
+import {
+  requestZaloAccountMedia,
+  type ZaloAccountMediaJobData,
+} from "@chatbotx.io/worker-config"
 import { zaloAccountService } from "../zalo-account/service"
 import { zaloAccountCommandTransportService } from "../zalo-account/transport.service"
 import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
@@ -79,10 +83,30 @@ export async function captureZaloAccountMessage(
     descriptors,
   })
   if (resources.length) {
-    await zaloAccountMediaService.registerResources({
+    const references = await zaloAccountMediaService.registerResources({
       workspaceId: input.workspaceId,
       accountId: account.id,
       resources,
     })
+    // registerResources owns and commits its transaction before returning here.
+    const jobs = new Map<string, ZaloAccountMediaJobData>()
+    for (const [index, reference] of references.entries()) {
+      if (!resources[index]?.source) {
+        continue
+      }
+      jobs.set(reference.assetId, {
+        type: "transfer",
+        data: {
+          workspaceId: input.workspaceId,
+          accountId: account.id,
+          assetId: reference.assetId,
+          priority: "live",
+          createdAt: reference.createdAt.getTime(),
+        },
+      })
+    }
+    if (jobs.size) {
+      requestZaloAccountMedia([...jobs.values()])
+    }
   }
 }
