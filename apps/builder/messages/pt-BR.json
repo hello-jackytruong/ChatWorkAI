@@ -4693,6 +4693,7 @@
     "addAttachment": "Adicionar anexo",
     "reloadAttachment": "Recarregar anexo",
     "failedToCopy": "Falha ao copiar",
+    "processingImage": "Processando imagem…",
     "failedToPreviewImage": "Falha ao visualizar a imagem",
     "loadingData": "Carregando dados...",
     "errorLoadingData": "Falha ao carregar os dados. Tente novamente.",

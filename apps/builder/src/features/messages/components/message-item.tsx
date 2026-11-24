@@ -43,6 +43,7 @@ import {
   CopyIcon,
   ExternalLinkIcon,
   ImageIcon,
+  LoaderCircleIcon,
   LockIcon,
   PaperclipIcon,
   PhoneIcon,
@@ -627,12 +628,37 @@ const RenderAttachments = (props: {
           attachmentId?: string
           role?: string
           state?: string
+          kind?: string
         }>
       }
     | undefined
   const isZalo = Boolean(
     zalo && typeof zalo === "object" && !Array.isArray(zalo),
   )
+  const isProcessing = (attachment: AttachmentResource) => {
+    if (!(isZalo && Array.isArray(zalo?.mediaResources))) {
+      return false
+    }
+    const mime =
+      attachment.mimeType?.split(";", 1)[0]?.trim().toLowerCase() ?? ""
+    const imageFile =
+      mime.startsWith("image/") ||
+      ((!mime || mime === "application/octet-stream") &&
+        Boolean(
+          attachment.name &&
+            attachment.name.length <= 255 &&
+            ZALO_IMAGE_FILE_NAME.test(attachment.name),
+        ))
+    return zalo.mediaResources.some(
+      (resource) =>
+        resource.attachmentId === attachment.id &&
+        resource.role === "original" &&
+        ["pending", "downloading"].includes(resource.state ?? "") &&
+        (resource.kind === "image" ||
+          attachment.fileType === "image" ||
+          imageFile),
+    )
+  }
   const previewUrl = (attachment: AttachmentResource) => {
     if (
       !(
@@ -685,6 +711,7 @@ const RenderAttachments = (props: {
               isZalo={isZalo}
               key={attachment.id}
               previewUrl={previewUrl(attachment)}
+              processing={isProcessing(attachment)}
             />
           ))}
         </div>
@@ -695,6 +722,7 @@ const RenderAttachments = (props: {
             isZalo={isZalo}
             key={attachment.id}
             previewUrl={previewUrl(attachment)}
+            processing={isProcessing(attachment)}
           />
         ))
       )}
@@ -704,6 +732,7 @@ const RenderAttachments = (props: {
           isZalo={isZalo}
           key={attachment.id}
           previewUrl={previewUrl(attachment)}
+          processing={isProcessing(attachment)}
         />
       ))}
     </div>
@@ -713,9 +742,10 @@ const RenderAttachments = (props: {
 const RenderImageGridItem = (props: {
   attachment: AttachmentResource
   isZalo?: boolean
+  processing?: boolean
   previewUrl?: string
 }) => {
-  const { attachment, isZalo, previewUrl } = props
+  const { attachment, isZalo, previewUrl, processing } = props
   const t = useTranslations("messages")
   const imageLabel = useTranslations("fields.image")
   const { url, onError } = useAttachmentSource(attachment)
@@ -734,8 +764,14 @@ const RenderImageGridItem = (props: {
       <div className="flex size-24 items-center justify-center overflow-hidden rounded-lg bg-secondary">
         {isZalo ? (
           <>
-            <ImageIcon className="size-5 text-muted-foreground" />
-            <span className="sr-only">{t("failedToPreviewImage")}</span>
+            {processing ? (
+              <LoaderCircleIcon className="size-5 animate-spin text-muted-foreground" />
+            ) : (
+              <ImageIcon className="size-5 text-muted-foreground" />
+            )}
+            <span className="sr-only">
+              {t(processing ? "processingImage" : "failedToPreviewImage")}
+            </span>
           </>
         ) : (
           <PaperclipIcon className="size-5 text-muted-foreground" />
@@ -816,9 +852,10 @@ const RenderImageAttachment = (props: {
 const RenderAttachmentItem = (props: {
   attachment: AttachmentResource
   isZalo?: boolean
+  processing?: boolean
   previewUrl?: string
 }) => {
-  const { attachment, isZalo, previewUrl } = props
+  const { attachment, isZalo, previewUrl, processing } = props
   const [failedPreview, setFailedPreview] = useState<string>()
   const t = useTranslations("messages")
   const imageLabel = useTranslations("fields.image")
@@ -850,7 +887,7 @@ const RenderAttachmentItem = (props: {
     }
   }
 
-  if (isZalo && (attachment.fileType === "image" || imageFile)) {
+  if (isZalo && (attachment.fileType === "image" || imageFile || processing)) {
     if (showImage) {
       return (
         <div className="flex flex-col gap-1">
@@ -876,8 +913,18 @@ const RenderAttachmentItem = (props: {
     if (!attachmentUrl || attachment.fileType === "image") {
       return (
         <div className="flex items-center gap-2 rounded-xl bg-secondary p-3 text-muted-foreground text-sm">
-          <ImageIcon className="size-5 flex-none" />
-          <span>{t("failedToPreviewImage")}</span>
+          {processing && !attachmentUrl ? (
+            <LoaderCircleIcon className="size-5 flex-none animate-spin" />
+          ) : (
+            <ImageIcon className="size-5 flex-none" />
+          )}
+          <span>
+            {t(
+              processing && !attachmentUrl
+                ? "processingImage"
+                : "failedToPreviewImage",
+            )}
+          </span>
         </div>
       )
     }

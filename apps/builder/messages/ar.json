@@ -4716,6 +4716,7 @@
     "addAttachment": "إضافة مرفق",
     "reloadAttachment": "إعادة تحميل المرفق",
     "failedToCopy": "تعذّر النسخ",
+    "processingImage": "جارٍ معالجة الصورة…",
     "failedToPreviewImage": "تعذّرت معاينة الصورة",
     "loadingData": "جارٍ تحميل البيانات...",
     "errorLoadingData": "تعذّر تحميل البيانات. يُرجى المحاولة مرة أخرى.",

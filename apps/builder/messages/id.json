@@ -4716,6 +4716,7 @@
     "addAttachment": "Tambah lampiran",
     "reloadAttachment": "Muat ulang lampiran",
     "failedToCopy": "Gagal menyalin",
+    "processingImage": "Memproses gambar…",
     "failedToPreviewImage": "Gagal melihat pratinjau gambar",
     "loadingData": "Memuat data...",
     "errorLoadingData": "Gagal memuat data. Silakan coba lagi.",

@@ -4716,6 +4716,7 @@
     "addAttachment": "Agregar archivo adjunto",
     "reloadAttachment": "Volver a cargar el adjunto",
     "failedToCopy": "Failed un copy",
+    "processingImage": "Procesando imagen…",
     "failedToPreviewImage": "Failed un preview imagen",
     "loadingData": "Cargando datos...",
     "errorLoadingData": "Failed un load datos. Por favor, try again.",

@@ -387,7 +387,12 @@ exact workspace/account/Inbox/thread binding checks. Reads work after disconnect
 or group-policy disablement. Signed links are issued only for objects already in
 R2/S3, expire after 60 seconds, and never fall back to provider URLs. Missing
 originals return `notCaptured`; files return `not_archived`/`unavailable` honestly.
-Media ingestion (checklist P0 · 2) is separate. Query data and local download links
+Media ingestion (checklist P0 · 2) is separate. Live-message capture offers its
+committed asset references to the existing bounded transfer queue immediately.
+Full/unavailable queues retain the durable intent for scheduled recovery; profile
+and backfill dispatch remain scheduled. Transfer concurrency and backlog limits
+are unchanged. Pending/downloading images show a processing state until an
+authorized stored image or preview is available. Query data and local download links
 are cleared on dialog close or tuple change; reopen authorizes again. Audit writes
 are best effort and record access/link issuance, not completed download, with no
 message body, filename, storage path, or signed URL.

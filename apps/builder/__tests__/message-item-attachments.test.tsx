@@ -797,6 +797,72 @@ describe("Zalo image attachment presentation", () => {
     expect(el.querySelector(`a[href="${attachment.url}"]`)).not.toBeNull()
   })
 
+  test.each([
+    "pending",
+    "downloading",
+  ])("shows processing rather than an error while Zalo image is %s", (state) => {
+    const attachment = {
+      ...makeImageAttachment("pending-photo"),
+      url: null,
+    } as AttachmentResource
+    const message = zalo(attachment)
+    message.contentAttributes = {
+      zaloAccount: {
+        mediaResources: [
+          {
+            attachmentId: attachment.id,
+            role: "original",
+            kind: "image",
+            state,
+          },
+        ],
+      },
+    }
+    const el = renderComponent(<MessageItem message={message} />)
+    expect(el.textContent).toContain("processingImage")
+    expect(el.textContent).not.toContain("failedToPreviewImage")
+    expect(el.querySelector("img, a")).toBeNull()
+    act(() =>
+      root?.render(
+        <TenantProvider settings={tenantSettings}>
+          <MessageItem
+            message={{
+              ...message,
+              attachments: [
+                { ...attachment, url: "https://signed.test/ready.jpg" },
+              ],
+            }}
+          />
+        </TenantProvider>,
+      ),
+    )
+    expect(el.querySelector("img")?.getAttribute("src")).toBe(
+      "https://signed.test/ready.jpg",
+    )
+  })
+  test("keeps failed image transfers distinct from processing", () => {
+    const attachment = {
+      ...makeImageAttachment("failed-photo"),
+      url: null,
+    } as AttachmentResource
+    const message = zalo(attachment)
+    message.contentAttributes = {
+      zaloAccount: {
+        mediaResources: [
+          {
+            attachmentId: attachment.id,
+            role: "original",
+            kind: "image",
+            state: "failed",
+          },
+        ],
+      },
+    }
+    const el = renderComponent(<MessageItem message={message} />)
+    expect(el.textContent).toContain("failedToPreviewImage")
+    expect(el.textContent).not.toContain("processingImage")
+  })
+
   test("shows an honest unavailable image without reconstructing a private origin", () => {
     const attachment = {
       ...makeImageAttachment("private"),

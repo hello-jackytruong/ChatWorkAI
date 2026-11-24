@@ -4716,6 +4716,7 @@
     "addAttachment": "Ek ekle",
     "reloadAttachment": "Eki yeniden yükle",
     "failedToCopy": "Kopyalanamadı",
+    "processingImage": "Görsel işleniyor…",
     "failedToPreviewImage": "Görsel önizlenemedi",
     "loadingData": "Veriler yükleniyor...",
     "errorLoadingData": "Veriler yüklenemedi. Lütfen tekrar deneyin.",

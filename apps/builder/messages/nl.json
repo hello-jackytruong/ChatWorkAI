@@ -4716,6 +4716,7 @@
     "addAttachment": "Bijlage toevoegen",
     "reloadAttachment": "Bijlage opnieuw laden",
     "failedToCopy": "Kopiëren is mislukt",
+    "processingImage": "Afbeelding verwerken…",
     "failedToPreviewImage": "Voorbeeld van afbeelding laden is mislukt",
     "loadingData": "Gegevens laden...",
     "errorLoadingData": "Gegevens laden is mislukt. Probeer het opnieuw.",

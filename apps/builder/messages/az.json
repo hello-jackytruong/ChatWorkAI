@@ -5398,6 +5398,7 @@
     "addAttachment": "Qoşma əlavə et",
     "reloadAttachment": "Əlavəni yenidən yüklə",
     "failedToCopy": "Kopyalamaq mümkün olmadı",
+    "processingImage": "Şəkil emal edilir…",
     "failedToPreviewImage": "Şəklin önbaxışını göstərmək mümkün olmadı",
     "loadingData": "Məlumatlar yüklənir...",
     "errorLoadingData": "Məlumatları yükləmək mümkün olmadı. Yenidən cəhd edin.",

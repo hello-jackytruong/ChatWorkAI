@@ -4693,6 +4693,7 @@
     "addAttachment": "添付ファイルを追加",
     "reloadAttachment": "添付ファイルを再読み込み",
     "failedToCopy": "コピーに失敗しました",
+    "processingImage": "画像を処理中…",
     "failedToPreviewImage": "画像のプレビューに失敗しました",
     "loadingData": "データを読み込んでいます...",
     "errorLoadingData": "データの読み込みに失敗しました。もう一度お試しください。",

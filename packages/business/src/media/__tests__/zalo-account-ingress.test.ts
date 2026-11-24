@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   register: vi.fn(),
+  requestMedia: vi.fn(),
   find: vi.fn(),
   stickers: vi.fn(),
+}))
+vi.mock("@chatbotx.io/worker-config", () => ({
+  requestZaloAccountMedia: mocks.requestMedia,
 }))
 vi.mock("../../zalo-account/service", () => ({
   zaloAccountService: { findByInboxId: mocks.find },
@@ -88,5 +92,98 @@ describe("Zalo ingress archival boundary", () => {
         resources: [expect.objectContaining({ kind: "sticker" })],
       }),
     )
+  })
+
+  it("requests live transfer only after durable registration resolves", async () => {
+    let finish!: (value: unknown[]) => void
+    mocks.register.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const capture = captureZaloAccountMessage({
+      ...input,
+      descriptors: [
+        {
+          kind: "image",
+          role: "original",
+          slot: "0",
+          url: "https://a.zdn.vn/photo",
+        },
+      ],
+    })
+    await vi.waitFor(() => expect(mocks.register).toHaveBeenCalledOnce())
+    expect(mocks.requestMedia).not.toHaveBeenCalled()
+    finish([{ assetId: "asset", createdAt: new Date(100) }])
+    await capture
+    expect(mocks.requestMedia).toHaveBeenCalledWith([
+      {
+        type: "transfer",
+        data: {
+          workspaceId: "1",
+          accountId: "5",
+          assetId: "asset",
+          createdAt: 100,
+          priority: "live",
+        },
+      },
+    ])
+  })
+  it("does not request transfers for absent sources or after registration rollback", async () => {
+    mocks.register.mockResolvedValue([
+      { assetId: "missing", createdAt: new Date() },
+    ])
+    await captureZaloAccountMessage({
+      ...input,
+      descriptors: [
+        {
+          kind: "sticker",
+          role: "original",
+          slot: "0",
+          sourceMissing: "source_missing",
+        },
+      ],
+    })
+    expect(mocks.requestMedia).not.toHaveBeenCalled()
+    mocks.register.mockRejectedValue(new Error("rollback"))
+    await expect(
+      captureZaloAccountMessage({
+        ...input,
+        descriptors: [
+          {
+            kind: "image",
+            role: "original",
+            slot: "0",
+            url: "https://a.zdn.vn/photo",
+          },
+        ],
+      }),
+    ).rejects.toThrow("rollback")
+    expect(mocks.requestMedia).not.toHaveBeenCalled()
+  })
+  it("deduplicates assets returned for multiple live resource references", async () => {
+    mocks.register.mockResolvedValue([
+      { assetId: "same", createdAt: new Date(100) },
+      { assetId: "same", createdAt: new Date(100) },
+    ])
+    await captureZaloAccountMessage({
+      ...input,
+      descriptors: [
+        {
+          kind: "image",
+          role: "original",
+          slot: "0",
+          url: "https://a.zdn.vn/photo",
+        },
+        {
+          kind: "image",
+          role: "thumbnail",
+          slot: "0",
+          url: "https://a.zdn.vn/photo",
+        },
+      ],
+    })
+    expect(mocks.requestMedia.mock.calls[0]?.[0]).toHaveLength(1)
   })
 })
