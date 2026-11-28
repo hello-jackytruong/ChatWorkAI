@@ -21,6 +21,7 @@ const workerState = vi.hoisted(() => ({
   capturedWorkers: [] as CapturedWorker[],
   globalConcurrency: vi.fn(async () => undefined),
   transferMedia: vi.fn(async () => undefined),
+  catchUpZaloHistory: vi.fn(async () => undefined),
   ensureBootstrapped: vi.fn(async () => undefined),
   coexistAttachmentDownload: vi.fn(async () => undefined),
   updateContactAvatar: vi.fn(async () => undefined),
@@ -74,6 +75,8 @@ vi.mock("@chatbotx.io/worker-config", () => ({
     messageStatus: "messageStatus",
     contactMarkAsRead: "contactMarkAsRead",
     incomingMessageEcho: "incomingMessageEcho",
+    zaloAccountThreadEvent: "zaloAccountThreadEvent",
+    zaloAccountHistoryCatchup: "zaloAccountHistoryCatchup",
   },
   queueNames: {
     enum: {
@@ -109,6 +112,16 @@ vi.mock("@chatbotx.io/business", () => ({
   flushAllPendingWorkspaceRealtimeEvents:
     workerState.flushAllPendingWorkspaceRealtimeEvents,
   withBlockedOwnerGuard: workerState.withBlockedOwnerGuard,
+}))
+
+vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  zaloAccountHistorySyncService: {
+    startAutomatic: workerState.catchUpZaloHistory,
+  },
+}))
+
+vi.mock("../src/integration/handlers/zalo-account-thread-event", () => ({
+  handleZaloAccountThreadEvent: vi.fn(),
 }))
 
 vi.mock("../src/env", () => ({
@@ -189,6 +202,7 @@ expect(workerState.globalConcurrency).toHaveBeenCalledWith(1)
 
 describe("low worker process boot", () => {
   beforeEach(() => {
+    workerState.catchUpZaloHistory.mockClear()
     workerState.coexistAttachmentDownload.mockClear()
     workerState.updateContactAvatar.mockClear()
     workerState.captureContactProfileSnapshot.mockClear()
@@ -225,6 +239,24 @@ describe("low worker process boot", () => {
 
     expect(worker?.options.concurrency).toBe(2)
     expect(worker?.options.limiter).toEqual({ max: 20, duration: 1000 })
+  })
+
+  test("routes Zalo history catch-up through the workspace owner guard", async () => {
+    const [worker] = workerState.capturedWorkers
+    const data = { workspaceId: "ws-9", accountId: "za-9" }
+    const job = { data: { type: "zaloAccountHistoryCatchup", data } }
+
+    await worker?.processor(job)
+
+    expect(workerState.catchUpZaloHistory).toHaveBeenCalledExactlyOnceWith(data)
+    expect(workerState.withBlockedOwnerGuard).toHaveBeenCalledWith(
+      data.workspaceId,
+      expect.any(Function),
+    )
+
+    workerState.withBlockedOwnerGuard.mockResolvedValueOnce(undefined)
+    await worker?.processor(job)
+    expect(workerState.catchUpZaloHistory).toHaveBeenCalledOnce()
   })
 
   test("routes a contactInfoCapture job to its handler behind the owner guard", async () => {
