@@ -120,32 +120,41 @@ Public lifecycle operations use the existing agent-first connection surfaces:
 
 All operations require the normal `channels` workspace-token scope.
 
+## Rich content in the Inbox
+
+Personal Zalo chats display video, voice, GIF, link previews, contact cards, locations, bank/QR information and call notices when the incoming payload includes the required fields. For inbound images and GIFs with a usable Zalo source, the Inbox receives a short-lived preview link while the existing worker archives the original. The preview checks the current account, conversation and recall state before redirecting. Reopening the conversation prefers the private R2/S3 object when ready. The original provider URL remains encrypted in the existing asset record. Other standalone assets that finish downloading after the message arrives are available after refreshing the conversation. Rich text uses validated style spans. The provider TTL is retained as metadata.
+
+Typed outbound messages are opt-in by account. Set `ZALO_ACCOUNT_RICH_SEND_ACCOUNT_IDS` to a comma-separated list of internal account IDs in the builder, worker and Zalo Account gateway. Existing text and single-attachment inputs remain available. For the public DM and group send commands, pass one typed `content` object or a `forward` source pointer with the source conversation ID, message ID and creation timestamp. For media forwarding the source attachment must already be available in the archive.
+
+The API exposes `delivery=partial` when only part of a multi-item send is confirmed. `remainingUnknown` indicates a later attempt may have reached the provider. `delivery=accepted_without_id` records an acknowledgment without a provider message ID. Inspect the existing send attempt for either outcome before issuing another command.
+
+Search sticker packs through `zaloAccounts.listStickers`, then use the returned ID, category and type to send a sticker. The gateway looks up catalog entries under the account session. Saved message artwork stays in the private archive. The picker keeps recent and favorite entries per user and account in the current browser.
+
+`zaloAccounts.searchHistory` reads one bounded Inbox history page in the specified account and conversation. Follow the cursor for older pages, including pages with zero matches. `zaloAccounts.locateQuote` reads a bounded page near the quoted timestamp and returns the visible original if found. Group mentions use provider UIDs from `zaloAccounts.listGroupMembers` and the gateway rechecks current membership before sending. All three read operations require `inbox` scope and conversation access. Member names may be missing when the provider returns a partial roster.
+
 ## Direct messages
 
-Supported 1:1 inbound/outbound content is deliberately small:
+The legacy 1:1 message shape supports:
 
 - text;
 - reply/quote metadata;
 - image;
 - file.
 
-Inbox sends support text together with one image; both are passed to the
-provider in the same send command. The provider can send the text separately
-when quote metadata is present. Text with a file and multiple attachments per
-command remain unsupported. The dedicated direct/group send API endpoints
-continue to accept either text or one attachment.
+The legacy Inbox input supports text with one image. The provider can send
+the caption separately when quote metadata is present. Enrolled accounts use
+the typed media input for multiple files or text with a file. The dedicated
+direct/group API also accepts each legacy input.
 
 Inbound messages, own echoes, delivery/read status, and undo events enter the
 existing integration worker and canonical Inbox persistence/realtime pipeline.
 Provider/account/thread/message identity is included in dedupe IDs so a retry
 does not create a second Inbox message.
 
-Outbound media is fetched only through the controlled download path: HTTPS,
-allowlisted resolution checks, redirect revalidation, byte/type limits, and a
-temporary local file that is removed after the SDK call. Arbitrary local paths
-and provider URLs are not exposed as client-facing attachments. Sticker,
-voice/video, card, poll, outbound reaction, forward, and other unsupported payloads fail
-explicitly; they are not silently converted.
+The controlled outbound download path checks HTTPS sources, DNS resolution,
+redirects, byte limits and media types. It removes temporary local files
+after the SDK call. Inbox attachments are projected through the storage
+policy. The send API rejects unsupported content such as polls.
 
 ## Controlled group Inbox
 

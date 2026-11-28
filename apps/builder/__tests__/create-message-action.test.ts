@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 const mockFindByOrFail = vi.fn()
 const mockResolveContactInboxForConversation = vi.fn()
 const mockCreateOutgoing = vi.fn()
+const mockAssertConversationAccess = vi.fn()
 
 vi.mock("@chatbotx.io/business", () => ({
   conversationService: {
@@ -22,6 +23,11 @@ vi.mock("@/lib/safe-action", () => ({
       inputSchema: () => ({ action: (fn: unknown) => fn }),
     }),
   },
+}))
+
+vi.mock("@/lib/public-api/member-scope", () => ({
+  assertConversationAccessForCaller: (...args: unknown[]) =>
+    mockAssertConversationAccess(...args),
 }))
 
 vi.mock("../src/features/messages/schema/mutation", () => ({
@@ -52,6 +58,7 @@ const contactInbox = {
 beforeEach(() => {
   vi.clearAllMocks()
   mockFindByOrFail.mockResolvedValue(conversation)
+  mockAssertConversationAccess.mockResolvedValue(conversation)
   mockResolveContactInboxForConversation.mockResolvedValue(contactInbox)
   mockCreateOutgoing.mockResolvedValue({ id: "msg-1" })
 })
@@ -143,5 +150,90 @@ describe("createMessageAction", () => {
       user: { id: "user-1" },
       sendFrom: "inbox",
     })
+  })
+
+  test("checks conversation access before forwarding rich Zalo Account content", async () => {
+    const zaloInbox = { ...contactInbox, channel: "zaloAccount" }
+    mockResolveContactInboxForConversation.mockResolvedValue(zaloInbox)
+    const workspace = { id: "ws-1" }
+    const workspaceMember = { id: "member-1" }
+    const user = { id: "user-1" }
+    const input = {
+      inboxId: contactInbox.inboxId,
+      clientId: "client-1",
+      replyToMessageId: "msg-original",
+      replyToMessageCreatedAt: new Date("2026-01-01T00:00:00Z"),
+      zaloAccountContent: { kind: "link", url: "https://example.com/" },
+    }
+
+    await createMessageAction({
+      bindArgsParsedInputs: ["ws-1", "conv-1"],
+      parsedInput: input,
+      ctx: { workspace, workspaceMember, user },
+    })
+
+    expect(mockAssertConversationAccess).toHaveBeenCalledWith(
+      { workspace, member: workspaceMember, user },
+      "conv-1",
+    )
+    expect(mockFindByOrFail).not.toHaveBeenCalled()
+    expect(mockCreateOutgoing).toHaveBeenCalledWith({
+      conversation,
+      contactInbox: zaloInbox,
+      input,
+      user,
+      sendFrom: "inbox",
+    })
+  })
+
+  test("rejects a rich upload when the resolved inbox is another channel", async () => {
+    await expect(
+      createMessageAction({
+        bindArgsParsedInputs: ["ws-1", "conv-1"],
+        parsedInput: {
+          inboxId: contactInbox.inboxId,
+          zaloAccountUpload: { type: "media", mediaFileIds: ["12", "15"] },
+        },
+        ctx: { user: { id: "user-1" } },
+      }),
+    ).rejects.toThrow(
+      "Rich Zalo Account content requires a Zalo Account inbox.",
+    )
+    expect(mockCreateOutgoing).not.toHaveBeenCalled()
+  })
+
+  test("authorizes both the source and destination before forwarding through Zalo Account", async () => {
+    mockResolveContactInboxForConversation.mockResolvedValue({
+      ...contactInbox,
+      channel: "zaloAccount",
+    })
+    const context = {
+      workspace: { id: "ws-1" },
+      workspaceMember: { id: "member-1" },
+      user: { id: "user-1" },
+    }
+    const request = {
+      bindArgsParsedInputs: ["ws-1", "conv-1"],
+      parsedInput: {
+        inboxId: "inbox-1",
+        zaloAccountForward: {
+          conversationId: "conv-source",
+          messageId: "source-4",
+          messageCreatedAt: new Date("2026-01-01T00:00:00Z"),
+        },
+      },
+      ctx: context,
+    }
+    mockAssertConversationAccess
+      .mockResolvedValueOnce(conversation)
+      .mockRejectedValueOnce(new Error("Source conversation not found"))
+
+    await expect(createMessageAction(request)).rejects.toThrow(
+      "Source conversation not found",
+    )
+    expect(mockCreateOutgoing).not.toHaveBeenCalled()
+    expect(
+      mockAssertConversationAccess.mock.calls.map((args) => args[1]),
+    ).toEqual(["conv-1", "conv-source"])
   })
 })

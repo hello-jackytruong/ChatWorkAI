@@ -1,10 +1,7 @@
 import {
-  type ZaloAccountAttachment,
   type ZaloAccountAuth,
   type ZaloAccountGroup,
   type ZaloAccountNativeOperation,
-  type ZaloAccountOutboundMessage,
-  ZaloAccountPreDispatchError,
   zaloAccountAuthSchema,
   zaloAccountFriendSyncSchema,
   zaloAccountLabelSnapshotSchema,
@@ -16,7 +13,8 @@ import {
   ThreadType,
   Zalo,
 } from "zca-js"
-import { downloadOutboundAttachment } from "./outbound-attachment"
+import { readGroupMembers } from "./group-members"
+import { assertOutboundUrl } from "./outbound-attachment"
 import type {
   ZcaApiPort,
   ZcaClientFactory,
@@ -28,25 +26,12 @@ import {
   normalizeProviderMessage,
 } from "./provider-message"
 import { normalizeProviderThreadEvent } from "./provider-thread-event"
+import { sendOutbound } from "./send-outbound"
+import { createStickerCatalogReader } from "./sticker-catalog"
 import { createStickerResourceReader } from "./sticker-resource"
 
 const normalizeQrImage = (image: string) =>
   image.startsWith("data:image/") ? image : `data:image/png;base64,${image}`
-
-const prepareOutboundAttachment = async (attachment: ZaloAccountAttachment) => {
-  try {
-    return await downloadOutboundAttachment(attachment)
-  } catch {
-    throw new ZaloAccountPreDispatchError(
-      "Zalo Account attachment preparation failed before sending",
-      {
-        code: "preparation_failed",
-        phase: "preparation",
-        safeAction: "new_attempt",
-      },
-    )
-  }
-}
 
 const normalizeTimestampMs = (value: number): number => {
   if (value <= 0) {
@@ -54,20 +39,6 @@ const normalizeTimestampMs = (value: number): number => {
   }
   return value < 1_000_000_000_000 ? value * 1000 : value
 }
-
-const quoteOf = (quote: ZaloAccountOutboundMessage["quote"]) =>
-  quote
-    ? {
-        content: quote.text ?? "",
-        msgType: quote.msgType,
-        propertyExt: undefined,
-        uidFrom: quote.senderId,
-        msgId: quote.providerMessageId,
-        cliMsgId: quote.clientMessageId ?? quote.providerMessageId,
-        ts: String(quote.timestampMs),
-        ttl: 0,
-      }
-    : undefined
 
 type NativeSdkPort = Pick<
   Awaited<ReturnType<Zalo["login"]>>,
@@ -141,11 +112,14 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
   }
   // Keep the close observer until the SDK confirms the network close.
   api.listener.on("closed", onClosed)
+  const getStickerResources = createStickerResourceReader((ids) =>
+    api.getStickersDetail(ids),
+  )
   return {
     nativeOperation: (input) => invokeNativeOperation(api, input),
-    getStickerResources: createStickerResourceReader((ids) =>
-      api.getStickersDetail(ids),
-    ),
+    getStickerResources,
+    getStickerCatalog: createStickerCatalogReader(api, getStickerResources),
+    getGroupMembers: (groupId, query) => readGroupMembers(api, groupId, query),
     sendTyping: async (threadId, threadType) => {
       await api.sendTypingEvent(
         threadId,
@@ -341,29 +315,14 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
         stop: () => api.listener.stop(),
       }
     },
-    sendDirect: async (message, beforeDispatch) => {
-      const attachments: Awaited<
-        ReturnType<typeof downloadOutboundAttachment>
-      >[] = []
-      for (const attachment of message.attachments) {
-        attachments.push(await prepareOutboundAttachment(attachment))
-      }
-      await beforeDispatch?.()
-      const result = await api.sendMessage(
-        {
-          msg: message.text ?? "",
-          ...(attachments.length ? { attachments } : {}),
-          ...(message.quote ? { quote: quoteOf(message.quote) } : {}),
-        },
+    sendDirect: (message, beforeDispatch) =>
+      sendOutbound(
+        api,
+        message,
         message.recipientId,
         ThreadType.User,
-      )
-      const messageIds = [
-        ...(result.message ? [String(result.message.msgId)] : []),
-        ...result.attachment.map((item) => String(item.msgId)),
-      ]
-      return { messageIds, sentCount: messageIds.length }
-    },
+        beforeDispatch,
+      ),
     listGroups: async () => {
       const allGroups = await api.getAllGroups()
       const allIds = Object.keys(allGroups.gridVerMap)
@@ -420,28 +379,8 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
         ...(page.length >= 500 ? { nextCursor: cursor + 1 } : {}),
       })
     },
-    sendGroup: async (groupId, message) => {
-      const attachments: Awaited<
-        ReturnType<typeof downloadOutboundAttachment>
-      >[] = []
-      for (const attachment of message.attachments) {
-        attachments.push(await prepareOutboundAttachment(attachment))
-      }
-      const result = await api.sendMessage(
-        {
-          msg: message.text ?? "",
-          ...(attachments.length ? { attachments } : {}),
-          ...(message.quote ? { quote: quoteOf(message.quote) } : {}),
-        },
-        groupId,
-        ThreadType.Group,
-      )
-      const messageIds = [
-        ...(result.message ? [String(result.message.msgId)] : []),
-        ...result.attachment.map((item) => String(item.msgId)),
-      ]
-      return { messageIds, sentCount: messageIds.length }
-    },
+    sendGroup: (groupId, message, beforeDispatch) =>
+      sendOutbound(api, message, groupId, ThreadType.Group, beforeDispatch),
     getLabels: async () =>
       zaloAccountLabelSnapshotSchema.parse({
         ...(await api.getLabels()),
@@ -507,8 +446,23 @@ export class ZcaClient implements ZcaClientPort {
       logging: false,
       selfListen: true,
       checkUpdate: false,
-      polyfill: (input, init) => {
+      polyfill: async (input, init) => {
         if (!this.loginPending) {
+          // zca-js probes the uploaded clip URL before sending voice or video.
+          if (init?.method === "HEAD") {
+            await assertOutboundUrl(
+              input instanceof Request ? input.url : String(input),
+            )
+            const response = await fetcher(input, {
+              ...init,
+              redirect: "error",
+              signal: AbortSignal.timeout(10_000),
+            })
+            if (!response.ok || response.headers.has("location")) {
+              throw new Error("Zalo Account clip storage probe failed")
+            }
+            return response
+          }
           return fetcher(input, init)
         }
         const signals = [this.controller.signal]

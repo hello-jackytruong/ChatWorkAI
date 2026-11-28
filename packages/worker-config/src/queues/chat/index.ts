@@ -31,6 +31,7 @@ import type {
 import type {
   CommentAnchor,
   MessageButtonTemplate,
+  ZaloAccountDispatchContent,
   ZaloAccountGroupAudience,
 } from "@chatbotx.io/sdk"
 import type { SendFrom } from "@chatbotx.io/utils/send-from"
@@ -65,6 +66,7 @@ export type ChatJobSendChannelMessage = {
   type: typeof ChatJobAction.sendChannelMessage
   data: {
     groupAudience?: ZaloAccountGroupAudience
+    zaloAccountContent?: ZaloAccountDispatchContent
     conversation: ConversationModel
     contactInbox: ContactInboxModel
     message: MessageModel & {

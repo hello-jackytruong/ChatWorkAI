@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "設定",
     "connectionStatus": "連線狀態",
     "active": "運作中",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "沒有可用於刪除Zalo歷史記錄的訊息邊界。",
     "deletedOnMyZalo": "已從我的 Zalo 刪除",
     "deleteChatBoundary": "歷史記錄刪除邊界",
+    "quote": {
+      "title": "原始訊息",
+      "unavailable": "原始訊息無法使用。"
+    },
+    "mention": {
+      "partial": "成員建議可能不完整。"
+    },
+    "sticker": "貼圖",
+    "forward": {
+      "title": "轉傳訊息",
+      "sendCopy": "傳送副本",
+      "description": "在同一個 Zalo 帳號中選擇對話。"
+    },
+    "composer": {
+      "moreMessageTypes": "更多訊息類型",
+      "recordVoice": "錄製語音訊息",
+      "voiceUnavailable": "無法錄音。請選擇 M4A 檔案。",
+      "videoPoster": "影片封面",
+      "bankBin": "銀行代碼（BIN）",
+      "accountNumber": "銀行帳號",
+      "underline": "底線",
+      "urgent": "緊急"
+    },
+    "richMessage": {
+      "openMap": "開啟地圖",
+      "bankDetails": "銀行帳戶資訊",
+      "missedCall": "未接來電",
+      "unansweredCall": "通話未接聽",
+      "incomingCall": "來電",
+      "outgoingCall": "去電",
+      "videoCall": "視訊通話",
+      "voiceCall": "語音通話",
+      "processingMedia": "正在處理媒體…",
+      "mediaUnavailable": "媒體無法使用"
+    },
     "evidence": {
+      "sentPartially": "已傳送部分內容",
+      "acceptedWithoutId": "Zalo 已接受訊息。正在等待訊息 ID。",
       "unsupportedContent": "不支援的 Zalo 訊息",
       "invalidContent": "無法讀取 Zalo 訊息",
       "unsupportedSchema": "不支援此 Zalo 訊息格式",

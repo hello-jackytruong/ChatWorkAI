@@ -1,6 +1,7 @@
 import type {
   ZaloAccountErrorInfo,
   ZaloAccountPreparedSend,
+  ZaloAccountSendDelivery,
 } from "@chatbotx.io/sdk"
 import { sql } from "drizzle-orm"
 import {
@@ -38,6 +39,9 @@ export type ZaloAccountReconciliation = {
   nextAttemptAt: string
   lastErrorCode: "reconciliation_conflict" | "internal_error" | null
   sendError?: ZaloAccountErrorInfo
+  delivery?: ZaloAccountSendDelivery
+  sentCount?: number
+  remainingUnknown?: boolean
 }
 
 export const zaloAccountThreadType = pgEnum(

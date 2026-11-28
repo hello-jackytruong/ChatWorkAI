@@ -2,7 +2,11 @@ import { qrImageDataUrlSchema } from "@chatbotx.io/utils/connection"
 import { z } from "zod"
 import {
   zaloAccountMediaResourcesSchema,
+  zaloAccountStickerCatalogEntrySchema,
+  zaloAccountStickerCatalogQuerySchema,
+  zaloAccountStickerMessageIdentitySchema,
   zaloAccountStickerResourceSchema,
+  zaloAccountStickerSendIdentitySchema,
 } from "./zalo-account-media"
 
 const providerTimestampMsSchema = z
@@ -46,6 +50,12 @@ export type ZaloAccountPreparedSend = {
   clientId: string
   text?: string
   attachment?: ZaloAccountAttachment
+  content?: ZaloAccountSendContent
+  forward?: {
+    conversationId: string
+    messageId: string
+    messageCreatedAt: string
+  }
   replyToMessageId?: string
   replyToMessageCreatedAt?: string
 }
@@ -491,17 +501,388 @@ export const zaloAccountAttachmentSchema = z
   .strict()
 export type ZaloAccountAttachment = z.infer<typeof zaloAccountAttachmentSchema>
 
+const richSendText = z.string().min(1).max(20_000)
+const nativeMediaUrl = z.url({ protocol: /^https$/ })
+const nativeContentId = z.string().trim().min(1).max(200)
+const explicitMentionUid = /^(?!(?:0|-\d+|all|everyone|self)$)[a-z0-9_-]+$/i
+export const zaloAccountSendMentionSchema = z.strictObject({
+  uid: z.string().min(1).max(200).regex(explicitMentionUid),
+  offset: z.number().int().nonnegative().max(20_000),
+  length: z.number().int().min(2).max(256),
+})
+export type ZaloAccountSendMention = z.infer<
+  typeof zaloAccountSendMentionSchema
+>
+
+const graphemeSegmenter = new Intl.Segmenter(undefined, {
+  granularity: "grapheme",
+})
+const validMentionSpans = (
+  text: string,
+  mentions?: ZaloAccountSendMention[],
+) => {
+  if (!mentions?.length) {
+    return true
+  }
+  const segments = graphemeSegmenter.segment(text)
+  let previousEnd = 0
+  return [...mentions]
+    .sort((first, next) => first.offset - next.offset)
+    .every(({ offset, length }) => {
+      const end = offset + length
+      const valid =
+        offset >= previousEnd &&
+        end <= text.length &&
+        text[offset] === "@" &&
+        text.slice(offset + 1, end).trim().length > 0 &&
+        segments.containing(offset)?.index === offset &&
+        (end === text.length || segments.containing(end)?.index === end)
+      previousEnd = end
+      return valid
+    })
+}
+const richTextOptions = {
+  styles: z
+    .array(
+      z.strictObject({
+        start: z.number().int().nonnegative(),
+        len: z.number().int().positive(),
+        st: z.enum([
+          "b",
+          "i",
+          "u",
+          "s",
+          "c_db342e",
+          "c_f27806",
+          "c_f7b503",
+          "c_15a85f",
+          "f_13",
+          "f_18",
+          "lst_1",
+          "lst_2",
+        ]),
+      }),
+    )
+    .max(100)
+    .optional(),
+  urgency: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+  mentions: z.array(zaloAccountSendMentionSchema).max(20).optional(),
+}
+
+export const zaloAccountSendContentSchema = z
+  .discriminatedUnion("kind", [
+    z.strictObject({
+      kind: z.literal("text"),
+      text: richSendText,
+      ...richTextOptions,
+    }),
+    z.strictObject({
+      kind: z.literal("media"),
+      attachments: z.array(zaloAccountAttachmentSchema).min(1).max(9),
+      caption: richSendText.optional(),
+      ...richTextOptions,
+    }),
+    z.strictObject({
+      kind: z.literal("video"),
+      url: nativeMediaUrl,
+      thumbnailUrl: nativeMediaUrl,
+      caption: richSendText.optional(),
+      width: z.number().int().positive().max(8192).optional(),
+      height: z.number().int().positive().max(8192).optional(),
+      durationMs: z
+        .number()
+        .int()
+        .positive()
+        .max(24 * 60 * 60_000)
+        .optional(),
+    }),
+    z.strictObject({ kind: z.literal("voice"), url: nativeMediaUrl }),
+    zaloAccountStickerSendIdentitySchema.extend({ kind: z.literal("sticker") }),
+    z.strictObject({
+      kind: z.literal("link"),
+      url: nativeMediaUrl,
+      text: richSendText.optional(),
+    }),
+    z.strictObject({
+      kind: z.literal("contactCard"),
+      userId: nativeContentId,
+      phoneNumber: z.string().max(24).optional(),
+    }),
+    z.strictObject({
+      kind: z.literal("bankCard"),
+      bankBin: z.string().regex(/^\d{6}$/),
+      accountNumber: z.string().regex(/^\d{1,30}$/),
+      accountName: z.string().trim().min(1).max(100).optional(),
+    }),
+  ])
+  .refine(
+    (content) => {
+      if (content.kind !== "text" && content.kind !== "media") {
+        return true
+      }
+      const text =
+        content.kind === "text" ? content.text : (content.caption ?? "")
+      return (content.styles ?? []).every(
+        ({ start, len }) => start + len <= text.length,
+      )
+    },
+    { message: "Styles must refer to text within the Zalo message" },
+  )
+  .refine(
+    (content) =>
+      (content.kind !== "text" && content.kind !== "media") ||
+      validMentionSpans(
+        content.kind === "text" ? content.text : (content.caption ?? ""),
+        content.mentions,
+      ),
+    {
+      message:
+        "Mentions must refer to distinct, complete @names in the Zalo message",
+    },
+  )
+export type ZaloAccountSendContent = z.infer<
+  typeof zaloAccountSendContentSchema
+>
+
+const zaloAccountForwardContentSchema = z.strictObject({
+  kind: z.literal("forward"),
+  text: richSendText,
+  reference: z.strictObject({
+    id: nativeContentId,
+    ts: z.number().int().positive(),
+    logSrcType: z.number().int().nonnegative(),
+    fwLvl: z.number().int().nonnegative(),
+  }),
+})
+export type ZaloAccountDispatchContent =
+  | ZaloAccountSendContent
+  | z.infer<typeof zaloAccountForwardContentSchema>
+
+export const zaloAccountSendDeliverySchema = z.enum([
+  "partial",
+  "accepted_without_id",
+])
+export type ZaloAccountSendDelivery = z.infer<
+  typeof zaloAccountSendDeliverySchema
+>
+
+export const zaloAccountSendResultSchema = z
+  .strictObject({
+    messageIds: z.array(z.string().min(1).max(200)).max(10),
+    sentCount: z.number().int().min(1).max(10),
+    delivery: zaloAccountSendDeliverySchema.optional(),
+    remainingUnknown: z.boolean().optional(),
+  })
+  .refine(
+    ({ messageIds, sentCount, delivery, remainingUnknown }) => {
+      if (delivery === "partial") {
+        return messageIds.length > 0 && sentCount >= new Set(messageIds).size
+      }
+      if (remainingUnknown !== undefined) {
+        return false
+      }
+      return delivery === "accepted_without_id"
+        ? messageIds.length === 0 && sentCount === 1
+        : messageIds.length > 0
+    },
+    { message: "Zalo Account send acknowledgement is inconsistent" },
+  )
+export type ZaloAccountSendResult = z.infer<typeof zaloAccountSendResultSchema>
+
+export const zaloAccountQuoteContentKindSchema = z.enum([
+  "text",
+  "image",
+  "file",
+  "video",
+  "audio",
+  "gif",
+  "sticker",
+  "contact",
+])
+
 export const zaloAccountQuoteSchema = z
   .object({
     providerMessageId: z.string().min(1),
     clientMessageId: z.string().min(1).optional(),
     senderId: z.string().min(1),
+    senderName: z.string().min(1).max(255).optional(),
     text: z.string().max(20_000).optional(),
+    contentKind: zaloAccountQuoteContentKindSchema.optional(),
+    fileName: z.string().min(1).max(255).optional(),
     msgType: z.string().min(1).max(100),
     timestampMs: providerTimestampMsSchema,
   })
   .strict()
 export type ZaloAccountQuote = z.infer<typeof zaloAccountQuoteSchema>
+
+export const zaloAccountAlbumSchema = z
+  .strictObject({
+    layoutId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/),
+    index: z.number().int().nonnegative(),
+    itemCount: z.number().int().min(2).max(100),
+  })
+  .refine(({ index, itemCount }) => index < itemCount, {
+    message: "Zalo album item position must be within the provider layout",
+  })
+export type ZaloAccountAlbum = z.infer<typeof zaloAccountAlbumSchema>
+
+export const zaloAccountGroupMembersQuerySchema = z.strictObject({
+  query: z
+    .string()
+    .trim()
+    .max(100)
+    .transform((value) => value || undefined)
+    .optional(),
+  limit: z.number().int().min(1).max(50).default(20),
+})
+export type ZaloAccountGroupMembersQuery = z.infer<
+  typeof zaloAccountGroupMembersQuerySchema
+>
+
+export const zaloAccountGroupMembersResultSchema = z.strictObject({
+  members: z
+    .array(
+      z.strictObject({
+        uid: z.string().min(1).max(200),
+        name: z.string().min(1).max(255).optional(),
+      }),
+    )
+    .max(50),
+  complete: z.boolean(),
+})
+export type ZaloAccountGroupMembersResult = z.infer<
+  typeof zaloAccountGroupMembersResultSchema
+>
+
+export const zaloAccountRichStyleSchema = z
+  .string()
+  .regex(/^(?:[bius]|c_[a-f0-9]{6}|f_(?:1[0-9]|2[0-4])|lst_[12])$/i)
+
+const webUrlProtocol = /^https?:\/\//i
+export function toZaloAccountWebUrl(
+  value: string | null | undefined,
+  secureOnly = false,
+): URL | undefined {
+  if (!(value && webUrlProtocol.test(value))) {
+    return
+  }
+  try {
+    const url = new URL(value)
+    if (
+      (url.protocol === "https:" ||
+        (!secureOnly && url.protocol === "http:")) &&
+      !url.username &&
+      !url.password
+    ) {
+      return url
+    }
+  } catch {
+    return
+  }
+}
+
+const richNavigationUrlSchema = z
+  .string()
+  .max(8192)
+  .refine((value) => Boolean(toZaloAccountWebUrl(value)), {
+    message:
+      "Zalo Account navigation requires an HTTP(S) URL without credentials",
+  })
+const richShortText = z.string().min(1).max(512)
+const richDescription = z.string().min(1).max(2048)
+
+export const zaloAccountRichContentSchema = z.discriminatedUnion("kind", [
+  zaloAccountStickerMessageIdentitySchema.extend({
+    kind: z.literal("sticker"),
+  }),
+  z
+    .object({
+      kind: z.literal("link"),
+      url: richNavigationUrlSchema,
+      title: richShortText.optional(),
+      description: richDescription.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("contact"),
+      name: richShortText.optional(),
+      userId: richShortText.optional(),
+      phone: z.string().min(1).max(64).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("location"),
+      latitude: z.number().min(-90).max(90).optional(),
+      longitude: z.number().min(-180).max(180).optional(),
+      url: richNavigationUrlSchema.optional(),
+      title: richShortText.optional(),
+      address: richDescription.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("bank"),
+      bankName: richShortText.optional(),
+      accountNumber: z.string().min(1).max(64).optional(),
+      accountName: richShortText.optional(),
+      amount: z.number().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+      description: richDescription.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("qr"),
+      title: richShortText.optional(),
+      description: richDescription.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("call"),
+      direction: z.enum(["incoming", "outgoing"]),
+      status: z.enum(["answered", "missed"]).optional(),
+      medium: z.enum(["audio", "video"]).optional(),
+      durationMs: z
+        .number()
+        .nonnegative()
+        .max(Number.MAX_SAFE_INTEGER)
+        .optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("styledText"),
+      spans: z
+        .array(
+          z
+            .object({
+              offset: z.number().int().nonnegative().max(20_000),
+              length: z.number().int().positive().max(20_000),
+              style: zaloAccountRichStyleSchema,
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(100),
+    })
+    .strict(),
+])
+export type ZaloAccountRichContent = z.infer<
+  typeof zaloAccountRichContentSchema
+>
+
+const inboundRichContentFields = {
+  richContent: zaloAccountRichContentSchema.optional(),
+  album: zaloAccountAlbumSchema.optional(),
+  providerTtl: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional(),
+}
 
 export const zaloAccountDirectMessageSchema = z
   .object({
@@ -521,6 +902,7 @@ export const zaloAccountDirectMessageSchema = z
     attachments: z.array(zaloAccountAttachmentSchema).max(10).default([]),
     mediaResources: zaloAccountMediaResourcesSchema.optional(),
     quote: zaloAccountQuoteSchema.optional(),
+    ...inboundRichContentFields,
   })
   .strict()
   .refine(
@@ -530,12 +912,14 @@ export const zaloAccountDirectMessageSchema = z
             message.text ||
             message.attachments.length ||
             message.mediaResources?.length ||
-            message.quote
+            message.quote ||
+            message.richContent
           )
         : Boolean(
             message.text?.trim() ||
               message.attachments.length ||
-              message.mediaResources?.length,
+              message.mediaResources?.length ||
+              message.richContent,
           ),
     { message: "Zalo Account message has no supported content" },
   )
@@ -543,7 +927,7 @@ export type ZaloAccountDirectMessage = z.infer<
   typeof zaloAccountDirectMessageSchema
 >
 
-export const zaloAccountGroupMessageSchema = z
+const zaloAccountGroupMessageObject = z
   .object({
     schemaVersion: z.literal(1).optional(),
     unsupported: zaloAccountUnsupportedSchema.optional(),
@@ -560,6 +944,7 @@ export const zaloAccountGroupMessageSchema = z
     attachments: z.array(zaloAccountAttachmentSchema).max(10).default([]),
     mediaResources: zaloAccountMediaResourcesSchema.optional(),
     quote: zaloAccountQuoteSchema.optional(),
+    ...inboundRichContentFields,
     mentions: z
       .array(
         z
@@ -575,7 +960,15 @@ export const zaloAccountGroupMessageSchema = z
       .default([]),
   })
   .strict()
-  .superRefine((message, context) => {
+
+// A conversation client reads the message context independently of archived media.
+export const zaloAccountGroupMessageContextSchema =
+  zaloAccountGroupMessageObject
+    .omit({ attachments: true, mediaResources: true })
+    .strip()
+
+export const zaloAccountGroupMessageSchema =
+  zaloAccountGroupMessageObject.superRefine((message, context) => {
     if (
       message.unsupported
         ? Boolean(
@@ -583,12 +976,14 @@ export const zaloAccountGroupMessageSchema = z
               message.attachments.length ||
               message.mediaResources?.length ||
               message.quote ||
+              message.richContent ||
               message.mentions.length,
           )
         : !(
             message.text?.trim() ||
             message.attachments.length ||
-            message.mediaResources?.length
+            message.mediaResources?.length ||
+            message.richContent
           )
     ) {
       context.addIssue({
@@ -777,11 +1172,25 @@ export const zaloAccountOutboundMessageSchema = z
     text: z.string().trim().min(1).max(20_000).optional(),
     attachments: z.array(zaloAccountAttachmentSchema).max(1).default([]),
     quote: zaloAccountQuoteSchema.optional(),
+    content: z
+      .union([zaloAccountSendContentSchema, zaloAccountForwardContentSchema])
+      .optional(),
   })
   .strict()
-  .refine((message) => Boolean(message.text || message.attachments.length), {
-    message: "Zalo Account outbound message has no content",
-  })
+  .refine(
+    (message) =>
+      Boolean(message.content || message.text || message.attachments.length),
+    {
+      message: "Zalo Account outbound message has no content",
+    },
+  )
+  .refine(
+    (message) =>
+      !(message.content && (message.text || message.attachments.length)),
+    {
+      message: "Select either rich content or legacy text and attachment",
+    },
+  )
   .refine(
     (message) =>
       !(
@@ -844,6 +1253,33 @@ export const zaloAccountCommandEnvelopeSchema = z.discriminatedUnion("kind", [
       stickerIds: z.array(z.string().min(1).max(200)).min(1).max(20),
     })
     .strict(),
+  z.strictObject({
+    ...commandBaseShape,
+    kind: z.literal("get_sticker_catalog"),
+    route: z.strictObject({
+      kind: z.literal("account"),
+      workspaceId: z.string().min(1),
+      accountId: z.string().min(1),
+      inboxId: z.string().min(1),
+    }),
+    target: commandTargetSchema,
+    stickerCatalogQuery: zaloAccountStickerCatalogQuerySchema,
+  }),
+  z.strictObject({
+    ...commandBaseShape,
+    kind: z.literal("get_group_members"),
+    route: z.strictObject({
+      kind: z.literal("account"),
+      workspaceId: z.string().min(1),
+      accountId: z.string().min(1),
+      inboxId: z.string().min(1),
+    }),
+    target: commandTargetSchema,
+    groupId: z.string().min(1).max(200),
+    accountPolicyEpoch: z.number().int().nonnegative(),
+    groupPolicyEpoch: z.number().int().nonnegative(),
+    groupMemberQuery: zaloAccountGroupMembersQuerySchema,
+  }),
   z
     .object({
       ...commandBaseShape,
@@ -1027,12 +1463,19 @@ export const zaloAccountCommandResultSchema = z.discriminatedUnion("status", [
           status: z.string().min(1),
           messageIds: z.array(z.string().min(1)).optional(),
           sentCount: z.number().int().nonnegative().optional(),
+          delivery: zaloAccountSendDeliverySchema.optional(),
+          remainingUnknown: z.boolean().optional(),
           groups: z.array(zaloAccountGroupSchema).max(1000).optional(),
           groupSync: zaloAccountGroupSyncSchema.optional(),
           friendSync: zaloAccountFriendSyncSchema.optional(),
+          groupMembers: zaloAccountGroupMembersResultSchema.optional(),
           labels: zaloAccountLabelSnapshotSchema.optional(),
           stickerResources: z
             .array(zaloAccountStickerResourceSchema)
+            .max(20)
+            .optional(),
+          stickerCatalog: z
+            .array(zaloAccountStickerCatalogEntrySchema)
             .max(20)
             .optional(),
         })

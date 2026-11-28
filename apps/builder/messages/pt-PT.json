@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Configurar",
     "connectionStatus": "Estado da ligação",
     "active": "Ativo",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Não existe uma mensagem limite para eliminar o histórico do Zalo.",
     "deletedOnMyZalo": "Eliminado no meu Zalo",
     "deleteChatBoundary": "Limite de eliminação do histórico",
+    "quote": {
+      "title": "Mensagem original",
+      "unavailable": "A mensagem original não está disponível."
+    },
+    "mention": {
+      "partial": "As sugestões de membros podem estar incompletas."
+    },
+    "sticker": "Sticker",
+    "forward": {
+      "title": "Reencaminhar mensagem",
+      "sendCopy": "Enviar uma cópia",
+      "description": "Escolha uma conversa na mesma conta do Zalo."
+    },
+    "composer": {
+      "moreMessageTypes": "Mais tipos de mensagem",
+      "recordVoice": "Gravar mensagem de voz",
+      "voiceUnavailable": "A gravação está indisponível. Escolha um ficheiro M4A.",
+      "videoPoster": "Capa do vídeo",
+      "bankBin": "Código do banco (BIN)",
+      "accountNumber": "Número da conta",
+      "underline": "Sublinhado",
+      "urgent": "Urgente"
+    },
+    "richMessage": {
+      "openMap": "Abrir mapa",
+      "bankDetails": "Dados da conta bancária",
+      "missedCall": "Chamada perdida",
+      "unansweredCall": "Chamada não atendida",
+      "incomingCall": "Chamada recebida",
+      "outgoingCall": "Chamada efetuada",
+      "videoCall": "Videochamada",
+      "voiceCall": "Chamada de voz",
+      "processingMedia": "A processar multimédia…",
+      "mediaUnavailable": "Multimédia indisponível"
+    },
     "evidence": {
+      "sentPartially": "Enviado parcialmente",
+      "acceptedWithoutId": "A Zalo aceitou a mensagem. ID da mensagem pendente.",
       "unsupportedContent": "Mensagem do Zalo não suportada",
       "invalidContent": "Não foi possível ler a mensagem do Zalo",
       "unsupportedSchema": "Formato de mensagem do Zalo não suportado",

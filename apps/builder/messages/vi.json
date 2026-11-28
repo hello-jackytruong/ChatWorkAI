@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Về kết quả",
+      "title": "Thư viện hội thoại",
+      "description": "Xem ảnh, video, tệp, liên kết và tin nhắn trong hội thoại Zalo này.",
+      "media": "Ảnh và video",
+      "file": "Tệp",
+      "link": "Liên kết",
+      "text": "Tin nhắn",
+      "search": "Tìm tin nhắn hoặc tên tệp",
+      "loading": "Đang tải lịch sử…",
+      "error": "Không tải được lịch sử.",
+      "empty": "Trang này chưa có kết quả.",
+      "unavailable": "Tệp không khả dụng",
+      "openMessage": "Mở tin nhắn",
+      "older": "Tải tin cũ hơn",
+      "retry": "Thử lại"
+    },
     "configure": "Cấu hình",
     "connectionStatus": "Trạng thái kết nối",
     "active": "Đang hoạt động",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Chưa có mốc tin nhắn để xóa lịch sử Zalo.",
     "deletedOnMyZalo": "Đã xóa phía mình trên Zalo",
     "deleteChatBoundary": "Mốc xóa lịch sử",
+    "quote": {
+      "title": "Tin nhắn gốc",
+      "unavailable": "Không thể xem tin nhắn gốc."
+    },
+    "mention": {
+      "partial": "Danh sách thành viên gợi ý có thể chưa đầy đủ."
+    },
+    "sticker": "Nhãn dán",
+    "forward": {
+      "title": "Chuyển tiếp tin nhắn",
+      "sendCopy": "Gửi bản sao",
+      "description": "Chọn cuộc trò chuyện trong cùng tài khoản Zalo."
+    },
+    "composer": {
+      "moreMessageTypes": "Thêm loại tin nhắn",
+      "recordVoice": "Ghi âm tin nhắn thoại",
+      "voiceUnavailable": "Không thể ghi âm. Hãy chọn tệp M4A.",
+      "videoPoster": "Ảnh bìa video",
+      "bankBin": "Mã ngân hàng (BIN)",
+      "accountNumber": "Số tài khoản",
+      "underline": "Gạch chân",
+      "urgent": "Khẩn cấp"
+    },
+    "richMessage": {
+      "openMap": "Mở bản đồ",
+      "bankDetails": "Thông tin tài khoản ngân hàng",
+      "missedCall": "Cuộc gọi nhỡ",
+      "unansweredCall": "Cuộc gọi không được trả lời",
+      "incomingCall": "Cuộc gọi đến",
+      "outgoingCall": "Cuộc gọi đi",
+      "videoCall": "Cuộc gọi video",
+      "voiceCall": "Cuộc gọi thoại",
+      "processingMedia": "Đang xử lý tệp đa phương tiện…",
+      "mediaUnavailable": "Tệp đa phương tiện không khả dụng"
+    },
     "evidence": {
+      "sentPartially": "Đã gửi một phần",
+      "acceptedWithoutId": "Zalo đã chấp nhận tin nhắn. Đang chờ mã tin nhắn.",
       "unsupportedContent": "Tin nhắn Zalo chưa được hỗ trợ",
       "invalidContent": "Không thể đọc tin nhắn Zalo",
       "unsupportedSchema": "Định dạng tin nhắn Zalo chưa được hỗ trợ",

@@ -840,6 +840,30 @@ describe("Zalo image attachment presentation", () => {
       "https://signed.test/ready.jpg",
     )
   })
+  test("draws an authorized pending image before the archive is ready", () => {
+    const url =
+      "https://builder.example.com/media/attachment/zalo-preview-token"
+    const attachment = { ...makeImageAttachment("pending-photo"), url }
+    const message = zalo(attachment)
+    message.contentAttributes = {
+      zaloAccount: {
+        mediaResources: [
+          {
+            attachmentId: attachment.id,
+            role: "original",
+            kind: "image",
+            state: "pending",
+          },
+        ],
+      },
+    }
+    const element = renderComponent(
+      <MessageItem message={message} zaloAccount />,
+    )
+    expect(element.querySelector("img")?.getAttribute("src")).toBe(url)
+    expect(element.textContent).not.toContain("processingImage")
+  })
+
   test("keeps failed image transfers distinct from processing", () => {
     const attachment = {
       ...makeImageAttachment("failed-photo"),
@@ -923,4 +947,480 @@ test("does not treat an unprojected provider HTTPS thumbnail as authorized", () 
     />,
   )
   expect(el.querySelector("img, a")).toBeNull()
+})
+
+const zaloRichMessage = (
+  richContent: unknown,
+  overrides: Partial<MessageResourceWithRelations> = {},
+) =>
+  makeMessage({
+    sourceId: "za:1:user:2:3",
+    text: "[fallback]",
+    contentAttributes: { zaloAccount: { richContent } },
+    ...overrides,
+  })
+
+describe("Zalo Account rich messages", () => {
+  test("renders an outgoing bank card accepted without a provider ID only in its Zalo Account inbox", () => {
+    const message = zaloRichMessage(undefined, {
+      sourceId: null,
+      messageType: "outgoing",
+      contentAttributes: {
+        zaloAccount: {
+          accountId: "51",
+          richSendKind: "bankCard",
+          richContent: {
+            kind: "bank",
+            bankName: "Example bank",
+            accountNumber: "0013",
+          },
+        },
+      },
+    })
+    const el = renderComponent(
+      <>
+        <MessageItem message={message} zaloAccount />
+        <MessageItem message={message} />
+        <MessageItem
+          message={{ ...message, messageType: "incoming" }}
+          zaloAccount
+        />
+      </>,
+    )
+    expect(el.textContent?.split("Example bank")).toHaveLength(2)
+    expect(el.textContent?.split("[fallback]")).toHaveLength(3)
+    expect(el.querySelector("a, button")).toBeNull()
+  })
+
+  test("uses a safe typed file quote while keeping the reply and a keyboard-operable jump", () => {
+    const openQuote = vi.fn()
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage(undefined, {
+          text: "A reply",
+          contentAttributes: {
+            zaloAccountQuote: {
+              providerMessageId: "10",
+              msgType: "chat.file",
+              contentKind: "file",
+              fileName: "receipt.pdf",
+              senderName: "Quỳnh",
+              senderId: "sender-1",
+              timestampMs: Date.now(),
+            },
+          },
+        })}
+        onOpenZaloQuote={openQuote}
+        zaloAccount
+      />,
+    )
+    const jump = el.querySelector("button")
+    expect(jump?.textContent).toContain("Quỳnh")
+    expect(jump?.textContent).toContain("receipt.pdf")
+    expect(el.textContent).toContain("A reply")
+    act(() => jump?.click())
+    expect(openQuote).toHaveBeenCalledOnce()
+  })
+
+  test("keeps a missing sticker in a fixed fallback frame and never renders its raw text summary", () => {
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage({ kind: "sticker", stickerId: "302" })}
+        zaloAccount
+      />,
+    )
+    expect(el.querySelector('[data-slot="zalo-sticker"]')).not.toBeNull()
+    expect(el.textContent).toContain("sticker")
+    expect(el.textContent).not.toContain("[fallback]")
+  })
+
+  test("opens a safe original link with an archived lazy thumbnail and escapes provider markup", () => {
+    const thumbnail = makeProxyAttachment("cover", "image", "image/png")
+    const richContent = {
+      kind: "link",
+      url: "https://example.com/article",
+      title: "<b>Article</b>",
+      description: "Article summary",
+    }
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage(richContent, {
+          attachments: [thumbnail],
+          contentAttributes: {
+            zaloAccount: {
+              richContent,
+              mediaResources: [
+                {
+                  attachmentId: thumbnail.id,
+                  role: "card_image",
+                  slot: "link_preview",
+                  state: "stored",
+                },
+              ],
+            },
+          },
+        })}
+        zaloAccount
+      />,
+    )
+
+    const link = el.querySelector('a[href="https://example.com/article"]')
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer")
+    expect(link?.textContent).toContain("<b>Article</b>")
+    expect(link?.querySelector("b")).toBeNull()
+    expect(link?.textContent).toContain("Article summary")
+    expect(link?.querySelector("img")?.getAttribute("src")).toBe(thumbnail.url)
+    expect(el.querySelectorAll("img")).toHaveLength(1)
+    expect(el.textContent).not.toContain("[fallback]")
+  })
+
+  test.each([
+    "javascript:alert(1)",
+    "https://user:secret@example.com/article",
+  ])("keeps the fallback for a rejected rich link (%s)", (url) => {
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage({ kind: "link", url })}
+        zaloAccount
+      />,
+    )
+
+    expect(el.querySelector("a, iframe")).toBeNull()
+    expect(el.textContent).toContain("[fallback]")
+  })
+
+  test("leaves rich attributes inert on another channel and in the guest widget", () => {
+    const message = zaloRichMessage({
+      kind: "link",
+      url: "https://example.com/article",
+    })
+    const el = renderComponent(
+      <>
+        <MessageItem message={message} />
+        <MessageItem
+          message={{ ...message, sourceId: "meta-message" }}
+          zaloAccount
+        />
+        <MessageItem guestDisplay message={message} zaloAccount />
+      </>,
+    )
+
+    expect(el.querySelector("a")).toBeNull()
+    expect(el.textContent?.split("[fallback]")).toHaveLength(4)
+  })
+
+  test("does not expose a recalled card or its saved image in the ordinary inbox", () => {
+    const message = zaloRichMessage(
+      { kind: "qr", title: "private QR" },
+      { attachments: [makeProxyAttachment("qr", "image", "image/png")] },
+    )
+    const el = renderComponent(
+      <MessageItem
+        message={{
+          ...message,
+          contentAttributes: {
+            zaloAccount: {
+              richContent: { kind: "qr", title: "private QR" },
+              lifecycle: { recalled: true },
+            },
+          },
+        }}
+        zaloAccount
+      />,
+    )
+
+    expect(el.textContent).toContain("recalled")
+    expect(el.textContent).not.toContain("private QR")
+    expect(el.querySelector("img, a")).toBeNull()
+  })
+
+  test("shows a location action and informational bank and call cards", () => {
+    const el = renderComponent(
+      <>
+        <MessageItem
+          message={zaloRichMessage({
+            kind: "location",
+            latitude: 10.5,
+            longitude: 106.25,
+            address: "12 Market Street",
+          })}
+          zaloAccount
+        />
+        <MessageItem
+          message={zaloRichMessage({
+            kind: "bank",
+            bankName: "Example Bank",
+            accountNumber: "00123",
+          })}
+          zaloAccount
+        />
+        <MessageItem
+          message={zaloRichMessage({
+            kind: "call",
+            direction: "incoming",
+            status: "missed",
+            medium: "video",
+            durationMs: 42_000,
+          })}
+          zaloAccount
+        />
+      </>,
+    )
+
+    expect(el.textContent).toContain("12 Market Street")
+    expect(el.querySelector("a")?.getAttribute("href")).toContain(
+      "10.5%2C106.25",
+    )
+    expect(el.querySelectorAll("a")).toHaveLength(1)
+    expect(el.querySelector("iframe, button")).toBeNull()
+    expect(el.textContent).toContain("Example Bank")
+    expect(el.textContent).toContain("00123")
+    expect(el.textContent).toContain("missedCall")
+    expect(el.textContent).toContain("videoCall")
+    expect(el.textContent).toContain("0:42")
+  })
+
+  test("renders nested styles around emoji without interpreting markup and rejects split-surrogate spans", () => {
+    const text = "A😀BC <b>plain</b>"
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage(
+          {
+            kind: "styledText",
+            spans: [
+              { offset: 1, length: 4, style: "b" },
+              { offset: 3, length: 1, style: "i" },
+              { offset: 2, length: 1, style: "u" },
+            ],
+          },
+          { text },
+        )}
+        zaloAccount
+      />,
+    )
+
+    expect(el.textContent).toContain(text)
+    expect(el.querySelector("strong")?.textContent).toContain("😀")
+    expect(el.querySelector("strong em")?.textContent).toBe("B")
+    expect(el.querySelector("u, b")).toBeNull()
+  })
+
+  test("uses only projected video and voice URLs with no preload, a trusted poster and duration", () => {
+    const video = {
+      ...makeProxyAttachment("video", "video", "video/mp4"),
+      thumbnailPath:
+        "https://builder.example.com/media/attachment/poster-token",
+    }
+    const audio = makeProxyAttachment("voice", "audio", "audio/mpeg")
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage(undefined, {
+          text: null,
+          attachments: [video, audio],
+          contentAttributes: {
+            zaloAccount: {
+              mediaResources: [
+                {
+                  attachmentId: video.id,
+                  role: "original",
+                  kind: "video",
+                  state: "stored",
+                  durationMs: 40_000,
+                },
+                {
+                  attachmentId: video.id,
+                  role: "poster",
+                  state: "stored",
+                },
+                {
+                  attachmentId: audio.id,
+                  role: "original",
+                  kind: "audio",
+                  state: "stored",
+                  durationMs: 20_000,
+                },
+              ],
+            },
+          },
+        })}
+        zaloAccount
+      />,
+    )
+
+    expect(
+      el
+        .querySelector("video[controls][preload=none] source")
+        ?.getAttribute("src"),
+    ).toBe(video.url)
+    expect(el.querySelector("video")?.getAttribute("poster")).toBe(
+      video.thumbnailPath,
+    )
+    expect(
+      el
+        .querySelector("audio[controls][preload=none] source")
+        ?.getAttribute("src"),
+    ).toBe(audio.url)
+    expect(el.querySelector(`a[href="${video.url}"][download]`)).not.toBeNull()
+    expect(el.querySelector(`a[href="${audio.url}"][download]`)).not.toBeNull()
+    expect(el.textContent).toContain("0:40")
+    expect(el.textContent).toContain("0:20")
+  })
+
+  test("shows pending and failed media without deriving a URL from the private path", () => {
+    const pending = {
+      ...makeProxyAttachment("pending", "video", "video/mp4"),
+      url: null,
+    }
+    const failed = {
+      ...makeProxyAttachment("failed", "audio", "audio/mpeg"),
+      url: null,
+    }
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage(undefined, {
+          text: null,
+          attachments: [pending, failed],
+          contentAttributes: {
+            zaloAccount: {
+              mediaResources: [
+                {
+                  attachmentId: pending.id,
+                  role: "original",
+                  kind: "video",
+                  state: "pending",
+                },
+                {
+                  attachmentId: failed.id,
+                  role: "original",
+                  kind: "audio",
+                  state: "failed",
+                },
+              ],
+            },
+          },
+        })}
+        zaloAccount
+      />,
+    )
+
+    expect(el.textContent).toContain("processingMedia")
+    expect(el.textContent).toContain("mediaUnavailable")
+    expect(el.querySelector("video, audio, a")).toBeNull()
+    expect(el.innerHTML).not.toContain("pending/pending")
+  })
+
+  test("updates a standalone GIF from processing to the original animation", () => {
+    const media = {
+      referenceId: "gif",
+      role: "original",
+      kind: "gif",
+      slot: "original",
+      state: "downloading",
+      mimeType: "image/gif",
+    }
+    const gifMessage = (resource: object) =>
+      zaloRichMessage(undefined, {
+        text: "A caption stays visible",
+        contentAttributes: { zaloAccount: { mediaResources: [resource] } },
+      })
+    const el = renderComponent(
+      <MessageItem message={gifMessage(media)} zaloAccount />,
+    )
+    expect(el.textContent).toContain("processingMedia")
+    expect(el.querySelector("img")).toBeNull()
+
+    const archivedUrl = "https://builder.example.com/media/attachment/gif-token"
+    act(() =>
+      root?.render(
+        <TenantProvider settings={tenantSettings}>
+          <MessageItem
+            message={gifMessage({
+              ...media,
+              state: "stored",
+              url: archivedUrl,
+            })}
+            zaloAccount
+          />
+        </TenantProvider>,
+      ),
+    )
+
+    expect(el.textContent).toContain("A caption stays visible")
+    expect(el.textContent).not.toContain("processingMedia")
+    expect(el.querySelector("img")?.getAttribute("src")).toBe(archivedUrl)
+  })
+
+  test("keeps contact and QR information usable when previews are missing or broken", () => {
+    const el = renderComponent(
+      <>
+        <MessageItem
+          message={zaloRichMessage({
+            kind: "contact",
+            phone: "0123456789",
+          })}
+          zaloAccount
+        />
+        <MessageItem
+          message={zaloRichMessage(undefined, {
+            contentAttributes: {
+              zaloAccount: {
+                richContent: { kind: "qr", title: "Collection QR" },
+                mediaResources: [
+                  {
+                    referenceId: "qr-reference",
+                    role: "card_image",
+                    slot: "qr_image",
+                    state: "stored",
+                    url: "https://builder.example.com/media/attachment/qr-token",
+                  },
+                ],
+              },
+            },
+          })}
+          zaloAccount
+        />
+      </>,
+    )
+
+    expect(el.textContent).toContain("0123456789")
+    expect(el.textContent).toContain("Collection QR")
+    expect(el.querySelector("a, button")).toBeNull()
+    const image = el.querySelector("img")
+    expect(image).not.toBeNull()
+    act(() => image?.dispatchEvent(new Event("error")))
+    expect(el.querySelector("img")).toBeNull()
+    expect(el.textContent).toContain("Collection QR")
+  })
+
+  test("renders list items and bounded color and size styles inside the message", () => {
+    const text = "First\nSecond"
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage(
+          {
+            kind: "styledText",
+            spans: [
+              { offset: 0, length: text.length, style: "lst_2" },
+              { offset: 0, length: 5, style: "c_0088FF" },
+              { offset: 0, length: 5, style: "f_18" },
+              { offset: 6, length: 6, style: "s" },
+            ],
+          },
+          { text },
+        )}
+        zaloAccount
+      />,
+    )
+
+    expect(
+      Array.from(el.querySelectorAll("ol li"), (item) => item.textContent),
+    ).toEqual(["First", "Second"])
+    expect(el.querySelector<HTMLElement>("li span")?.style.fontSize).toBe(
+      "18px",
+    )
+    expect(el.querySelector<HTMLElement>("li span")?.style.color).toBe(
+      "rgb(0, 136, 255)",
+    )
+    expect(el.querySelector("li s")?.textContent).toBe("Second")
+  })
 })

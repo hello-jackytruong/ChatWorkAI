@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Configurează",
     "connectionStatus": "Starea conexiunii",
     "active": "Activ",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Nu există un mesaj limită pentru ștergerea istoricului Zalo.",
     "deletedOnMyZalo": "Șters din Zalo al meu",
     "deleteChatBoundary": "Limita de ștergere a istoricului",
+    "quote": {
+      "title": "Mesaj original",
+      "unavailable": "Mesajul original nu este disponibil."
+    },
+    "mention": {
+      "partial": "Lista membrilor sugerați poate fi incompletă."
+    },
+    "sticker": "Autocolant",
+    "forward": {
+      "title": "Redirecționează mesajul",
+      "sendCopy": "Trimite o copie",
+      "description": "Alege o conversație din același cont Zalo."
+    },
+    "composer": {
+      "moreMessageTypes": "Mai multe tipuri de mesaje",
+      "recordVoice": "Înregistrează un mesaj vocal",
+      "voiceUnavailable": "Înregistrarea nu este disponibilă. Alege un fișier M4A.",
+      "videoPoster": "Imagine de copertă a videoclipului",
+      "bankBin": "Cod bancar (BIN)",
+      "accountNumber": "Număr de cont",
+      "underline": "Subliniere",
+      "urgent": "Urgent"
+    },
+    "richMessage": {
+      "openMap": "Deschide harta",
+      "bankDetails": "Datele contului bancar",
+      "missedCall": "Apel pierdut",
+      "unansweredCall": "Apel fără răspuns",
+      "incomingCall": "Apel primit",
+      "outgoingCall": "Apel efectuat",
+      "videoCall": "Apel video",
+      "voiceCall": "Apel vocal",
+      "processingMedia": "Se procesează fișierul media…",
+      "mediaUnavailable": "Fișierul media nu este disponibil"
+    },
     "evidence": {
+      "sentPartially": "Trimis parțial",
+      "acceptedWithoutId": "Zalo a acceptat mesajul. ID-ul mesajului este în așteptare.",
       "unsupportedContent": "Mesaj Zalo neacceptat",
       "invalidContent": "Mesajul Zalo nu a putut fi citit",
       "unsupportedSchema": "Format de mesaj Zalo neacceptat",

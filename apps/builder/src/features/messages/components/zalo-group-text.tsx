@@ -1,4 +1,5 @@
 import { splitZaloMentions } from "@/features/zalo-accounts/lib/group-content"
+import { ZaloMemberIdentity } from "./zalo-member-identity"
 
 export function ZaloGroupText({
   text,
@@ -9,13 +10,9 @@ export function ZaloGroupText({
 }) {
   return splitZaloMentions(text, mentions).map((part) =>
     part.uid ? (
-      <mark
-        className="rounded bg-primary/15 text-inherit"
-        key={`${part.offset}-${part.uid}`}
-        title={part.uid}
-      >
-        {part.text}
-      </mark>
+      <ZaloMemberIdentity key={`${part.offset}-${part.uid}`} uid={part.uid}>
+        <mark className="rounded bg-primary/15 text-inherit">{part.text}</mark>
+      </ZaloMemberIdentity>
     ) : (
       part.text
     ),

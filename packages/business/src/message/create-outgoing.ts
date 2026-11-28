@@ -27,6 +27,7 @@ import {
 } from "@chatbotx.io/realtime-protocol"
 import {
   type MessageButtonTemplate,
+  type ZaloAccountDispatchContent,
   type ZaloAccountGroupAudience,
   zaloAccountGroupMessageSchema,
   zaloAccountQuoteSchema,
@@ -65,8 +66,18 @@ import { productMessageService } from "../product-message/service"
 import { getPublicFileUrl } from "../utils"
 import { recordAgentReply } from "../working-hours/agent-reply-metric"
 import { zaloAccountGroupService } from "../zalo-account/group.service"
+import {
+  outgoingPresentation,
+  selectedZaloMedia,
+  withPreparedZaloMedia,
+  type ZaloAccountComposerUpload,
+  zaloRichText,
+} from "../zalo-account/prepare-composer-content"
+import { resolveZaloForward } from "../zalo-account/resolve-forward"
+import { isZaloAccountRichSendEnabled } from "../zalo-account/rich-send-policy"
 import { zaloAccountService } from "../zalo-account/service"
 import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
+import { withResolvedAttachmentUrls } from "./list-for-conversation"
 
 type CreateOutgoingInput = (
   | { flowId: string; nodeId?: string }
@@ -85,6 +96,13 @@ type CreateOutgoingInput = (
       mediaFileIds?: string[]
     }
 ) & {
+  zaloAccountContent?: ZaloAccountDispatchContent
+  zaloAccountUpload?: ZaloAccountComposerUpload
+  zaloAccountForward?: {
+    conversationId: string
+    messageId: string
+    messageCreatedAt: string | Date
+  }
   inboxId?: string
   clientId?: string
   replyToMessageId?: string
@@ -359,6 +377,7 @@ export const createOutgoing = async (props: {
   deliveryIdentity?: { id: string; createdAt: Date; commandId?: string }
   preparedAttachment?: UploadedFile
   prepareAttachment?: () => Promise<UploadedFile>
+  prepareZaloAttachments?: () => Promise<UploadedFile[]>
   groupAudience?: ZaloAccountGroupAudience
 }) => {
   const {
@@ -372,6 +391,17 @@ export const createOutgoing = async (props: {
     ? ({ kind: "agent", userId: user.id } as const)
     : ({ kind: "other" } as const)
   const isGroup = contactInbox.contactKind === "channelGroup"
+  const isZaloDirect = contactInbox.channel === "zaloAccount" && !isGroup
+  if (
+    isZaloDirect &&
+    (parsedInput.isPrivateReply ||
+      (parsedInput.replyToMessageId && !parsedInput.replyToMessageCreatedAt))
+  ) {
+    throw validationException(
+      "message",
+      "A Zalo reply requires its original message and timestamp",
+    )
+  }
   const groupAudience = isGroup
     ? await zaloAccountGroupService.createAudience({
         workspaceId: conversation.workspaceId,
@@ -380,6 +410,68 @@ export const createOutgoing = async (props: {
         origin: sendFrom === "inbox" ? "inbox" : "api",
       })
     : undefined
+  let richContent = parsedInput.zaloAccountContent
+  const richUpload = parsedInput.zaloAccountUpload
+  const forward = parsedInput.zaloAccountForward
+  if (
+    !isGroup &&
+    ((richContent &&
+      "mentions" in richContent &&
+      richContent.mentions?.length) ||
+      (richUpload?.type === "media" && richUpload.mentions?.length))
+  ) {
+    throw validationException(
+      "content",
+      "Mentions require a Zalo Account group",
+    )
+  }
+  let richAccountId: string | undefined
+  if (richContent || richUpload || forward) {
+    if (
+      contactInbox.channel !== "zaloAccount" ||
+      parsedInput.isPrivateReply ||
+      [richContent, richUpload, forward].filter(Boolean).length !== 1
+    ) {
+      throw validationException(
+        "content",
+        "Select one Zalo Account message payload",
+      )
+    }
+    richAccountId =
+      groupAudience?.accountId ??
+      (
+        await zaloAccountService.findByInboxId({
+          workspaceId: conversation.workspaceId,
+          inboxId: contactInbox.inboxId,
+        })
+      )?.id
+    if (!(richAccountId && isZaloAccountRichSendEnabled(richAccountId))) {
+      throw validationException(
+        "content",
+        "Rich sending is disabled for this Zalo account",
+      )
+    }
+    if (
+      parsedInput.replyToMessageId &&
+      (forward ||
+        richUpload?.type === "voice" ||
+        richUpload?.type === "video" ||
+        (richContent && !["text", "media"].includes(richContent.kind)))
+    ) {
+      throw validationException(
+        "content",
+        "This Zalo message type cannot include a reply",
+      )
+    }
+    if (forward) {
+      richContent = await resolveZaloForward({
+        ...forward,
+        messageCreatedAt: new Date(forward.messageCreatedAt).toISOString(),
+        accountId: richAccountId,
+        workspaceId: conversation.workspaceId,
+      })
+    }
+  }
   if (isGroup && !groupAudience) {
     throw new ChatbotXException("Zalo Account group sending is disabled")
   }
@@ -438,6 +530,16 @@ export const createOutgoing = async (props: {
             conversation,
             contactInbox,
             message,
+            ...(richContent
+              ? {
+                  zaloAccountContent: withPreparedZaloMedia(
+                    richContent,
+                    undefined,
+                    existing.attachments,
+                    storageUrl,
+                  ),
+                }
+              : {}),
             sendFrom,
             ...(groupAudience ? { groupAudience } : {}),
           },
@@ -525,18 +627,33 @@ export const createOutgoing = async (props: {
   // channel cannot deliver is refused instead of silently losing its images.
   // Device files win over media library ids (as the upload branch below
   // does), so ids sent alongside files are never looked up.
-  const mediaLibraryFiles = hasDeviceFiles(parsedInput)
-    ? []
-    : await resolveMediaLibraryFiles(conversation.workspaceId, parsedInput)
-  assertChannelAcceptsImages({
-    channel: contactInbox.channel,
-    kind: resolveInboxReplyKind({
-      channel: channelTypes.safeParse(contactInbox.channel).data,
-      hasReplyTarget: Boolean(parsedInput.replyToMessageId),
-      isPrivateReply: Boolean(parsedInput.isPrivateReply),
-    }),
-    imageCount: countImages(parsedInput, mediaLibraryFiles),
-  })
+  const { ids: selectedZaloIds, files: selectedZaloFiles } =
+    selectedZaloMedia(richUpload)
+  if (
+    selectedZaloIds.length + selectedZaloFiles.length > 9 ||
+    selectedZaloFiles.reduce((total, file) => total + file.size, 0) >
+      20 * 1024 * 1024
+  ) {
+    throw validationException("content", "Zalo media exceeds the upload limit")
+  }
+  const mediaLibraryFiles =
+    !richUpload && hasDeviceFiles(parsedInput)
+      ? []
+      : await resolveMediaLibraryFiles(
+          conversation.workspaceId,
+          richUpload ? { mediaFileIds: selectedZaloIds } : parsedInput,
+        )
+  if (!richUpload) {
+    assertChannelAcceptsImages({
+      channel: contactInbox.channel,
+      kind: resolveInboxReplyKind({
+        channel: channelTypes.safeParse(contactInbox.channel).data,
+        hasReplyTarget: Boolean(parsedInput.replyToMessageId),
+        isPrivateReply: Boolean(parsedInput.isPrivateReply),
+      }),
+      imageCount: countImages(parsedInput, mediaLibraryFiles),
+    })
+  }
 
   const { storageUrl } = await resolveTenantSettings({
     workspaceId: conversation.workspaceId,
@@ -646,12 +763,41 @@ export const createOutgoing = async (props: {
     }
   }
   let uploadedFiles: UploadedFile[] = []
-  if (props.prepareAttachment) {
+  if (props.prepareZaloAttachments) {
+    uploadedFiles = await props.prepareZaloAttachments()
+  } else if (props.prepareAttachment) {
     uploadedFiles = [await props.prepareAttachment()]
   } else if (props.preparedAttachment) {
     uploadedFiles = [props.preparedAttachment]
   }
-  if (
+  if (richUpload) {
+    if (
+      mediaLibraryFiles.reduce((total, file) => total + file.size, 0) >
+      40 * 1024 * 1024
+    ) {
+      throw validationException(
+        "content",
+        "Zalo media exceeds the upload limit",
+      )
+    }
+    for (const mediaLibraryFile of mediaLibraryFiles) {
+      uploadedFiles.push(
+        await copyMediaLibraryFileToConversationAttachment({
+          mediaLibraryFile,
+          workspaceId: conversation.workspaceId,
+          conversationId: targetConversation.id,
+        }),
+      )
+    }
+    for (const file of selectedZaloFiles) {
+      uploadedFiles.push(
+        ...(await uploadMultipleFiles(
+          [file],
+          `public/space/${conversation.workspaceId}/conversations/${targetConversation.id}`,
+        )),
+      )
+    }
+  } else if (
     "files" in parsedInput &&
     parsedInput.files &&
     parsedInput.files.length > 0
@@ -676,7 +822,15 @@ export const createOutgoing = async (props: {
     ? null
     : (parsedInput.replyToMessageId ?? null)
 
-  const plainText = "text" in parsedInput ? (parsedInput.text ?? null) : null
+  const zaloAccountContent = withPreparedZaloMedia(
+    richContent,
+    richUpload,
+    uploadedFiles,
+    storageUrl,
+  )
+  const plainText =
+    zaloRichText(zaloAccountContent) ??
+    ("text" in parsedInput ? (parsedInput.text ?? null) : null)
 
   const now = props.deliveryIdentity?.createdAt ?? new Date()
   const baseContentAttributes = withSentFromInbox(
@@ -687,7 +841,7 @@ export const createOutgoing = async (props: {
           (parsedInput.isPrivateReply ? { isPrivateReply: true } : null),
         parsedInput.bypassThreadControlLock,
       ),
-      parsedInput.isPrivateReply,
+      parsedInput.isPrivateReply || isZaloDirect,
       parsedInput.replyToMessageCreatedAt,
     ),
     sendFrom,
@@ -712,6 +866,7 @@ export const createOutgoing = async (props: {
     : replyContentAttributes
   if (contactInbox.channel === "zaloAccount") {
     const accountId =
+      richAccountId ??
       groupAudience?.accountId ??
       (
         await zaloAccountService.findByInboxId({
@@ -724,7 +879,16 @@ export const createOutgoing = async (props: {
     }
     contentAttributes = {
       ...contentAttributes,
-      zaloAccount: { accountId, sendAttempt: { status: "pending" } },
+      zaloAccount: {
+        accountId,
+        sendAttempt: { status: "pending" },
+        ...(zaloAccountContent
+          ? {
+              richSendKind: zaloAccountContent.kind,
+              richContent: outgoingPresentation(zaloAccountContent),
+            }
+          : {}),
+      },
     }
   }
   const messageInput = {
@@ -739,7 +903,10 @@ export const createOutgoing = async (props: {
     contentType: "text" as const,
     createdAt: now,
     type:
-      parsedInput.replyToMessageId && !isSmtpEmailReply && !isGroup
+      parsedInput.replyToMessageId &&
+      !isSmtpEmailReply &&
+      !isGroup &&
+      !isZaloDirect
         ? ("comment" as const)
         : ("message" as const),
     parentId,
@@ -814,11 +981,17 @@ export const createOutgoing = async (props: {
     })
   }
 
+  const visibleMessage = zaloAccountContent
+    ? await withResolvedAttachmentUrls(messageWithAttachments, {
+        channel: "zaloAccount",
+        workspaceId: conversation.workspaceId,
+      })
+    : messageWithAttachments
   if (prepared?.isNew !== false) {
     await queueMessageCreatedEvent(
       messageWithAttachments.workspaceId,
       {
-        ...messageWithAttachments,
+        ...visibleMessage,
         clientId: parsedInput.clientId,
       },
       targetConversation,
@@ -851,6 +1024,7 @@ export const createOutgoing = async (props: {
             },
             quickReplies: parsedInput.quickReplies,
             sendFrom,
+            ...(zaloAccountContent ? { zaloAccountContent } : {}),
             ...(groupAudience ? { groupAudience } : {}),
           },
         },
@@ -929,5 +1103,5 @@ export const createOutgoing = async (props: {
     eventId: `reply:${message.id}`,
   })
 
-  return messageWithAttachments
+  return visibleMessage
 }

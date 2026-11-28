@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "配置",
     "connectionStatus": "连接状态",
     "active": "运行中",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "没有可用于删除Zalo历史记录的消息边界。",
     "deletedOnMyZalo": "已从我的 Zalo 删除",
     "deleteChatBoundary": "历史记录删除边界",
+    "quote": {
+      "title": "原消息",
+      "unavailable": "原消息不可用。"
+    },
+    "mention": {
+      "partial": "成员建议可能不完整。"
+    },
+    "sticker": "贴纸",
+    "forward": {
+      "title": "转发消息",
+      "sendCopy": "发送副本",
+      "description": "在同一个 Zalo 账号中选择对话。"
+    },
+    "composer": {
+      "moreMessageTypes": "更多消息类型",
+      "recordVoice": "录制语音消息",
+      "voiceUnavailable": "无法录音。请选择 M4A 文件。",
+      "videoPoster": "视频封面",
+      "bankBin": "银行代码（BIN）",
+      "accountNumber": "银行账号",
+      "underline": "下划线",
+      "urgent": "紧急"
+    },
+    "richMessage": {
+      "openMap": "打开地图",
+      "bankDetails": "银行账户信息",
+      "missedCall": "未接来电",
+      "unansweredCall": "呼叫未接听",
+      "incomingCall": "来电",
+      "outgoingCall": "去电",
+      "videoCall": "视频通话",
+      "voiceCall": "语音通话",
+      "processingMedia": "正在处理媒体…",
+      "mediaUnavailable": "媒体不可用"
+    },
     "evidence": {
+      "sentPartially": "部分发送成功",
+      "acceptedWithoutId": "Zalo 已接受消息。正在等待消息 ID。",
       "unsupportedContent": "不支持的 Zalo 消息",
       "invalidContent": "无法读取 Zalo 消息",
       "unsupportedSchema": "不支持此 Zalo 消息格式",

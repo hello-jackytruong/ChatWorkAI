@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Konfigurasi",
     "connectionStatus": "Status koneksi",
     "active": "Aktif",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Tidak ada batas pesan untuk menghapus riwayat Zalo.",
     "deletedOnMyZalo": "Dihapus di Zalo saya",
     "deleteChatBoundary": "Batas penghapusan riwayat",
+    "quote": {
+      "title": "Pesan asli",
+      "unavailable": "Pesan asli tidak tersedia."
+    },
+    "mention": {
+      "partial": "Saran anggota mungkin tidak lengkap."
+    },
+    "sticker": "Stiker",
+    "forward": {
+      "title": "Teruskan pesan",
+      "sendCopy": "Kirim salinan",
+      "description": "Pilih percakapan di akun Zalo yang sama."
+    },
+    "composer": {
+      "moreMessageTypes": "Jenis pesan lainnya",
+      "recordVoice": "Rekam pesan suara",
+      "voiceUnavailable": "Perekaman tidak tersedia. Pilih file M4A.",
+      "videoPoster": "Gambar sampul video",
+      "bankBin": "Kode bank (BIN)",
+      "accountNumber": "Nomor rekening",
+      "underline": "Garis bawah",
+      "urgent": "Mendesak"
+    },
+    "richMessage": {
+      "openMap": "Buka peta",
+      "bankDetails": "Detail rekening bank",
+      "missedCall": "Panggilan tak terjawab",
+      "unansweredCall": "Panggilan tidak dijawab",
+      "incomingCall": "Panggilan masuk",
+      "outgoingCall": "Panggilan keluar",
+      "videoCall": "Panggilan video",
+      "voiceCall": "Panggilan suara",
+      "processingMedia": "Memproses media…",
+      "mediaUnavailable": "Media tidak tersedia"
+    },
     "evidence": {
+      "sentPartially": "Terkirim sebagian",
+      "acceptedWithoutId": "Zalo menerima pesan. ID pesan masih tertunda.",
       "unsupportedContent": "Pesan Zalo tidak didukung",
       "invalidContent": "Pesan Zalo tidak dapat dibaca",
       "unsupportedSchema": "Format pesan Zalo tidak didukung",

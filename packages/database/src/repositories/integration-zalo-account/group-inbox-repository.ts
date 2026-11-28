@@ -88,6 +88,18 @@ const identityWhere = (input: Scope) =>
     ),
   )
 
+const groupMessageAttributes = (payload: ZaloAccountGroupMessage) => {
+  const { richContent, providerTtl, album } = payload
+  return {
+    zaloAccount: {
+      group: payload,
+      ...(richContent ? { richContent } : {}),
+      ...(album ? { album } : {}),
+      ...(providerTtl === undefined ? {} : { providerTtl }),
+    },
+  }
+}
+
 export const zaloAccountGroupInboxRepository = {
   async persist(input: {
     workspaceId: string
@@ -268,9 +280,9 @@ export const zaloAccountGroupInboxRepository = {
                 ),
               }
             : {}),
-          contentAttributesOverlay: {
-            zaloAccount: { group: identity.payload },
-          },
+          contentAttributesOverlay: groupMessageAttributes(
+            identity.payload as ZaloAccountGroupMessage,
+          ),
         })
       }
       let message = await repo.findById({
@@ -311,7 +323,7 @@ export const zaloAccountGroupInboxRepository = {
             messageType: payload.isSelf ? "outgoing" : "incoming",
             senderType: payload.isSelf ? "user" : "contact",
             text: payload.text ?? null,
-            contentAttributes: { zaloAccount: { group: payload } },
+            contentAttributes: groupMessageAttributes(payload),
           },
           attachments: payload.attachments.map((attachment, index) => ({
             workspaceId: input.workspaceId,
@@ -342,7 +354,7 @@ export const zaloAccountGroupInboxRepository = {
             senderType: payload.isSelf ? "user" : "contact",
             contentType: "text",
             text: payload.text ?? null,
-            contentAttributes: { zaloAccount: { group: payload } },
+            contentAttributes: groupMessageAttributes(payload),
           },
           payload.attachments.map((attachment, index) => ({
             workspaceId: input.workspaceId,

@@ -141,6 +141,11 @@ describe("Zalo Account message adapter", () => {
   })
 
   it("maps an own echo to the remote peer instead of the connected account", async () => {
+    const richContent = {
+      kind: "call",
+      direction: "outgoing",
+      status: "missed",
+    }
     const result = await receiveMessage({
       ctx,
       data: {
@@ -151,12 +156,17 @@ describe("Zalo Account message adapter", () => {
           isSelf: true,
           senderId: "self-1",
           recipientId: "peer-1",
+          richContent,
+          providerTtl: 0,
         },
       },
     })
 
     expect(result).toMatchObject({
-      message: { messageType: "outgoing" },
+      message: {
+        messageType: "outgoing",
+        contentAttributes: { zaloAccount: { richContent, providerTtl: 0 } },
+      },
       contact: { sourceId: "peer-1" },
     })
   })

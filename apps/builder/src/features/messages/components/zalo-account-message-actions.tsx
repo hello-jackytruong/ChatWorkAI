@@ -25,6 +25,7 @@ import {
   mutateZaloMessageAction,
 } from "@/features/zalo-accounts/actions/message-operations.action"
 import { zaloSendAttemptResource } from "@/features/zalo-accounts/schema/send-attempt"
+import { getZaloComposerCapabilityAction } from "../actions/zalo-composer-capability.action"
 import type { MessageResourceWithRelations } from "../schema/resource"
 import { ZaloAccountSavedContentDialog } from "./zalo-account-saved-content-dialog"
 import {
@@ -44,11 +45,13 @@ export function ZaloAccountMessageActions({
   message,
   deleteChatOnly = false,
   inspect,
+  forward,
 }: {
   workspaceId: string
   message: MessageResourceWithRelations
   deleteChatOnly?: boolean
   inspect?: ZaloMessageInspect
+  forward?: { inboxId: string; open: () => void }
 }) {
   const ref = parseZaloAccountSourceId(message.sourceId)
   const accountId = ref?.accountId ?? inspect?.accountId
@@ -68,6 +71,7 @@ export function ZaloAccountMessageActions({
       accountId={accountId}
       canInspect={canInspect}
       deleteChatOnly={deleteChatOnly}
+      forward={forward}
       hasProviderIdentity={Boolean(ref)}
       message={message}
       workspaceId={workspaceId}
@@ -81,6 +85,7 @@ function Actions({
   deleteChatOnly,
   canInspect,
   hasProviderIdentity,
+  forward,
 }: {
   workspaceId: string
   message: MessageResourceWithRelations
@@ -88,6 +93,7 @@ function Actions({
   deleteChatOnly: boolean
   canInspect: boolean
   hasProviderIdentity: boolean
+  forward?: { inboxId: string; open: () => void }
 }) {
   const t = useTranslations("zaloAccount")
   const client = useQueryClient()
@@ -136,6 +142,28 @@ function Actions({
         throw new Error(result?.serverError ?? "Capabilities unavailable")
       }
       return result.data
+    },
+  })
+  const forwardCapability = useQuery({
+    queryKey: [
+      "zalo-composer-capability",
+      workspaceId,
+      message.conversationId,
+      forward?.inboxId,
+    ],
+    enabled: expanded && !!forward,
+    queryFn: async () => {
+      if (!forward) {
+        return false
+      }
+      const result = await getZaloComposerCapabilityAction(
+        workspaceId,
+        message.conversationId,
+        {
+          inboxId: forward.inboxId,
+        },
+      )
+      return result?.data?.enabled === true
     },
   })
   const statusLabel = (status: string | undefined) => {
@@ -291,6 +319,15 @@ function Actions({
             }
           />
           <DropdownMenuContent align="start" className="w-60">
+            {forward && forwardCapability.data && (
+              <DropdownMenuItem onClick={forward.open}>
+                {t(
+                  message.attachments?.length
+                    ? "forward.sendCopy"
+                    : "forward.title",
+                )}
+              </DropdownMenuItem>
+            )}
             {canInspect && (
               <DropdownMenuItem
                 disabled={inspectionPending}

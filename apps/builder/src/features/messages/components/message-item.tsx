@@ -65,7 +65,10 @@ import {
   OutgoingTranslationStatus,
   useOutgoingTranslationStatus,
 } from "@/features/translation/components/outgoing-translation-status"
-import { getZaloGroupMessage } from "@/features/zalo-accounts/lib/group-content"
+import {
+  getZaloGroupMessage,
+  getZaloGroupQuote,
+} from "@/features/zalo-accounts/lib/group-content"
 import { getEmailSubject } from "../lib/get-email-subject"
 import {
   getSentPaymentRequests,
@@ -81,6 +84,7 @@ import {
   zaloMessageLabel,
   zaloRetainedQuoteLabel,
 } from "../lib/zalo-message-label"
+import { getZaloRichMessage } from "../lib/zalo-rich-message"
 import type { MessageResourceWithRelations } from "../schema/resource"
 import { InboundOrderBubble } from "./inbound-order-bubble"
 import { MessageActions, MessageActionsEditor } from "./message-actions"
@@ -105,8 +109,14 @@ import {
   getZaloMessageEvidence,
   ZaloMessageEvidence,
 } from "./zalo-message-evidence"
+import { type ZaloQuoteAuthor, ZaloQuotePreview } from "./zalo-quote-preview"
+import { ZaloRichCard } from "./zalo-rich-card"
+import { ZaloRichClip } from "./zalo-rich-clip"
+import { ZaloStickerArtwork } from "./zalo-sticker-artwork"
+import { ZaloStyledText } from "./zalo-styled-text"
 
 type MessageItemProps = {
+  zaloAccount?: boolean
   zaloGroup?: boolean
   zaloState?: ZaloGroupMessageState
   message: MessageResourceWithRelations
@@ -148,6 +158,8 @@ type MessageItemProps = {
    * chat store, which the guest webchat view does not have.
    */
   renderZaloActions?: (message: MessageItemProps["message"]) => ReactNode
+  zaloQuoteAuthor?: ZaloQuoteAuthor
+  onOpenZaloQuote?: () => void
   renderResend?: (message: MessageItemProps["message"]) => ReactNode
   /** Inbox only: omitted means the bubble renders exactly as before. */
   translation?: MessageItemTranslation
@@ -215,6 +227,10 @@ export const MessageItem = (props: MessageItemProps) => {
   const zaloResendAllowed = canResendZaloMessage(message.contentAttributes)
   const isComment = message.type === "comment"
   const isDeleted = message.deletedAt != null || retentionLabel !== null
+  const zaloQuote =
+    props.zaloAccount && !(isDeleted || retainedQuoteLabel || guestDisplay)
+      ? getZaloGroupQuote(message.contentAttributes)
+      : null
   const zaloGroupMessage = props.zaloGroup
     ? getZaloGroupMessage(message.contentAttributes)
     : null
@@ -225,6 +241,20 @@ export const MessageItem = (props: MessageItemProps) => {
   const isLiked = attributes?.liked === true
   const isHidden = attributes?.hidden === true
   const hasAttachments = !!message.attachments?.length
+  const zaloRichMessage =
+    props.zaloAccount && !(isDeleted || isComment || guestDisplay)
+      ? getZaloRichMessage(message, true)
+      : undefined
+  const zaloContent = zaloRichMessage?.content
+  const zaloCard =
+    zaloContent?.kind === "styledText" || zaloContent?.kind === "sticker"
+      ? undefined
+      : zaloContent
+  const styledZaloText =
+    translation?.mainText === undefined && zaloContent?.kind === "styledText"
+      ? zaloContent
+      : undefined
+  const displayAttachments = zaloRichMessage?.attachments ?? message.attachments
   const emailSubject = getEmailSubject(message.contentAttributes)
   const storyReply = getStoryReplyEntity(message.contentAttributes)
   // Call rows render localized labels from contentAttributes; the stored
@@ -258,6 +288,8 @@ export const MessageItem = (props: MessageItemProps) => {
       : getWhatsappFlowResponse(message.contentAttributes)
   const suppressRawText = Boolean(
     zaloEvidence?.unsupported ||
+      zaloCard ||
+      zaloRichMessage?.sticker ||
       flowResponse ||
       inboundOrder ||
       whatsappCall ||
@@ -310,8 +342,18 @@ export const MessageItem = (props: MessageItemProps) => {
             {tZalo(retainedQuoteLabel)}
           </blockquote>
         )}
+        {zaloQuote && (
+          <ZaloQuotePreview
+            author={props.zaloQuoteAuthor}
+            onOpen={props.onOpenZaloQuote}
+            quote={zaloQuote}
+          />
+        )}
         {props.zaloGroup && !isDeleted && (
-          <ZaloGroupMessageContext attributes={message.contentAttributes} />
+          <ZaloGroupMessageContext
+            attributes={message.contentAttributes}
+            hideQuote={Boolean(zaloQuote || retainedQuoteLabel)}
+          />
         )}
         {isPartnerEcho && (
           <span className="flex items-center gap-1 self-end text-muted-foreground text-xs">
@@ -372,34 +414,67 @@ export const MessageItem = (props: MessageItemProps) => {
                   {emailSubject && !isDeleted && (
                     <p className="mb-1 font-semibold text-xs">{emailSubject}</p>
                   )}
-                  <pre
-                    className="wrap-break-word whitespace-pre-line font-sans"
-                    dir={translation ? "auto" : undefined}
-                  >
-                    {isDeleted ? (
-                      <span className="text-xs italic">
-                        {retentionLabel
-                          ? tZalo(retentionLabel)
-                          : t("messageDeleted")}
-                      </span>
-                    ) : (
-                      (translation?.mainText ??
-                      (props.zaloGroup && zaloGroupMessage ? (
-                        <ZaloGroupText
-                          mentions={zaloGroupMessage.mentions}
-                          text={message.text ?? ""}
-                        />
+                  {styledZaloText && message.text ? (
+                    <div
+                      className="wrap-break-word whitespace-pre-wrap"
+                      dir="auto"
+                    >
+                      <ZaloStyledText
+                        mentions={zaloGroupMessage?.mentions}
+                        spans={styledZaloText.spans}
+                        text={message.text}
+                      />
+                    </div>
+                  ) : (
+                    <pre
+                      className="wrap-break-word whitespace-pre-line font-sans"
+                      dir={translation ? "auto" : undefined}
+                    >
+                      {isDeleted ? (
+                        <span className="text-xs italic">
+                          {retentionLabel
+                            ? tZalo(retentionLabel)
+                            : t("messageDeleted")}
+                        </span>
                       ) : (
-                        message.text
-                      )))
-                    )}
-                  </pre>
+                        (translation?.mainText ??
+                        (props.zaloGroup && zaloGroupMessage ? (
+                          <ZaloGroupText
+                            mentions={zaloGroupMessage.mentions}
+                            text={message.text ?? ""}
+                          />
+                        ) : (
+                          message.text
+                        )))
+                      )}
+                    </pre>
+                  )}
                   {!isDeleted && translation?.footer}
                 </div>
               )}
-            {!isDeleted && hasAttachments && !whatsappCall && !flowResponse && (
-              <RenderAttachments message={message} />
+            {zaloCard && (
+              <ZaloRichCard
+                content={zaloCard}
+                image={zaloRichMessage?.cardImage}
+              />
             )}
+            {zaloRichMessage?.sticker && (
+              <ZaloStickerArtwork
+                artwork={zaloRichMessage.sticker}
+                label={tZalo("sticker")}
+              />
+            )}
+            {zaloRichMessage?.clips.map((clip) => (
+              <ZaloRichClip clip={clip} key={clip.id} />
+            ))}
+            {!isDeleted &&
+              Boolean(displayAttachments?.length) &&
+              !whatsappCall &&
+              !flowResponse && (
+                <RenderAttachments
+                  message={{ ...message, attachments: displayAttachments }}
+                />
+              )}
             {flowResponse && (
               <WhatsappFlowResponseCard
                 entity={flowResponse}
@@ -739,7 +814,7 @@ const RenderAttachments = (props: {
   )
 }
 
-const RenderImageGridItem = (props: {
+export const RenderImageGridItem = (props: {
   attachment: AttachmentResource
   isZalo?: boolean
   processing?: boolean
@@ -748,10 +823,12 @@ const RenderImageGridItem = (props: {
   const { attachment, isZalo, previewUrl, processing } = props
   const t = useTranslations("messages")
   const imageLabel = useTranslations("fields.image")
-  const { url, onError } = useAttachmentSource(attachment)
+  const { url, onError, retryUrl } = useAttachmentSource(attachment)
   const [failedPreview, setFailedPreview] = useState<string>()
+  const [failedOriginal, setFailedOriginal] = useState<string>()
+  const original = url === failedOriginal ? undefined : url
   const attachmentUrl =
-    url ?? (previewUrl === failedPreview ? undefined : previewUrl)
+    original ?? (previewUrl === failedPreview ? undefined : previewUrl)
   const attachmentLabel =
     attachment.name ||
     (isZalo ? imageLabel("label") : attachment.originPath || "Attachment")
@@ -788,8 +865,12 @@ const RenderImageGridItem = (props: {
           className="h-full w-full object-cover"
           height={120}
           onError={() => {
-            if (url) {
-              onError()
+            if (original) {
+              if (isZalo && (!retryUrl || original === retryUrl)) {
+                setFailedOriginal(original)
+              } else {
+                onError()
+              }
             } else {
               setFailedPreview(previewUrl)
             }

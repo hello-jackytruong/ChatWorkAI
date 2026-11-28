@@ -12,6 +12,7 @@ type Descriptor = {
   width?: number
   height?: number
   durationMs?: number
+  frameCount?: number
   sourceMissing?: "source_missing"
 }
 type Attachment = {
@@ -36,6 +37,7 @@ type Context = {
   attachments?: Attachment[]
 }
 const numericSlot = /^\d+$/
+const stickerVariants = new Set(["static", "webp", "sprite"])
 const kinds = new Set(["image", "file", "video", "audio", "gif", "sticker"])
 const roles = new Set([
   "original",
@@ -96,7 +98,9 @@ export function buildZaloMessageResources(
         role: descriptor.role as RegisterMediaResource["role"],
         slot: descriptor.slot,
         sourceRevision: JSON.stringify([
-          descriptor.kind === "sticker" ? "sticker" : descriptor.slot,
+          descriptor.kind === "sticker" && !stickerVariants.has(descriptor.slot)
+            ? "sticker"
+            : descriptor.slot,
           descriptor.providerResourceId ?? "",
           descriptor.providerVersion ?? "",
           descriptor.role,
@@ -114,6 +118,7 @@ export function buildZaloMessageResources(
         width: descriptor.width,
         height: descriptor.height,
         durationMs: descriptor.durationMs,
+        frameCount: descriptor.frameCount,
         priority: 10,
       },
     ]

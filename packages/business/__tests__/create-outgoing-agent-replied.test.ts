@@ -18,7 +18,13 @@ vi.mock("../src/zalo-account/group.service", () => ({
   zaloAccountGroupService: { createAudience: mockGroupAudience },
 }))
 vi.mock("../src/zalo-account/service", () => ({
-  zaloAccountService: { findById: async () => ({ zaloUid: "account-uid" }) },
+  zaloAccountService: {
+    findById: async () => ({ zaloUid: "account-uid" }),
+    findByInboxId: async () => ({ id: "account-1" }),
+  },
+}))
+vi.mock("../src/media/zalo-account-ingress", () => ({
+  captureZaloAccountMessage: vi.fn(),
 }))
 
 vi.mock("@chatbotx.io/database/repositories", () => ({
@@ -190,6 +196,35 @@ describe("createOutgoing agent:replied", () => {
       }),
     ).rejects.toThrow("group sending is disabled")
     expect(mockRepositoryCreate).not.toHaveBeenCalled()
+  })
+  test("queues a personal Zalo reply as a message with its parent timestamp", async () => {
+    const replyToMessageCreatedAt = new Date("2026-11-28T07:00:00Z")
+    await createOutgoing({
+      conversation: conversation as never,
+      contactInbox: { ...contactInbox, channel: "zaloAccount" } as never,
+      input: {
+        text: "reply",
+        replyToMessageId: "parent",
+        replyToMessageCreatedAt,
+      },
+      sendFrom: "inbox",
+    })
+    expect(mockRepositoryCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "message",
+        parentId: "parent",
+      }),
+    )
+    expect(mockChatQueueAdd).toHaveBeenCalledWith(
+      "sendChannelMessage",
+      expect.objectContaining({
+        data: expect.objectContaining({
+          message: expect.objectContaining({
+            parentCreatedAt: replyToMessageCreatedAt,
+          }),
+        }),
+      }),
+    )
   })
   test("reuses the prepared canonical message identity and stable queue job on recovery", async () => {
     const createdAt = new Date("2026-10-19T02:00:00Z")

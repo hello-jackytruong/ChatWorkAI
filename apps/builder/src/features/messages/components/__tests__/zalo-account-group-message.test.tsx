@@ -1,5 +1,7 @@
+import { NextIntlClientProvider } from "next-intl"
 import { renderToStaticMarkup } from "react-dom/server"
 import { expect, it } from "vitest"
+import messages from "../../../../../messages/en.json"
 import {
   getZaloGroupConversation,
   getZaloGroupMessage,
@@ -52,7 +54,9 @@ it("keeps two senders in one group without deriving customer identities", () => 
 it("renders validated mention spans as text and escapes untrusted names", () => {
   const text = "Hi @Bob <script>"
   const html = renderToStaticMarkup(
-    <ZaloGroupText mentions={payload.mentions} text={text} />,
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <ZaloGroupText mentions={payload.mentions} text={text} />
+    </NextIntlClientProvider>,
   )
   expect(html).toContain("<mark")
   expect(html).toContain("@Bob")

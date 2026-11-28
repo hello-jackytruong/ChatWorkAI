@@ -142,6 +142,105 @@ it("uses a durable provider acknowledgement even if the transport result was los
     ),
   ).resolves.toEqual({ messageIds: ["m2"], sentCount: 1 })
 })
+
+it("returns a gateway acknowledgement committed after the fallback read", async () => {
+  mocks.settle.mockResolvedValueOnce({
+    row: {
+      status: "applied",
+      providerMessageIds: ["winner"],
+      reconciliation: {
+        delivery: "partial",
+        sentCount: 1,
+        remainingUnknown: false,
+      },
+    },
+    conflict: false,
+  })
+  await expect(
+    zaloAccountSendAttemptService.send(input, () =>
+      Promise.reject(new Error("transport disconnected")),
+    ),
+  ).resolves.toEqual({
+    messageIds: ["winner"],
+    sentCount: 1,
+    delivery: "partial",
+    remainingUnknown: false,
+  })
+})
+
+it("records an accepted send that has no provider ID and never replays it", async () => {
+  const result = {
+    delivery: "accepted_without_id" as const,
+    messageIds: [],
+    sentCount: 1,
+  }
+  const persisted = {
+    status: "applied",
+    providerMessageIds: [],
+    reconciliation: { delivery: result.delivery, sentCount: 1 },
+  }
+  mocks.settle.mockResolvedValueOnce({ row: persisted, conflict: false })
+  const dispatch = vi.fn(async () => result)
+  await expect(
+    zaloAccountSendAttemptService.send(input, dispatch),
+  ).resolves.toEqual(result)
+  expect(mocks.settle).toHaveBeenCalledWith(
+    expect.objectContaining({
+      status: "applied",
+      providerMessageIds: [],
+      delivery: "accepted_without_id",
+      sentCount: 1,
+    }),
+  )
+  mocks.claim.mockImplementationOnce(async (row) => ({
+    claimed: false,
+    row: { ...row, ...persisted },
+  }))
+  await expect(
+    zaloAccountSendAttemptService.send(input, dispatch),
+  ).resolves.toEqual(result)
+  expect(dispatch).toHaveBeenCalledOnce()
+})
+
+it("keeps confirmed IDs and partial outcome when the gateway acknowledgement wins the Redis result race", async () => {
+  const attempt = {
+    threadId: input.threadId,
+    status: "applied",
+    providerMessageIds: ["p1", "p2"],
+    reconciliation: {
+      delivery: "partial",
+      sentCount: 2,
+      remainingUnknown: true,
+    },
+  }
+  mocks.find.mockResolvedValue(attempt)
+  mocks.settle.mockResolvedValue({ row: attempt, conflict: false })
+  await zaloAccountSendAttemptService.confirm({
+    ...input,
+    messageIds: ["p1", "p2"],
+    sentCount: 2,
+    delivery: "partial",
+    remainingUnknown: true,
+  })
+  expect(mocks.settle).toHaveBeenCalledWith(
+    expect.objectContaining({
+      providerMessageIds: ["p1", "p2"],
+      sentCount: 2,
+      delivery: "partial",
+      remainingUnknown: true,
+    }),
+  )
+  await expect(
+    zaloAccountSendAttemptService.send(input, () =>
+      Promise.reject(new Error("Redis result lost")),
+    ),
+  ).resolves.toEqual({
+    messageIds: ["p1", "p2"],
+    sentCount: 2,
+    delivery: "partial",
+    remainingUnknown: true,
+  })
+})
 it("uses the same scoped identity for API preparation and worker dispatch", async () => {
   const id = await zaloAccountSendAttemptService.commandId(input)
   const send = vi.fn(async () => ({ messageIds: ["m1"], sentCount: 1 }))

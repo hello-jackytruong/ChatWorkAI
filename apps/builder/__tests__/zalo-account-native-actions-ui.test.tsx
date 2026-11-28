@@ -22,6 +22,9 @@ vi.mock("@/features/zalo-accounts/actions/message-operations.action", () => ({
 vi.mock("@/features/zalo-accounts/actions/account-operations.action", () => ({
   inspectZaloAccountMessageAction: actions.inspectMessage,
 }))
+vi.mock("@/features/messages/actions/zalo-composer-capability.action", () => ({
+  getZaloComposerCapabilityAction: vi.fn(),
+}))
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }))
 vi.mock("@chatbotx.io/ui/components/ui/dialog", () => ({
   Dialog: ({ open, children }: { open: boolean; children: ReactNode }) =>

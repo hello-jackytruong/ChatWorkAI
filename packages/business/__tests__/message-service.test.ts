@@ -89,7 +89,14 @@ vi.mock("@chatbotx.io/realtime-protocol", () => ({
   },
 }))
 vi.mock("@chatbotx.io/worker-config", () => ({}))
-vi.mock("../src/contact-inbox/service", () => ({ contactInboxService: {} }))
+vi.mock("../src/contact-inbox/service", () => ({
+  contactInboxService: { findManyByIds: vi.fn().mockResolvedValue([]) },
+}))
+vi.mock("../src/zalo-account-media/read-service", () => ({
+  zaloAccountMediaReadService: {
+    projectMessages: vi.fn().mockResolvedValue(new Map()),
+  },
+}))
 vi.mock("../src/conversation/service", () => ({ conversationService: {} }))
 vi.mock("../src/working-hours/agent-reply-metric", () => ({
   recordAgentReply: vi.fn(),
@@ -595,9 +602,16 @@ test("updates Zalo pending evidence and publishes the persisted attributes to th
   const stored = {
     id: "m",
     conversationId: "conv",
+    contactInboxId: "ci",
+    attachments: [],
     contentAttributes: {
       other: true,
-      zaloAccount: { group: { threadId: "g" } },
+      zaloAccount: {
+        group: {
+          threadId: "g",
+          attachments: [{ url: "https://provider.test/private" }],
+        },
+      },
     },
   }
   const updated = {
@@ -632,7 +646,18 @@ test("updates Zalo pending evidence and publishes the persisted attributes to th
   )
   expect(mocks.realtime).toHaveBeenCalledWith("w", {
     eventType: "messageContentUpdated",
-    data: { messageId: "m", contentAttributes: updated.contentAttributes },
+    data: {
+      messageId: "m",
+      contentAttributes: {
+        other: true,
+        zaloAccount: {
+          accountId: "a",
+          group: { threadId: "g" },
+          mediaResources: [],
+          sendAttempt: { status: "unknown" },
+        },
+      },
+    },
     route: { conversationId: "conv" },
   })
 })

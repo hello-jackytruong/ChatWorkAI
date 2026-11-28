@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "הגדרה",
     "connectionStatus": "מצב חיבור",
     "active": "פעיל",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "אין הודעת גבול זמינה למחיקת היסטוריית Zalo.",
     "deletedOnMyZalo": "נמחק ב-Zalo שלי",
     "deleteChatBoundary": "גבול מחיקת ההיסטוריה",
+    "quote": {
+      "title": "הודעה מקורית",
+      "unavailable": "ההודעה המקורית אינה זמינה."
+    },
+    "mention": {
+      "partial": "ייתכן שחסרים חברים בהצעות."
+    },
+    "sticker": "מדבקה",
+    "forward": {
+      "title": "העברת הודעה",
+      "sendCopy": "שליחת עותק",
+      "description": "יש לבחור שיחה באותו חשבון Zalo."
+    },
+    "composer": {
+      "moreMessageTypes": "סוגי הודעות נוספים",
+      "recordVoice": "הקלטת הודעה קולית",
+      "voiceUnavailable": "ההקלטה אינה זמינה. יש לבחור קובץ M4A.",
+      "videoPoster": "תמונת שער לסרטון",
+      "bankBin": "קוד בנק (BIN)",
+      "accountNumber": "מספר חשבון",
+      "underline": "קו תחתון",
+      "urgent": "דחוף"
+    },
+    "richMessage": {
+      "openMap": "פתיחת מפה",
+      "bankDetails": "פרטי חשבון בנק",
+      "missedCall": "שיחה שלא נענתה",
+      "unansweredCall": "שיחה ללא מענה",
+      "incomingCall": "שיחה נכנסת",
+      "outgoingCall": "שיחה יוצאת",
+      "videoCall": "שיחת וידאו",
+      "voiceCall": "שיחה קולית",
+      "processingMedia": "המדיה בעיבוד…",
+      "mediaUnavailable": "המדיה אינה זמינה"
+    },
     "evidence": {
+      "sentPartially": "נשלח חלקית",
+      "acceptedWithoutId": "ההודעה התקבלה ב-Zalo. ממתינים למזהה ההודעה.",
       "unsupportedContent": "הודעת Zalo אינה נתמכת",
       "invalidContent": "לא ניתן לקרוא את הודעת Zalo",
       "unsupportedSchema": "פורמט הודעת Zalo אינו נתמך",

@@ -1,6 +1,10 @@
 import { TRANSLATION_MAX_LENGTH } from "@chatbotx.io/business/translation/channel-limits"
 import { channelTypes } from "@chatbotx.io/database/partials"
 import { sendProductsContentSchema } from "@chatbotx.io/flow-config"
+import {
+  zaloAccountSendContentSchema,
+  zaloAccountSendMentionSchema,
+} from "@chatbotx.io/sdk"
 import { zodBigintAsString } from "@chatbotx.io/utils"
 import { z } from "zod"
 import { zodGuestConversationId } from "@/features/integration-webchat/lib/guest-conversation-id"
@@ -216,9 +220,95 @@ export type CreateMessageRequest = z.infer<typeof createMessageRequest>
  * agent dismisses the routing lock. Kept off `createMessageRequest` itself so the
  * public and private message APIs never accept or advertise it.
  */
-export const createMessageWithRoutingBypassRequest = createMessageRequest.and(
-  z.object({ bypassThreadControlLock: bypassField }),
-)
+export const ZALO_COMPOSER_MAX_DEVICE_FILES = 3
+export const ZALO_COMPOSER_MAX_DEVICE_FILE_BYTES = MAX_FILE_SIZE
+
+const zaloDeviceFile = z
+  .instanceof(File)
+  .refine((file) => file.size > 0 && file.size <= MAX_FILE_SIZE)
+const zaloDuration = z
+  .number()
+  .int()
+  .positive()
+  .max(24 * 60 * 60_000)
+const zaloDimension = z.number().int().positive().max(8192)
+const zaloCaption = z.string().trim().min(1).max(20_000)
+
+const zaloAccountUploadSchema = z.discriminatedUnion("type", [
+  z
+    .strictObject({
+      type: z.literal("media"),
+      caption: zaloCaption.optional(),
+      mentions: z.array(zaloAccountSendMentionSchema).max(20).optional(),
+      mediaFileIds: z.array(zodBigintAsString()).min(1).max(9).optional(),
+      files: z
+        .array(zaloDeviceFile)
+        .min(1)
+        .max(ZALO_COMPOSER_MAX_DEVICE_FILES)
+        .optional(),
+    })
+    .refine((upload) => Boolean(upload.mediaFileIds) !== Boolean(upload.files)),
+  z
+    .strictObject({
+      type: z.literal("voice"),
+      mediaFileId: zodBigintAsString().optional(),
+      file: zaloDeviceFile.optional(),
+      durationMs: zaloDuration.optional(),
+    })
+    .refine((upload) => Boolean(upload.mediaFileId) !== Boolean(upload.file)),
+  z.strictObject({
+    type: z.literal("video"),
+    mediaFileId: zodBigintAsString(),
+    posterMediaFileId: zodBigintAsString(),
+    caption: zaloCaption.optional(),
+    durationMs: zaloDuration.optional(),
+    width: zaloDimension.optional(),
+    height: zaloDimension.optional(),
+  }),
+])
+
+const zaloComposerRequest = z
+  .strictObject({
+    inboxId: zodBigintAsString(),
+    clientId: zodBigintAsString(),
+    replyToMessageId: z.string().optional(),
+    replyToMessageCreatedAt: z.coerce.date().optional(),
+    zaloAccountContent: zaloAccountSendContentSchema.optional(),
+    zaloAccountUpload: zaloAccountUploadSchema.optional(),
+    zaloAccountForward: z
+      .strictObject({
+        conversationId: zodBigintAsString(),
+        messageId: zodBigintAsString(),
+        messageCreatedAt: z.coerce.date(),
+      })
+      .optional(),
+    translate: z.never().optional(),
+  })
+  .refine(
+    (request) =>
+      [
+        request.zaloAccountContent,
+        request.zaloAccountUpload,
+        request.zaloAccountForward,
+      ].filter(Boolean).length === 1,
+  )
+
+export type ZaloComposerContent = Pick<
+  z.infer<typeof zaloComposerRequest>,
+  "zaloAccountContent" | "zaloAccountUpload"
+>
+
+export const createMessageWithRoutingBypassRequest = z.union([
+  createMessageRequest.and(
+    z.object({
+      bypassThreadControlLock: bypassField,
+      zaloAccountContent: z.never().optional(),
+      zaloAccountUpload: z.never().optional(),
+      zaloAccountForward: z.never().optional(),
+    }),
+  ),
+  zaloComposerRequest,
+])
 export type CreateMessageWithRoutingBypassRequest = z.infer<
   typeof createMessageWithRoutingBypassRequest
 >

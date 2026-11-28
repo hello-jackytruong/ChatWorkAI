@@ -1,3 +1,5 @@
+import { zaloAccountAlbumSchema } from "@chatbotx.io/sdk"
+
 export type RecallProjection = {
   id: string
   lifecycleRevision: number
@@ -68,12 +70,12 @@ export function projectZaloAccountRetainedMessage<T>(
     return message
   }
   const attrs = object(row.contentAttributes)
-  const lifecycle = recall
-    ? lifecycleOfRecall(recall)
-    : object(object(attrs.zaloAccount).lifecycle)
+  const zalo = object(attrs.zaloAccount)
+  const lifecycle = recall ? lifecycleOfRecall(recall) : object(zalo.lifecycle)
   if (!(lifecycle.recalled || lifecycle.localHiddenAt || row.deletedAt)) {
     return message
   }
+  const { data: album } = zaloAccountAlbumSchema.safeParse(zalo.album)
   return {
     ...row,
     text: null,
@@ -81,6 +83,7 @@ export function projectZaloAccountRetainedMessage<T>(
     attachmentCount: 0,
     contentAttributes: {
       zaloAccount: {
+        ...(album ? { album } : {}),
         lifecycle:
           row.deletedAt && !lifecycle.recalled && !lifecycle.localHiddenAt
             ? { ...lifecycle, legacyDeleted: true }

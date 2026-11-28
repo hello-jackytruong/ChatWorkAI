@@ -8,8 +8,13 @@ import type { IntegrationZaloAccountGroupModel } from "@chatbotx.io/database/typ
 import type {
   ZaloAccountGroupAudience,
   ZaloAccountOutboundMessage,
+  ZaloAccountSendResult,
 } from "@chatbotx.io/sdk"
-import { SdkException, ZaloAccountPreDispatchError } from "@chatbotx.io/sdk"
+import {
+  SdkException,
+  ZaloAccountPreDispatchError,
+  zaloAccountGroupMembersQuerySchema,
+} from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import { dispatchAuditRecordSafely } from "../audit/dispatcher"
 import { notFoundException } from "../errors"
@@ -324,6 +329,55 @@ export const zaloAccountGroupService = {
     return group
   },
 
+  async listMembers(input: {
+    workspaceId: string
+    accountId: string
+    groupId: string
+    conversationId: string
+    query?: string
+    limit?: number
+  }) {
+    const groupMemberQuery = zaloAccountGroupMembersQuerySchema.parse({
+      query: input.query,
+      limit: input.limit,
+    })
+    const account = await requireAccount(input)
+    const group = await integrationZaloAccountGroupRepository.find({
+      workspaceId: input.workspaceId,
+      accountId: input.accountId,
+      id: input.groupId,
+    })
+    if (
+      !(
+        account.groupMessagingEnabled &&
+        group?.accessible &&
+        group.sendEnabled &&
+        group.contactInboxId
+      ) ||
+      group.conversationId !== input.conversationId
+    ) {
+      throw notFoundException("Zalo group conversation not found")
+    }
+    const result =
+      await zaloAccountCommandTransportService.getGroupMembersAndWait({
+        workspaceId: input.workspaceId,
+        accountId: account.id,
+        inboxId: account.inboxId,
+        commandId: createId(),
+        ttlMs: 10_000,
+        waitTimeoutMs: 5000,
+        groupId: group.providerGroupId,
+        accountPolicyEpoch: account.groupPolicyEpoch,
+        groupPolicyEpoch: group.policyEpoch,
+        groupMemberQuery,
+      })
+    const members = result.members.filter(({ uid }) => uid !== account.zaloUid)
+    return {
+      members: members.slice(0, groupMemberQuery.limit),
+      complete: result.complete && members.length <= groupMemberQuery.limit,
+    }
+  },
+
   async sync(input: {
     workspaceId: string
     accountId: string
@@ -440,7 +494,7 @@ export const zaloAccountGroupService = {
     origin?: "inbox" | "flow" | "api"
     localMessage?: { id: string; createdAt: Date }
     audience?: ZaloAccountGroupAudience
-  }): Promise<{ messageIds: string[]; sentCount: number }> {
+  }): Promise<ZaloAccountSendResult> {
     const account = await requireAccount(input)
     const group = await integrationZaloAccountGroupRepository.find({
       workspaceId: input.workspaceId,

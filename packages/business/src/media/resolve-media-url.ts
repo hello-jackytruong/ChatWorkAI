@@ -90,6 +90,7 @@ const buildProxyUrl = async (
     refId: string
     workspaceId: string
     messageCreatedAt?: number
+    zaloImagePreview?: { accountId: string; conversationId: string }
   },
   ttlMs?: number,
 ): Promise<string> => {
@@ -106,6 +107,25 @@ const buildProxyUrl = async (
   })
   return new URL(`/media/${props.kind}/${token}`, appUrl).toString()
 }
+
+export const resolveZaloImagePreviewUrl = (input: {
+  workspaceId: string
+  accountId: string
+  conversationId: string
+  referenceId: string
+}): Promise<string> =>
+  buildProxyUrl(
+    {
+      kind: "attachment",
+      workspaceId: input.workspaceId,
+      refId: input.referenceId,
+      zaloImagePreview: {
+        accountId: input.accountId,
+        conversationId: input.conversationId,
+      },
+    },
+    10 * 60 * 1000,
+  )
 
 // Fresh no-avatar sentinel → the guaranteed placeholder asset on the
 // workspace's own (white-label) domain, so a missing tenant `no_avatar.jpg`

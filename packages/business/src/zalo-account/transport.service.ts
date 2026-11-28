@@ -6,14 +6,18 @@ import {
   type ZaloAccountCommandEnvelope,
   type ZaloAccountCommandResult,
   type ZaloAccountGroup,
+  type ZaloAccountGroupMembersQuery,
   type ZaloAccountLabel,
   type ZaloAccountLabelSnapshot,
   type ZaloAccountNativeOperation,
   type ZaloAccountOutboundMessage,
   ZaloAccountPreDispatchError,
+  type ZaloAccountSendResult,
+  type ZaloAccountStickerCatalogQuery,
   zaloAccountCommandResultSchema,
   zaloAccountFriendSyncSchema,
   zaloAccountOutboundMessageSchema,
+  zaloAccountSendResultSchema,
   zaloAccountTransportKeys,
 } from "@chatbotx.io/sdk"
 
@@ -51,6 +55,19 @@ const readLease = (value: string | null) => {
   const fenceToken = value.slice(separator + 1)
   return FENCE_TOKEN_PATTERN.test(fenceToken) ? { ownerId, fenceToken } : null
 }
+
+const readSendResult = ({
+  messageIds = [],
+  sentCount = messageIds.length,
+  delivery,
+  remainingUnknown,
+}: Extract<ZaloAccountCommandResult, { status: "applied" }>["result"]) =>
+  zaloAccountSendResultSchema.parse({
+    messageIds,
+    sentCount,
+    ...(delivery ? { delivery } : {}),
+    ...(remainingUnknown === undefined ? {} : { remainingUnknown }),
+  })
 
 export class ZaloAccountCommandTransport {
   async syncFriendsAndWait(
@@ -331,7 +348,7 @@ export class ZaloAccountCommandTransport {
       message: ZaloAccountOutboundMessage
       waitTimeoutMs: number
     },
-  ): Promise<{ messageIds: string[]; sentCount: number }> {
+  ): Promise<ZaloAccountSendResult> {
     const route = {
       kind: "account" as const,
       workspaceId: input.workspaceId,
@@ -368,12 +385,7 @@ export class ZaloAccountCommandTransport {
       input.waitTimeoutMs,
       "send",
     )
-    const messageIds = result.result.messageIds ?? []
-    const sentCount = result.result.sentCount ?? messageIds.length
-    if (sentCount < 1 || messageIds.length < 1) {
-      throw new Error("Zalo Account send returned no provider message ID")
-    }
-    return { messageIds, sentCount }
+    return readSendResult(result.result)
   }
 
   async syncGroupsAndWait(
@@ -422,7 +434,7 @@ export class ZaloAccountCommandTransport {
       message: ZaloAccountOutboundMessage
       waitTimeoutMs: number
     },
-  ): Promise<{ messageIds: string[]; sentCount: number }> {
+  ): Promise<ZaloAccountSendResult> {
     const lease = await this.requireLease(input)
     const message = zaloAccountOutboundMessageSchema.parse({
       ...input.message,
@@ -453,12 +465,7 @@ export class ZaloAccountCommandTransport {
       input.waitTimeoutMs,
       "group send",
     )
-    const messageIds = result.result.messageIds ?? []
-    const sentCount = result.result.sentCount ?? messageIds.length
-    if (sentCount < 1 || messageIds.length < 1) {
-      throw new Error("Zalo Account group send returned no provider message ID")
-    }
-    return { messageIds, sentCount }
+    return readSendResult(result.result)
   }
 
   async getStickerResourcesAndWait(
@@ -491,6 +498,82 @@ export class ZaloAccountCommandTransport {
       "sticker detail",
     )
     return result.result.stickerResources ?? []
+  }
+
+  async getStickerCatalogAndWait(
+    input: AccountCommandInput & {
+      stickerCatalogQuery: ZaloAccountStickerCatalogQuery
+      waitTimeoutMs: number
+    },
+  ) {
+    const lease = await this.requireLease(input)
+    const command = this.command({
+      commandId: input.commandId,
+      kind: "get_sticker_catalog",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      ttlMs: input.ttlMs,
+      stickerCatalogQuery: input.stickerCatalogQuery,
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const { result } = await this.waitForResult(
+      input.commandId,
+      input.waitTimeoutMs,
+      "sticker catalog",
+    )
+    if (!result.stickerCatalog) {
+      throw new Error("Zalo Account command returned no sticker catalog")
+    }
+    return result.stickerCatalog
+  }
+
+  async getGroupMembersAndWait(
+    input: AccountCommandInput & {
+      groupId: string
+      accountPolicyEpoch: number
+      groupPolicyEpoch: number
+      groupMemberQuery: ZaloAccountGroupMembersQuery
+      waitTimeoutMs: number
+    },
+  ) {
+    const lease = await this.requireLease(input)
+    const command = this.command({
+      commandId: input.commandId,
+      kind: "get_group_members",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      ttlMs: input.ttlMs,
+      groupId: input.groupId,
+      accountPolicyEpoch: input.accountPolicyEpoch,
+      groupPolicyEpoch: input.groupPolicyEpoch,
+      groupMemberQuery: input.groupMemberQuery,
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const { result } = await this.waitForResult(
+      input.commandId,
+      input.waitTimeoutMs,
+      "group members",
+    )
+    if (!result.groupMembers) {
+      throw new Error("Zalo Account command returned no group members result")
+    }
+    return result.groupMembers
   }
 
   async getLabelsAndWait(
@@ -570,6 +653,8 @@ export class ZaloAccountCommandTransport {
   private command(input: {
     cursor?: number
     stickerIds?: string[]
+    stickerCatalogQuery?: ZaloAccountStickerCatalogQuery
+    groupMemberQuery?: ZaloAccountGroupMembersQuery
     threadType?: "user" | "group"
     threadId?: string
     operationToken?: string
@@ -596,6 +681,12 @@ export class ZaloAccountCommandTransport {
       ...(input.target ? { target: input.target } : {}),
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
       ...(input.stickerIds ? { stickerIds: input.stickerIds } : {}),
+      ...(input.stickerCatalogQuery
+        ? { stickerCatalogQuery: input.stickerCatalogQuery }
+        : {}),
+      ...(input.groupMemberQuery
+        ? { groupMemberQuery: input.groupMemberQuery }
+        : {}),
       ...(input.operationToken ? { operationToken: input.operationToken } : {}),
       ...(input.groupId ? { groupId: input.groupId } : {}),
       ...(input.threadId
@@ -714,6 +805,14 @@ const withTransport = async <T>(
 }
 
 export const zaloAccountCommandTransportService = {
+  getGroupMembersAndWait: (
+    input: Parameters<ZaloAccountCommandTransport["getGroupMembersAndWait"]>[0],
+  ) => withTransport((transport) => transport.getGroupMembersAndWait(input)),
+  getStickerCatalogAndWait: (
+    input: Parameters<
+      ZaloAccountCommandTransport["getStickerCatalogAndWait"]
+    >[0],
+  ) => withTransport((transport) => transport.getStickerCatalogAndWait(input)),
   getStickerResourcesAndWait: (
     input: Parameters<
       ZaloAccountCommandTransport["getStickerResourcesAndWait"]

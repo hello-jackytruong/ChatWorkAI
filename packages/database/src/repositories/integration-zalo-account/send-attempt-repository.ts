@@ -1,4 +1,9 @@
-import type { ZaloAccountErrorInfo } from "@chatbotx.io/sdk"
+import {
+  type ZaloAccountErrorInfo,
+  type ZaloAccountSendDelivery,
+  type ZaloAccountSendResult,
+  zaloAccountSendResultSchema,
+} from "@chatbotx.io/sdk"
 import {
   and,
   type DatabaseClient,
@@ -9,7 +14,10 @@ import {
   isNull,
   sql,
 } from "../../client"
-import { zaloAccountSendAttemptModel } from "../../schema"
+import {
+  type ZaloAccountReconciliation,
+  zaloAccountSendAttemptModel,
+} from "../../schema"
 import { workspaceRepository } from "../workspace"
 
 type Scope = { workspaceId: string; accountId: string; commandId: string }
@@ -19,6 +27,34 @@ const where = (input: Scope) =>
     eq(zaloAccountSendAttemptModel.accountId, input.accountId),
     eq(zaloAccountSendAttemptModel.commandId, input.commandId),
   )
+
+const baseReconciliation = (
+  state: ZaloAccountReconciliation["state"],
+): ZaloAccountReconciliation => ({
+  version: 1,
+  state,
+  revision: 0,
+  attempts: 0,
+  nextAttemptAt: new Date().toISOString(),
+  lastErrorCode: null,
+})
+
+const outcomeFields = ["delivery", "sentCount", "remainingUnknown"] as const
+const acknowledgementEvidence = (
+  result: ZaloAccountSendResult,
+): Pick<ZaloAccountReconciliation, (typeof outcomeFields)[number]> => {
+  if (!result.delivery) {
+    return {}
+  }
+  return {
+    delivery: result.delivery,
+    sentCount: result.sentCount,
+    ...(result.remainingUnknown === undefined
+      ? {}
+      : { remainingUnknown: result.remainingUnknown }),
+  }
+}
+
 export const zaloAccountSendAttemptRepository = {
   async directTarget(input: {
     workspaceId: string
@@ -213,6 +249,9 @@ export const zaloAccountSendAttemptRepository = {
     input: Scope & {
       status: "applied" | "failed" | "unknown"
       providerMessageIds?: string[]
+      sentCount?: number
+      delivery?: ZaloAccountSendDelivery
+      remainingUnknown?: boolean
       sendError?: ZaloAccountErrorInfo
     },
   ) {
@@ -230,37 +269,51 @@ export const zaloAccountSendAttemptRepository = {
         throw new Error("Zalo send attempt disappeared")
       }
       if (input.status === "applied") {
-        const ids = [...new Set(input.providerMessageIds ?? [])]
-        if (
-          !ids.length ||
-          ids.length > 10 ||
-          ids.some((id) => !id || id.length > 200)
-        ) {
-          throw new Error("Invalid Zalo acknowledgement IDs")
-        }
+        const result = zaloAccountSendResultSchema.parse({
+          messageIds: input.providerMessageIds ?? [],
+          sentCount: input.sentCount ?? input.providerMessageIds?.length ?? 0,
+          delivery: input.delivery,
+          remainingUnknown: input.remainingUnknown,
+        })
+        const ids = [...new Set(result.messageIds)]
+        const evidence = acknowledgementEvidence(result)
         if (row.status === "applied") {
+          const previous =
+            row.reconciliation ?? baseReconciliation("not_required")
           const conflict =
-            JSON.stringify(row.providerMessageIds) !== JSON.stringify(ids)
-          if (!conflict) {
+            JSON.stringify(row.providerMessageIds) !== JSON.stringify(ids) ||
+            outcomeFields.some(
+              (key) =>
+                previous[key] !== undefined &&
+                evidence[key] !== undefined &&
+                previous[key] !== evidence[key],
+            )
+          const enriched = outcomeFields.some(
+            (key) => previous[key] === undefined && evidence[key] !== undefined,
+          )
+          if (!(conflict || enriched)) {
             return { row, conflict: false }
           }
-          const previous = row.reconciliation
+          const reconciliation: ZaloAccountReconciliation = {
+            ...previous,
+            revision: previous.revision + 1,
+            ...(conflict
+              ? {
+                  state: "needs_review",
+                  nextAttemptAt: new Date().toISOString(),
+                  lastErrorCode: "reconciliation_conflict",
+                  sendError: {
+                    code: "reconciliation_conflict",
+                    phase: "reconciliation",
+                    safeAction: "inspect",
+                  },
+                }
+              : evidence),
+          }
           const [winner] = await tx
             .update(zaloAccountSendAttemptModel)
             .set({
-              reconciliation: {
-                version: 1,
-                state: "needs_review",
-                revision: (previous?.revision ?? 0) + 1,
-                attempts: previous?.attempts ?? 0,
-                nextAttemptAt: new Date().toISOString(),
-                lastErrorCode: "reconciliation_conflict",
-                sendError: {
-                  code: "reconciliation_conflict",
-                  phase: "reconciliation",
-                  safeAction: "inspect",
-                },
-              },
+              reconciliation,
               updatedAt: new Date(),
             })
             .where(where(input))
@@ -268,7 +321,7 @@ export const zaloAccountSendAttemptRepository = {
           if (!winner) {
             throw new Error("Zalo acknowledgement disappeared")
           }
-          return { row: winner, conflict: true }
+          return { row: winner, conflict }
         }
         const [applied] = await tx
           .update(zaloAccountSendAttemptModel)
@@ -278,15 +331,13 @@ export const zaloAccountSendAttemptRepository = {
             providerMessageIds: ids,
             updatedAt: new Date(),
             reconciliation: {
-              version: 1,
-              state:
-                row.messageId && row.messageCreatedAt
+              ...baseReconciliation(
+                ids.length && row.messageId && row.messageCreatedAt
                   ? "pending"
                   : "not_required",
+              ),
               revision: (row.reconciliation?.revision ?? 0) + 1,
-              attempts: 0,
-              nextAttemptAt: new Date().toISOString(),
-              lastErrorCode: null,
+              ...evidence,
             },
           })
           .where(where(input))

@@ -28,6 +28,8 @@ const reconnectCommand: ZaloAccountCommandEnvelope = {
 
 const makeHarness = (admission?: ProviderAdmissionPort) => {
   const pool = {
+    getGroupMembers: vi.fn(async () => ({ members: [], complete: true })),
+    getStickerCatalog: vi.fn(async () => []),
     getStickerResources: vi.fn(async () => []),
     getLabels: vi.fn(
       async (): Promise<ZaloAccountLabelSnapshot> => ({
@@ -72,6 +74,34 @@ const makeHarness = (admission?: ProviderAdmissionPort) => {
 }
 
 describe("ZaloAccountCommandExecutor", () => {
+  it("dispatches a catalog read for the targeted account and sticker pack", async () => {
+    const { executor, pool } = makeHarness()
+    const stickerCatalogQuery = {
+      kind: "category" as const,
+      categoryId: "40",
+      limit: 5,
+    }
+    await expect(
+      executor.execute({
+        ...reconnectCommand,
+        kind: "get_sticker_catalog",
+        target: { ownerId: "owner-1", fenceToken: "1" },
+        stickerCatalogQuery,
+      }),
+    ).resolves.toEqual({
+      status: "applied",
+      result: { status: "synced", stickerCatalog: [] },
+    })
+    expect(pool.getStickerCatalog).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        inboxId: "inbox-1",
+        runtime: { kind: "account", id: "account-1" },
+        query: stickerCatalogQuery,
+      }),
+    )
+  })
+
   it("dispatches best-effort typing with the exact group policy context", async () => {
     const { executor, pool } = makeHarness()
     await expect(

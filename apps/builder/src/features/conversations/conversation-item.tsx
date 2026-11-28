@@ -247,6 +247,11 @@ export default function ConversationItem({
     conversation.messages?.[0],
     t,
     brand,
+    conversation.contactInboxes?.some(
+      (inbox) =>
+        inbox.channel === "zaloAccount" &&
+        inbox.id === conversation.messages?.[0]?.contactInboxId,
+    ),
   )
   const callPreviewKind = resolveCallPreviewKind(conversation.messages?.[0])
   const CallPreviewIcon = callPreviewKind

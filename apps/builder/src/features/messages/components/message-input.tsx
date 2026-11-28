@@ -59,7 +59,10 @@ import { authClient } from "@/lib/auth/auth-client"
 import { shouldSendOnEnter } from "@/lib/keyboard/should-send-on-enter"
 import { useChatStore } from "../../chat/store/chat-store-provider"
 import { sendZaloGroupTypingAction } from "../../zalo-accounts/actions/group-inbox.action"
-import { getZaloGroupConversation } from "../../zalo-accounts/lib/group-content"
+import {
+  getZaloGroupConversation,
+  getZaloGroupMessage,
+} from "../../zalo-accounts/lib/group-content"
 import { useZaloGroupInbox } from "../../zalo-accounts/queries/use-group-inbox"
 import { createMessageAction } from "../actions/create-message.action"
 import {
@@ -67,14 +70,30 @@ import {
   enqueueSend,
   isSendQueueLocked,
   resumeSendQueue,
+  takeWaitingSends,
 } from "../lib/send-queue"
-import { createMessageWithRoutingBypassRequest } from "../schema/mutation"
+import {
+  applyZaloMention,
+  findZaloMentionQuery,
+  trimZaloMentionRanges,
+  updateZaloMentionRanges,
+  type ZaloMentionMember,
+  type ZaloMentionQuery,
+  type ZaloMentionRange,
+} from "../lib/zalo-mention-draft"
+import { isZaloStickerMessage } from "../lib/zalo-rich-message"
+import {
+  createMessageWithRoutingBypassRequest,
+  type ZaloComposerContent,
+} from "../schema/mutation"
 import type { MessageResource } from "../schema/resource"
 import { FileUploadPreview } from "./file-upload"
 import { InputMenu } from "./input-menu"
 import { MediaFilePreview } from "./media-file-preview"
 import { SendQueueNotice } from "./send-queue-notice"
 import { ThreadControlLockedComposer } from "./thread-control-locked-composer"
+import { ZaloComposer } from "./zalo-composer"
+import { ZaloMentionPicker } from "./zalo-mention-picker"
 
 const CHANNEL_WINDOW_SECONDS: Record<ChannelType, number> = {
   api: 0,
@@ -149,13 +168,57 @@ export const MessageInput = () => {
     [conversations, activeConversationId],
   )
 
-  const channel = conversation?.contactInboxes[0]?.channel
+  const composerInbox = conversation?.contactInboxes[0]
+  const channel = composerInbox?.channel
   const groupAudience = getZaloGroupConversation(conversation)
   const groupInbox = useZaloGroupInbox(
     conversation?.workspaceId ?? "",
     groupAudience,
   )
   const groupSendDisabled = !!groupAudience && groupInbox.data?.canSend !== true
+  const canMention = Boolean(
+    groupAudience && groupInbox.data?.richSendEnabled && !groupSendDisabled,
+  )
+  const [mentionQuery, setMentionQuery] = useState<ZaloMentionQuery | null>(
+    null,
+  )
+  const [mentionDraft, setMentionDraft] = useState<{
+    text: string
+    mentions: ZaloMentionRange[]
+  }>({
+    text: "",
+    mentions: [],
+  })
+  // The form may keep its text while navigating. Native identities never carry to another thread.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset only on a conversation switch
+  useEffect(() => {
+    setMentionQuery(null)
+    setMentionDraft({ text: "", mentions: [] })
+  }, [activeConversationId])
+  const recentMentionSenders = useMemo(
+    () =>
+      groupAudience
+        ? [
+            ...new Map(
+              messages.slice(-50).flatMap((message) => {
+                const sender = getZaloGroupMessage(message.contentAttributes)
+                return sender?.senderId &&
+                  !sender.isSelf &&
+                  message.conversationId === activeConversationId &&
+                  sender.threadId === groupAudience.providerGroupId
+                  ? [
+                      [
+                        sender.senderId,
+                        { uid: sender.senderId, name: sender.senderName },
+                      ] as const,
+                    ]
+                  : []
+              }),
+            ).values(),
+          ]
+        : [],
+    [activeConversationId, groupAudience, messages],
+  )
   const lastTypingAt = useRef(0)
   const threadControl = useThreadControl(conversation, channel)
 
@@ -429,6 +492,101 @@ export const MessageInput = () => {
   // Messages are held behind a failed (or unconfirmed) one: sending more would
   // only pile on, so the composer waits for the person's decision.
   const isSendLocked = sendQueue ? isSendQueueLocked(sendQueue) : false
+  const pendingZaloSends = sendQueue?.waiting.filter(
+    ({ input }) =>
+      input.zaloAccountContent ||
+      input.zaloAccountUpload ||
+      input.zaloAccountForward,
+  )
+
+  const sendZaloContent = useCallback(
+    (content: ZaloComposerContent) => {
+      if (
+        !conversation ||
+        composerInbox?.channel !== "zaloAccount" ||
+        groupSendDisabled ||
+        isSendLocked
+      ) {
+        return false
+      }
+      const clientId = createId()
+      const parsed = createMessageWithRoutingBypassRequest.safeParse({
+        ...content,
+        clientId,
+        inboxId: composerInbox.inboxId,
+        ...(replyToMessage && {
+          replyToMessageId: replyToMessage.id,
+          replyToMessageCreatedAt: replyToMessage.createdAt,
+        }),
+      })
+      if (!parsed.success) {
+        return false
+      }
+      const native = content.zaloAccountContent
+      const upload = content.zaloAccountUpload
+      const nativeText = native && "text" in native ? native.text : undefined
+      const caption = upload && "caption" in upload ? upload.caption : undefined
+      const optimisticMessageId = appendOptimistic({
+        clientId,
+        text: nativeText || caption || t("zaloAccount.evidence.pending"),
+      })
+      updateSendQueue(conversation.id, (queue) =>
+        enqueueSend(queue, {
+          clientId,
+          input: parsed.data,
+          optimisticMessageId,
+        }),
+      )
+      setReplyToMessage(null)
+      return true
+    },
+    [
+      appendOptimistic,
+      composerInbox,
+      conversation,
+      groupSendDisabled,
+      isSendLocked,
+      replyToMessage,
+      setReplyToMessage,
+      t,
+      updateSendQueue,
+    ],
+  )
+
+  const clearDraft = useCallback(() => {
+    form.setValue("text", "")
+    form.setValue("files", [])
+    form.setValue("mediaFileIds", [])
+    setSelectedMediaFiles([])
+    setMentionDraft({ text: "", mentions: [] })
+    setMentionQuery(null)
+    setReplyToMessage(null)
+    resetPreview()
+    textareaRef.current?.focus()
+  }, [form, resetPreview, setReplyToMessage])
+
+  const chooseMention = (member: ZaloMentionMember) => {
+    if (!mentionQuery) {
+      return
+    }
+    const text = form.getValues("text") ?? ""
+    const draft = applyZaloMention(
+      text,
+      updateZaloMentionRanges(mentionDraft.text, text, mentionDraft.mentions),
+      mentionQuery,
+      member,
+    )
+    form.setValue("text", draft.text, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+    setMentionDraft(draft)
+    setMentionQuery(null)
+    textareaRef.current?.focus()
+    requestAnimationFrame(() =>
+      textareaRef.current?.setSelectionRange(draft.caret, draft.caret),
+    )
+  }
 
   const sendMessage = useCallback(async () => {
     if (groupSendDisabled) {
@@ -436,6 +594,42 @@ export const MessageInput = () => {
       return
     }
     if (isSendLocked) {
+      return
+    }
+    const currentText = form.getValues("text") ?? ""
+    const mentions = canMention
+      ? trimZaloMentionRanges(
+          currentText,
+          updateZaloMentionRanges(
+            mentionDraft.text,
+            currentText,
+            mentionDraft.mentions,
+          ),
+        )
+      : []
+    if (mentions.length) {
+      const text = currentText.trim()
+      const files = form.getValues("files")
+      const hasMedia =
+        selectedMediaFiles.length > 0 ||
+        (Array.isArray(files) && files.length > 0)
+      const content: ZaloComposerContent = hasMedia
+        ? {
+            zaloAccountUpload: {
+              type: "media",
+              caption: text,
+              mentions,
+              ...(selectedMediaFiles.length > 0
+                ? { mediaFileIds: selectedMediaFiles.map(({ id }) => id) }
+                : { files }),
+            },
+          }
+        : { zaloAccountContent: { kind: "text", text, mentions } }
+      if (sendZaloContent(content)) {
+        clearDraft()
+      } else {
+        toast.error(t("validation.form.invalid"))
+      }
       return
     }
     // With the translation preview on, Enter first translates and shows it; the
@@ -527,18 +721,13 @@ export const MessageInput = () => {
         optimisticMessageId,
       }),
     )
-    form.setValue("text", "")
-    form.setValue("files", [])
-    form.setValue("mediaFileIds", [])
-    setSelectedMediaFiles([])
-    setReplyToMessage(null)
-    resetPreview()
-    textareaRef.current?.focus()
+    clearDraft()
   }, [
     appendOptimistic,
+    canMention,
+    clearDraft,
     composerTranslation,
     previewEnabled,
-    resetPreview,
     translatePreview,
     translatesSend,
     translationPreview,
@@ -550,18 +739,23 @@ export const MessageInput = () => {
     isPrivateReply,
     isSendLocked,
     groupSendDisabled,
+    mentionDraft,
+    sendZaloContent,
     t,
     lastContactComment,
     replyToMessage,
     replyKind,
     selectedMediaFiles,
-    setReplyToMessage,
     updateSendQueue,
   ])
 
   // Memoize keyboard handler
   const onKeyDown = useCallback(
     async (e: KeyboardEvent) => {
+      if (e.key === "Escape" && mentionQuery) {
+        setMentionQuery(null)
+        return
+      }
       if (!shouldSendOnEnter(e, isTouchDevice)) {
         return
       }
@@ -569,7 +763,7 @@ export const MessageInput = () => {
       e.preventDefault()
       await sendMessage()
     },
-    [isTouchDevice, sendMessage],
+    [isTouchDevice, mentionQuery, sendMessage],
   )
 
   const isInstagramPostComment =
@@ -778,6 +972,36 @@ export const MessageInput = () => {
               reason={sendQueue.holdReason}
             />
           )}
+          {activeConversationId &&
+            pendingZaloSends?.map((item) => (
+              <div
+                className="mx-2.5 mb-1 flex items-center justify-between gap-2 px-2 text-muted-foreground text-xs"
+                key={item.clientId}
+              >
+                <span role="status">{t("zaloAccount.evidence.pending")}</span>
+                <Button
+                  onClick={() => {
+                    let cancelled = false
+                    updateSendQueue(activeConversationId, (queue) => {
+                      const result = takeWaitingSends(
+                        queue,
+                        (waiting) => waiting.clientId === item.clientId,
+                      )
+                      cancelled = result.taken.length > 0
+                      return result.queue
+                    })
+                    if (cancelled && item.optimisticMessageId) {
+                      markMessagesDeleted([item.optimisticMessageId])
+                    }
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  {t("actions.cancel")}
+                </Button>
+              </div>
+            ))}
           {composerTranslation.kind === "unknownLanguage" && (
             <p className="mx-2.5 mb-1 flex items-center gap-1.5 text-muted-foreground text-xs">
               {isDetectingLanguage ? (
@@ -803,7 +1027,10 @@ export const MessageInput = () => {
                     {t("messages.privateReply")}:
                   </span>
                 )}
-                {replyToMessage.text || t("messages.facebookComment")}
+                {composerInbox?.channel === "zaloAccount" &&
+                isZaloStickerMessage(replyToMessage)
+                  ? t("zaloAccount.sticker")
+                  : replyToMessage.text || t("messages.facebookComment")}
               </span>
               <Button
                 aria-label="Clear reply"
@@ -836,6 +1063,23 @@ export const MessageInput = () => {
                     {...field}
                     onChange={(event) => {
                       field.onChange(event)
+                      if (canMention) {
+                        const { value, selectionStart, selectionEnd } =
+                          event.currentTarget
+                        setMentionDraft((current) => ({
+                          text: value,
+                          mentions: updateZaloMentionRanges(
+                            current.text,
+                            value,
+                            current.mentions,
+                          ),
+                        }))
+                        setMentionQuery(
+                          selectionStart === selectionEnd
+                            ? findZaloMentionQuery(value, selectionStart)
+                            : null,
+                        )
+                      }
                       if (
                         groupAudience &&
                         conversation &&
@@ -860,6 +1104,19 @@ export const MessageInput = () => {
               )}
             />
           </div>
+          {canMention && mentionQuery && groupAudience && conversation && (
+            <ZaloMentionPicker
+              accountId={groupAudience.accountId}
+              conversationId={conversation.id}
+              groupId={groupAudience.groupId}
+              key={conversation.id}
+              onChoose={chooseMention}
+              onDismiss={() => setMentionQuery(null)}
+              query={mentionQuery.query}
+              recent={recentMentionSenders}
+              workspaceId={conversation.workspaceId}
+            />
+          )}
           {composerTranslation.kind === "active" && (
             <ComposerTranslationPreview
               language={composerTranslation.language}
@@ -900,6 +1157,30 @@ export const MessageInput = () => {
               )}
             </div>
           )}
+          {conversation &&
+            composerInbox?.channel === "zaloAccount" &&
+            !groupSendDisabled &&
+            !isSendLocked && (
+              <ZaloComposer
+                conversationId={conversation.id}
+                inboxId={composerInbox.inboxId}
+                key={`${conversation.id}:${composerInbox.inboxId}`}
+                mentionDraft={canMention ? mentionDraft : undefined}
+                onSend={(content) => {
+                  const queued = sendZaloContent(content)
+                  if (
+                    queued &&
+                    content.zaloAccountContent?.kind === "text" &&
+                    content.zaloAccountContent.mentions?.length
+                  ) {
+                    clearDraft()
+                  }
+                  return queued
+                }}
+                userId={session?.data?.user.id}
+                workspaceId={conversation.workspaceId}
+              />
+            )}
           <div className="scrollbar-hide flex w-full items-center gap-2 overflow-x-auto ps-2.5">
             <div className="flex min-w-0 flex-1 items-center gap-1">
               <InboxIcon

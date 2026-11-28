@@ -29,6 +29,16 @@ vi.mock("../src/zalo-account/group.service", () => ({
   zaloAccountGroupService: { get: mocks.group },
 }))
 vi.mock("../src/zalo-account/send-attempt.service", () => ({
+  getZaloAccountSendResult: (row: {
+    status: string
+    providerMessageIds: string[]
+  }) =>
+    row.status === "applied"
+      ? {
+          messageIds: row.providerMessageIds,
+          sentCount: row.providerMessageIds.length,
+        }
+      : null,
   zaloAccountSendAttemptService: {
     commandId: async () => "scoped-command",
     publishOutcome: vi.fn(),

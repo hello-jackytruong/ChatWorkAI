@@ -1,6 +1,7 @@
 "use server"
 
 import {
+  isZaloAccountRichSendEnabled,
   zaloAccountGroupService,
   zaloAccountGroupTagService,
   zaloAccountMessageStateService,
@@ -33,6 +34,7 @@ export const getZaloGroupInboxAction = workspaceActionClient
       })
       return {
         group,
+        richSendEnabled: isZaloAccountRichSendEnabled(accountId),
         status: account.status,
         gatewayAvailable: account.gatewayAvailable,
         canSend:

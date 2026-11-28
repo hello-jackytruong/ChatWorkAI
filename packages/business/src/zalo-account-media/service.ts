@@ -196,6 +196,9 @@ export class ZaloAccountMediaService {
                   width: resource.width,
                   height: resource.height,
                   durationMs: resource.durationMs,
+                  ...(resource.frameCount === undefined
+                    ? {}
+                    : { frameCount: resource.frameCount }),
                   mimeType: resource.mimeType,
                 },
                 deletionPhase: "active",
@@ -246,12 +249,18 @@ export class ZaloAccountMediaService {
     if (!asset?.encryptedSource) {
       return null
     }
-    const source = await encryptUtils.decryptObject<MediaSource>(
-      asset.encryptedSource,
-      sourceSchema,
-      aad(input),
-    )
+    const source = await this.readAssetSource(input, asset.encryptedSource)
     return { asset, source }
+  }
+  async readAssetSource(
+    scope: MediaScope,
+    encryptedSource: NonNullable<MediaJoined["asset"]["encryptedSource"]>,
+  ): Promise<MediaSource> {
+    return await encryptUtils.decryptObject<MediaSource>(
+      encryptedSource,
+      sourceSchema,
+      aad(scope),
+    )
   }
   reserveCandidate(input: MediaLease & { objectKey: string }) {
     const prefix = `workspace/${input.workspaceId}/zalo-account/${input.accountId}/`

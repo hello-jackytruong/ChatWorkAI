@@ -90,6 +90,64 @@ it("cannot downgrade an accepted ACK on a late failure", async () => {
   expect(result.row.status).toBe("applied")
   expect(mocks.update).not.toHaveBeenCalled()
 })
+
+it("stops retries for an accepted acknowledgement with no IDs and skips alias reconciliation", async () => {
+  mocks.row = {
+    ...scope,
+    status: "unknown",
+    messageId: "m",
+    messageCreatedAt: new Date(),
+    reconciliation: null,
+  }
+  const result = await repository.settle({
+    ...scope,
+    status: "applied",
+    providerMessageIds: [],
+    sentCount: 1,
+    delivery: "accepted_without_id",
+  })
+  expect(result.row).toMatchObject({
+    status: "applied",
+    providerMessageIds: [],
+    reconciliation: {
+      state: "not_required",
+      delivery: "accepted_without_id",
+      sentCount: 1,
+    },
+  })
+})
+
+it("adds late partial evidence to identical IDs and retains it on retries and conflicting ACKs", async () => {
+  const acknowledgement = {
+    ...scope,
+    status: "applied" as const,
+    providerMessageIds: ["winner", "alias"],
+  }
+  const delta = {
+    sentCount: 2,
+    delivery: "partial" as const,
+    remainingUnknown: false,
+  }
+  const enriched = await repository.settle({ ...acknowledgement, ...delta })
+  expect(enriched).toMatchObject({
+    conflict: false,
+    row: { reconciliation: { ...delta, state: "completed", revision: 3 } },
+  })
+  const retry = await repository.settle(acknowledgement)
+  expect(retry).toMatchObject({
+    conflict: false,
+    row: { reconciliation: delta },
+  })
+  const conflicting = await repository.settle({
+    ...acknowledgement,
+    ...delta,
+    remainingUnknown: true,
+  })
+  expect(conflicting).toMatchObject({
+    conflict: true,
+    row: { reconciliation: { ...delta, state: "needs_review", revision: 4 } },
+  })
+})
 it("completes repair only for the claimed revision and unchanged confirmed IDs", async () => {
   await repository.finishReconciliation({
     ...scope,

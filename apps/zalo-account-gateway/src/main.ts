@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url"
 import {
+  isZaloAccountRichSendEnabled,
   takeDirectSendCapacity,
   zaloAccountGroupService,
   zaloAccountLabelService,
@@ -62,6 +63,7 @@ export const main = async (): Promise<void> => {
     : disabledEventSink
   const pool = new ZaloAccountPool({
     messageIntegrityEnabled: env.messageIntegrityEnabled,
+    richSendEnabled: (accountId) => isZaloAccountRichSendEnabled(accountId),
     admitDirectSend: takeDirectSendCapacity,
     onLeaseLost: () => scheduleRecovery(0),
     claim: (input) => zaloAccountRuntimeStateService.claim(input),

@@ -1,5 +1,107 @@
 import { z } from "zod"
 
+const stickerId = z.string().regex(/^[1-9]\d{0,14}$/)
+const stickerCategoryId = z.string().regex(/^(?:0|[1-9]\d{0,14})$/)
+const stickerType = z.number().int().positive().max(32_767)
+const stickerTitle = z.string().trim().min(1).max(200)
+const stickerFrameCount = z.number().int().positive().max(1000)
+const stickerFrameDuration = z.number().int().positive().max(10_000)
+
+export const zaloAccountStickerSendIdentitySchema = z.strictObject({
+  stickerId,
+  categoryId: stickerCategoryId,
+  stickerType,
+})
+export const zaloAccountStickerMessageIdentitySchema =
+  zaloAccountStickerSendIdentitySchema.partial({
+    categoryId: true,
+    stickerType: true,
+  })
+
+const stickerCatalogLimit = z.number().int().min(1).max(20).default(20)
+export const zaloAccountStickerCatalogQuerySchema = z.discriminatedUnion(
+  "kind",
+  [
+    z.strictObject({
+      kind: z.literal("search"),
+      query: z.string().trim().min(1).max(200),
+      limit: stickerCatalogLimit,
+    }),
+    z.strictObject({
+      kind: z.literal("category"),
+      categoryId: stickerCategoryId,
+      limit: stickerCatalogLimit,
+    }),
+  ],
+)
+export type ZaloAccountStickerCatalogQuery = z.infer<
+  typeof zaloAccountStickerCatalogQuerySchema
+>
+
+const stickerCatalogHosts = new Set(["zalo-api.zadn.vn", "zpsticke.zadn.vn"])
+const stickerAssetPath =
+  /^\/api\/emoticon\/(?:sticker\/(?:webpc|webp|sprite)|sprite|package\/\d{1,15}\/icon_\d{1,15}_big\.(?:webp|png))$/
+const stickerAssetParameters = new Set(["eid", "size", "version"])
+const numericAssetParameter = /^\d{1,15}$/
+
+/** The live account supplies catalog IDs separately from publicly usable previews. */
+export function toZaloAccountStickerCatalogUrl(
+  value: string | null | undefined,
+): string | undefined {
+  if (!(value?.startsWith("https://") && value.length <= 2048)) {
+    return
+  }
+  try {
+    const url = new URL(value)
+    if (
+      !(
+        stickerCatalogHosts.has(url.hostname) &&
+        stickerAssetPath.test(url.pathname)
+      ) ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.hash
+    ) {
+      return
+    }
+    const seen = new Set<string>()
+    for (const [key, parameter] of url.searchParams) {
+      if (
+        !(
+          stickerAssetParameters.has(key) &&
+          numericAssetParameter.test(parameter)
+        ) ||
+        seen.has(key)
+      ) {
+        return
+      }
+      seen.add(key)
+    }
+    return url.href
+  } catch {
+    return
+  }
+}
+
+const stickerCatalogUrl = z
+  .string()
+  .refine((value) => Boolean(toZaloAccountStickerCatalogUrl(value)), {
+    message: "Expected a public Zalo sticker asset URL",
+  })
+export const zaloAccountStickerCatalogEntrySchema =
+  zaloAccountStickerSendIdentitySchema.extend({
+    title: stickerTitle.optional(),
+    frameCount: stickerFrameCount.optional(),
+    frameDurationMs: stickerFrameDuration.optional(),
+    staticUrl: stickerCatalogUrl.optional(),
+    webpUrl: stickerCatalogUrl.optional(),
+    spriteUrl: stickerCatalogUrl.optional(),
+  })
+export type ZaloAccountStickerCatalogEntry = z.infer<
+  typeof zaloAccountStickerCatalogEntrySchema
+>
+
 /** Inbound transport only: URLs can contain credentials and must not be projected publicly. */
 export const zaloAccountMediaResourceSchema = z
   .object({
@@ -38,6 +140,7 @@ export const zaloAccountMediaResourceSchema = z
       .max(Number.MAX_SAFE_INTEGER)
       .optional(),
     animated: z.boolean().optional(),
+    frameCount: stickerFrameCount.optional(),
   })
   .strict()
   .refine(
@@ -56,6 +159,11 @@ export type ZaloAccountMediaResource = z.infer<
 export const zaloAccountStickerResourceSchema = z
   .object({
     stickerId: z.string().min(1).max(200),
+    categoryId: stickerCategoryId.optional(),
+    stickerType: stickerType.optional(),
+    title: stickerTitle.optional(),
+    frameCount: stickerFrameCount.optional(),
+    frameDurationMs: stickerFrameDuration.optional(),
     resources: z.array(zaloAccountMediaResourceSchema).max(3),
   })
   .strict()

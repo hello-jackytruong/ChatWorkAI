@@ -4,9 +4,12 @@ import {
   type ZaloAccountErrorInfo,
   type ZaloAccountFriendSync,
   type ZaloAccountGroup,
+  type ZaloAccountGroupMembersResult,
   type ZaloAccountGroupSync,
   type ZaloAccountLabelSnapshot,
   ZaloAccountPreDispatchError,
+  type ZaloAccountSendDelivery,
+  type ZaloAccountStickerCatalogEntry,
   type ZaloAccountStickerResource,
 } from "@chatbotx.io/sdk"
 import type { ZaloAccountPool } from "../runtime/zalo-account-pool"
@@ -14,6 +17,8 @@ import type { ProviderAdmissionPort } from "./provider-admission"
 
 type PoolPort = Pick<
   ZaloAccountPool,
+  | "getGroupMembers"
+  | "getStickerCatalog"
   | "getLabels"
   | "getStickerResources"
   | "listGroups"
@@ -35,11 +40,15 @@ export type CommandExecutionOutcome =
         status: string
         messageIds?: string[]
         sentCount?: number
+        delivery?: ZaloAccountSendDelivery
+        remainingUnknown?: boolean
         groups?: ZaloAccountGroup[]
         groupSync?: ZaloAccountGroupSync
         friendSync?: ZaloAccountFriendSync
         labels?: ZaloAccountLabelSnapshot
         stickerResources?: ZaloAccountStickerResource[]
+        stickerCatalog?: ZaloAccountStickerCatalogEntry[]
+        groupMembers?: ZaloAccountGroupMembersResult
       }
     }
   | { status: "rejected_stale" }
@@ -132,6 +141,8 @@ const operationSafety = (
     case "sync_friends":
     case "get_labels":
     case "get_sticker_resources":
+    case "get_sticker_catalog":
+    case "get_group_members":
       return "read"
     case "send_direct":
     case "send_group":
@@ -222,7 +233,11 @@ export class ZaloAccountCommandExecutor {
     try {
       const result = await this.dispatchWithReadRetry(command)
       if (command.kind !== "stop") {
-        this.options.admission?.recordSuccess(accountId)
+        if (result.delivery === "partial" && result.remainingUnknown) {
+          this.options.admission?.recordFailure(accountId)
+        } else {
+          this.options.admission?.recordSuccess(accountId)
+        }
       }
       const outcome: CommandExecutionOutcome = { status: "applied", result }
       await this.options.stateStore.complete(
@@ -404,11 +419,15 @@ export class ZaloAccountCommandExecutor {
     status: string
     messageIds?: string[]
     sentCount?: number
+    delivery?: ZaloAccountSendDelivery
+    remainingUnknown?: boolean
     groups?: ZaloAccountGroup[]
     groupSync?: ZaloAccountGroupSync
     friendSync?: ZaloAccountFriendSync
     labels?: ZaloAccountLabelSnapshot
     stickerResources?: ZaloAccountStickerResource[]
+    stickerCatalog?: ZaloAccountStickerCatalogEntry[]
+    groupMembers?: ZaloAccountGroupMembersResult
   }> {
     if (command.kind === "native_operation") {
       throw new Error("Native operations require durable dispatch")
@@ -499,6 +518,27 @@ export class ZaloAccountCommandExecutor {
         stickerResources: await this.options.pool.getStickerResources({
           ...poolCommand,
           stickerIds: command.stickerIds,
+        }),
+      }
+    }
+    if (command.kind === "get_sticker_catalog") {
+      return {
+        status: "synced",
+        stickerCatalog: await this.options.pool.getStickerCatalog({
+          ...poolCommand,
+          query: command.stickerCatalogQuery,
+        }),
+      }
+    }
+    if (command.kind === "get_group_members") {
+      return {
+        status: "synced",
+        groupMembers: await this.options.pool.getGroupMembers({
+          ...poolCommand,
+          groupId: command.groupId,
+          accountPolicyEpoch: command.accountPolicyEpoch,
+          groupPolicyEpoch: command.groupPolicyEpoch,
+          groupMemberQuery: command.groupMemberQuery,
         }),
       }
     }

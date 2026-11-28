@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Konfigurer",
     "connectionStatus": "Forbindelsesstatus",
     "active": "Aktiv",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Ingen beskedgrænse er tilgængelig til sletning af Zalo-historik.",
     "deletedOnMyZalo": "Slettet på min Zalo",
     "deleteChatBoundary": "Grænse for sletning af historik",
+    "quote": {
+      "title": "Oprindelig besked",
+      "unavailable": "Den oprindelige besked er ikke tilgængelig."
+    },
+    "mention": {
+      "partial": "Medlemsforslagene kan være ufuldstændige."
+    },
+    "sticker": "Klistermærke",
+    "forward": {
+      "title": "Videresend besked",
+      "sendCopy": "Send en kopi",
+      "description": "Vælg en samtale på samme Zalo-konto."
+    },
+    "composer": {
+      "moreMessageTypes": "Flere meddelelsestyper",
+      "recordVoice": "Optag talebesked",
+      "voiceUnavailable": "Optagelse er ikke tilgængelig. Vælg en M4A-fil.",
+      "videoPoster": "Videoforside",
+      "bankBin": "Bankkode (BIN)",
+      "accountNumber": "Kontonummer",
+      "underline": "Understregning",
+      "urgent": "Haster"
+    },
+    "richMessage": {
+      "openMap": "Åbn kort",
+      "bankDetails": "Bankkontooplysninger",
+      "missedCall": "Ubesvaret opkald",
+      "unansweredCall": "Opkald uden svar",
+      "incomingCall": "Indgående opkald",
+      "outgoingCall": "Udgående opkald",
+      "videoCall": "Videoopkald",
+      "voiceCall": "Taleopkald",
+      "processingMedia": "Behandler medie…",
+      "mediaUnavailable": "Mediet er ikke tilgængeligt"
+    },
     "evidence": {
+      "sentPartially": "Delvist sendt",
+      "acceptedWithoutId": "Zalo har accepteret beskeden. Besked-id afventes.",
       "unsupportedContent": "Zalo-beskeden understøttes ikke",
       "invalidContent": "Zalo-beskeden kunne ikke læses",
       "unsupportedSchema": "Zalo-beskedformatet understøttes ikke",

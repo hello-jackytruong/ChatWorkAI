@@ -87,21 +87,30 @@ describe("inbound media capture", () => {
         mediaResources: [{ kind: "video", sourceMissing: "source_missing" }],
       },
     })
-    for (const msgType of ["bank", "link"]) {
-      expect(
-        normalizeProviderMessage({
-          ...base,
-          type: 0,
-          data: {
-            ...base.data,
-            msgType,
-            content: {
-              href: "https://bank.example.test",
-              image: "https://bank.example.test/logo",
-            },
-          },
-        }).kind,
-      ).toBe("unsupported")
+    const webpage = {
+      href: "https://bank.example.test",
+      image: "https://bank.example.test/logo",
+    }
+    expect(
+      normalizeProviderMessage({
+        ...base,
+        type: 0,
+        data: { ...base.data, msgType: "bank", content: webpage },
+      }).kind,
+    ).toBe("unsupported")
+    const link = normalizeProviderMessage({
+      ...base,
+      type: 0,
+      data: { ...base.data, msgType: "link", content: webpage },
+    })
+    expect(link).toMatchObject({
+      kind: "direct",
+      message: {
+        richContent: { kind: "link", url: "https://bank.example.test/" },
+      },
+    })
+    if (link.kind === "direct") {
+      expect(link.message.mediaResources).toBeUndefined()
     }
   })
   it("keeps inbound-only kinds outside outgoing sends", () => {

@@ -2,6 +2,7 @@ import type { ZaloAccountNativeOperation } from "@chatbotx.io/sdk"
 import {
   type ZaloAccountAuth,
   type ZaloAccountDirectMessage,
+  type ZaloAccountGroupMembersQuery,
   type ZaloAccountLabel,
   type ZaloAccountLabelSnapshot,
   type ZaloAccountLifecycleEvent,
@@ -9,6 +10,7 @@ import {
   ZaloAccountPreDispatchError,
   type ZaloAccountRuntimeDiagnostics,
   type ZaloAccountRuntimeRef,
+  type ZaloAccountStickerCatalogQuery,
   zaloAccountAuthorizationEventSchema,
   zaloAccountLifecycleEventSchema,
 } from "@chatbotx.io/sdk"
@@ -268,6 +270,12 @@ export class ZaloAccountRuntime {
     message: ZaloAccountOutboundMessage,
     beforeDispatch?: () => Promise<void>,
   ): Promise<RuntimeSendResult> {
+    const { api, admit } = this.prepareSend(beforeDispatch)
+    const result = await api.sendDirect(message, admit)
+    return { status: "sent", ...result }
+  }
+
+  private prepareSend(beforeDispatch?: () => Promise<void>) {
     if (
       !(
         this.active &&
@@ -294,12 +302,14 @@ export class ZaloAccountRuntime {
         )
       }
     }
-    const result = await api.sendDirect(message, async () => {
-      assertConnected()
-      await beforeDispatch?.()
-      assertConnected()
-    })
-    return { status: "sent", ...result }
+    return {
+      api,
+      admit: async () => {
+        assertConnected()
+        await beforeDispatch?.()
+        assertConnected()
+      },
+    }
   }
 
   async listGroups() {
@@ -370,20 +380,10 @@ export class ZaloAccountRuntime {
   async sendGroup(
     groupId: string,
     message: ZaloAccountOutboundMessage,
+    beforeDispatch?: () => Promise<void>,
   ): Promise<RuntimeSendResult> {
-    if (
-      !(
-        this.active &&
-        this.api &&
-        this.state === "connected" &&
-        !this.closeObserved
-      )
-    ) {
-      throw new ZaloAccountPreDispatchError(
-        "Zalo Account runtime is not connected",
-      )
-    }
-    const result = await this.api.sendGroup(groupId, message)
+    const { api, admit } = this.prepareSend(beforeDispatch)
+    const result = await api.sendGroup(groupId, message, admit)
     return { status: "sent", ...result }
   }
 
@@ -401,6 +401,40 @@ export class ZaloAccountRuntime {
       )
     }
     return await this.api.getStickerResources(stickerIds)
+  }
+
+  async getStickerCatalog(query: ZaloAccountStickerCatalogQuery) {
+    if (
+      !(
+        this.active &&
+        this.api?.getStickerCatalog &&
+        this.state === "connected" &&
+        !this.closeObserved &&
+        Date.now() < this.leaseExpiresAt
+      )
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account sticker catalog unavailable",
+      )
+    }
+    return await this.api.getStickerCatalog(query)
+  }
+
+  async getGroupMembers(groupId: string, query: ZaloAccountGroupMembersQuery) {
+    if (
+      !(
+        this.active &&
+        this.api?.getGroupMembers &&
+        this.state === "connected" &&
+        !this.closeObserved &&
+        Date.now() < this.leaseExpiresAt
+      )
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account group members are unavailable",
+      )
+    }
+    return await this.api.getGroupMembers(groupId, query)
   }
 
   async getLabels(): Promise<ZaloAccountLabelSnapshot> {

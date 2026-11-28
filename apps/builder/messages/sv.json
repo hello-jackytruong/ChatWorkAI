@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Konfigurera",
     "connectionStatus": "Anslutningsstatus",
     "active": "Aktiv",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Ingen meddelandegräns finns för att ta bort Zalo-historik.",
     "deletedOnMyZalo": "Borttaget på min Zalo",
     "deleteChatBoundary": "Gräns för borttagning av historik",
+    "quote": {
+      "title": "Ursprungligt meddelande",
+      "unavailable": "Det ursprungliga meddelandet är inte tillgängligt."
+    },
+    "mention": {
+      "partial": "Medlemsförslagen kan vara ofullständiga."
+    },
+    "sticker": "Klistermärke",
+    "forward": {
+      "title": "Vidarebefordra meddelande",
+      "sendCopy": "Skicka en kopia",
+      "description": "Välj en konversation i samma Zalo-konto."
+    },
+    "composer": {
+      "moreMessageTypes": "Fler meddelandetyper",
+      "recordVoice": "Spela in röstmeddelande",
+      "voiceUnavailable": "Inspelning är inte tillgänglig. Välj en M4A-fil.",
+      "videoPoster": "Omslagsbild för video",
+      "bankBin": "Bankkod (BIN)",
+      "accountNumber": "Kontonummer",
+      "underline": "Understrykning",
+      "urgent": "Brådskande"
+    },
+    "richMessage": {
+      "openMap": "Öppna karta",
+      "bankDetails": "Bankkontouppgifter",
+      "missedCall": "Missat samtal",
+      "unansweredCall": "Obesvarat samtal",
+      "incomingCall": "Inkommande samtal",
+      "outgoingCall": "Utgående samtal",
+      "videoCall": "Videosamtal",
+      "voiceCall": "Röstsamtal",
+      "processingMedia": "Bearbetar media…",
+      "mediaUnavailable": "Mediet är inte tillgängligt"
+    },
     "evidence": {
+      "sentPartially": "Delvis skickat",
+      "acceptedWithoutId": "Zalo har accepterat meddelandet. Meddelande-ID inväntas.",
       "unsupportedContent": "Zalo-meddelandet stöds inte",
       "invalidContent": "Zalo-meddelandet kunde inte läsas",
       "unsupportedSchema": "Zalo-meddelandeformatet stöds inte",

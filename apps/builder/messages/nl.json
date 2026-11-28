@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Configureren",
     "connectionStatus": "Verbindingsstatus",
     "active": "Actief",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Er is geen berichtgrens beschikbaar om de Zalo-geschiedenis te verwijderen.",
     "deletedOnMyZalo": "Verwijderd op mijn Zalo",
     "deleteChatBoundary": "Grens voor verwijderen van geschiedenis",
+    "quote": {
+      "title": "Oorspronkelijk bericht",
+      "unavailable": "Het oorspronkelijke bericht is niet beschikbaar."
+    },
+    "mention": {
+      "partial": "De voorgestelde leden zijn mogelijk onvolledig."
+    },
+    "sticker": "Sticker",
+    "forward": {
+      "title": "Bericht doorsturen",
+      "sendCopy": "Een kopie verzenden",
+      "description": "Kies een gesprek in hetzelfde Zalo-account."
+    },
+    "composer": {
+      "moreMessageTypes": "Meer berichttypen",
+      "recordVoice": "Spraakbericht opnemen",
+      "voiceUnavailable": "Opnemen is niet beschikbaar. Kies een M4A-bestand.",
+      "videoPoster": "Omslagafbeelding van video",
+      "bankBin": "Bankcode (BIN)",
+      "accountNumber": "Rekeningnummer",
+      "underline": "Onderstrepen",
+      "urgent": "Dringend"
+    },
+    "richMessage": {
+      "openMap": "Kaart openen",
+      "bankDetails": "Bankrekeninggegevens",
+      "missedCall": "Gemiste oproep",
+      "unansweredCall": "Onbeantwoorde oproep",
+      "incomingCall": "Inkomende oproep",
+      "outgoingCall": "Uitgaande oproep",
+      "videoCall": "Videogesprek",
+      "voiceCall": "Spraakoproep",
+      "processingMedia": "Media verwerken…",
+      "mediaUnavailable": "Media niet beschikbaar"
+    },
     "evidence": {
+      "sentPartially": "Gedeeltelijk verzonden",
+      "acceptedWithoutId": "Zalo heeft het bericht geaccepteerd. Bericht-ID nog niet beschikbaar.",
       "unsupportedContent": "Niet-ondersteund Zalo-bericht",
       "invalidContent": "Zalo-bericht kon niet worden gelezen",
       "unsupportedSchema": "Zalo-berichtindeling wordt niet ondersteund",

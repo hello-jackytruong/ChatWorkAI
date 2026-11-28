@@ -1,0 +1,18 @@
+.sprite {
+  animation: play var(--sticker-duration) steps(var(--sticker-frames)) infinite;
+}
+
+@keyframes play {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--sticker-shift));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sprite {
+    animation: none;
+  }
+}

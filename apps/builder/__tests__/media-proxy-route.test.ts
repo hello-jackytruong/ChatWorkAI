@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => {
     getPublicFileUrl: vi.fn(),
     loadServableWorkspace: vi.fn(),
     lowQueueAdd: vi.fn(),
+    previewZaloImage: vi.fn(),
     resolveFreshContactAvatarUrl: vi.fn(),
     resolveFreshMediaUrl: vi.fn(),
     resolveIntegrationForAttachment: vi.fn(),
@@ -29,6 +30,9 @@ vi.mock("@chatbotx.io/business/zalo-account/message-recall", () => ({
   zaloAccountMessageRecallService: {
     isOrdinaryAttachmentVisible: mocks.ordinaryAttachmentVisible,
   },
+}))
+vi.mock("@chatbotx.io/business/zalo-account-media", () => ({
+  zaloAccountMediaReadService: { previewImage: mocks.previewZaloImage },
 }))
 vi.mock("@chatbotx.io/encryption", () => ({
   verifyMediaToken: mocks.verifyMediaToken,
@@ -101,6 +105,17 @@ const tokenContext = (token = "signed-token") => ({
   params: Promise.resolve({ token }),
 })
 
+const zaloImagePreviewToken = () => ({
+  workspaceId: "workspace-1",
+  kind: "attachment",
+  refId: "reference-1",
+  expiresAt: Date.now() + 60_000,
+  zaloImagePreview: {
+    accountId: "account-1",
+    conversationId: "conversation-1",
+  },
+})
+
 const attachment = (
   originPath = "https://cdn.example/pending.jpg",
   id = "attachment-1",
@@ -138,6 +153,74 @@ describe("attachment media proxy", () => {
       refId: "attachment-1",
       expiresAt: Date.now() + 60_000,
     })
+  })
+
+  test("redirects a temporary Zalo image preview from its signed reference without caching or forwarding the token as a referrer", async () => {
+    mocks.verifyMediaToken.mockResolvedValue(zaloImagePreviewToken())
+    mocks.previewZaloImage.mockResolvedValue(
+      "https://zalo-cdn.example/preview.jpg",
+    )
+
+    const response = await getAttachment(
+      new Request(
+        "http://localhost/media/attachment/signed-token?retry=1&referenceId=another-reference&accountId=another-account",
+      ) as never,
+      tokenContext(),
+    )
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get("location")).toBe(
+      "https://zalo-cdn.example/preview.jpg",
+    )
+    expect(response.headers.get("cache-control")).toContain("no-store")
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer")
+    expect(mocks.previewZaloImage).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+      conversationId: "conversation-1",
+      referenceId: "reference-1",
+    })
+    expect(mocks.findAttachmentById).not.toHaveBeenCalled()
+    expect(mocks.lowQueueAdd).not.toHaveBeenCalled()
+    expect(mocks.resolveFreshMediaUrl).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    "null",
+    "throws",
+  ])("a Zalo image preview is unavailable when the scoped resolver %s", async (outcome) => {
+    mocks.verifyMediaToken.mockResolvedValue(zaloImagePreviewToken())
+    if (outcome === "throws") {
+      mocks.previewZaloImage.mockRejectedValue(new Error("preview unavailable"))
+    } else {
+      mocks.previewZaloImage.mockResolvedValue(null)
+    }
+
+    const response = await getAttachment(
+      new Request("http://localhost/media/attachment/signed-token") as never,
+      tokenContext(),
+    )
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3123/media/unavailable.svg",
+    )
+    expect(response.headers.get("cache-control")).toContain("no-store")
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer")
+    expect(mocks.findAttachmentById).not.toHaveBeenCalled()
+  })
+
+  test("rejects temporary Zalo image previews for unavailable workspaces before resolving the reference", async () => {
+    mocks.verifyMediaToken.mockResolvedValue(zaloImagePreviewToken())
+    mocks.loadServableWorkspace.mockResolvedValue({ servable: false })
+
+    const response = await getAttachment(
+      new Request("http://localhost/media/attachment/signed-token") as never,
+      tokenContext(),
+    )
+
+    expect(response.status).toBe(410)
+    expect(mocks.previewZaloImage).not.toHaveBeenCalled()
   })
 
   test("denies an old ordinary Zalo token after recall before storage signing or provider fallback", async () => {

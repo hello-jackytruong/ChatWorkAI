@@ -3,11 +3,21 @@ import {
   type ZaloAccountDirectMessage,
   type ZaloAccountGroupMessage,
   type ZaloAccountMediaResource,
-  type ZaloAccountQuote,
   zaloAccountDirectMessageSchema,
   zaloAccountGroupMessageSchema,
   zaloAccountMediaResourceSchema,
 } from "@chatbotx.io/sdk"
+import { readProviderAlbum } from "./provider-album"
+import {
+  asNonEmptyString,
+  asObject,
+  firstUrl,
+  parseObject,
+  providerNumber,
+  withinBudget,
+} from "./provider-content"
+import { quoteOf } from "./provider-quote"
+import { normalizeProviderRichContent } from "./provider-rich-content"
 
 type ProviderMessageData = {
   msgId?: unknown
@@ -21,6 +31,8 @@ type ProviderMessageData = {
   quote?: unknown
   mentions?: unknown
   propertyExt?: unknown
+  textProperties?: unknown
+  ttl?: unknown
 }
 
 export type ProviderMessageInput = {
@@ -39,65 +51,6 @@ export type NormalizedProviderMessage =
       message: ZaloAccountGroupMessage
     }
   | { kind: "unsupported"; reason: string }
-
-const asNonEmptyString = (
-  value: unknown,
-  maxLength = 512,
-): string | undefined => {
-  if (typeof value !== "string" && typeof value !== "number") {
-    return
-  }
-  if (typeof value === "number" && !Number.isSafeInteger(value)) {
-    return
-  }
-  const normalized = String(value).trim()
-  if (normalized.length > maxLength) {
-    return
-  }
-  return normalized || undefined
-}
-
-const asObject = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : undefined
-
-const parseObject = (value: unknown): Record<string, unknown> | undefined => {
-  const direct = asObject(value)
-  if (direct) {
-    return direct
-  }
-  if (typeof value !== "string" || value.length > 16_384) {
-    return
-  }
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return withinBudget(parsed) ? asObject(parsed) : undefined
-  } catch {
-    return
-  }
-}
-
-const firstUrl = (
-  object: Record<string, unknown>,
-  keys: string[],
-): string | undefined => {
-  for (const key of keys) {
-    const candidate = asNonEmptyString(object[key], 65_536)
-    if (!candidate) {
-      continue
-    }
-    try {
-      const url = new URL(candidate)
-      if (url.protocol === "https:" || url.protocol === "http:") {
-        return url.href
-      }
-    } catch {
-      // Provider payloads are untrusted. Invalid URLs are unsupported content.
-    }
-  }
-  return
-}
 
 const attachmentOf = (
   msgType: string,
@@ -185,16 +138,20 @@ const mediaResourcesOf = (
     }
     for (const [key, value] of Object.entries({
       providerResourceId: asNonEmptyString(
-        source.stickerId ?? source.fileId ?? source.id,
+        source.stickerId ?? source.sticker_id ?? source.fileId ?? source.id,
       ),
       providerVersion: asNonEmptyString(source.version),
       name: asNonEmptyString(source.name ?? source.title),
       mimeType: asNonEmptyString(source.mimeType ?? source.mime),
-      size: source.size ?? source.fileSize,
-      width: source.width,
-      height: source.height,
-      durationMs: source.durationMs ?? source.duration,
-      animated: source.animated,
+      size: providerNumber(source.size ?? source.fileSize, 0),
+      width: providerNumber(source.width, 1, 100_000),
+      height: providerNumber(source.height, 1, 100_000),
+      durationMs: providerNumber(source.durationMs ?? source.duration, 0),
+      animated: resourceKind === "gif" ? true : source.animated,
+      frameCount:
+        resourceKind === "sticker"
+          ? providerNumber(source.frameCount ?? source.totalFrames, 1, 1000)
+          : undefined,
     })) {
       if (value !== undefined) {
         candidate[key] = value
@@ -211,6 +168,7 @@ const mediaResourcesOf = (
         "height",
         "durationMs",
         "animated",
+        "frameCount",
         "name",
         "mimeType",
         "providerResourceId",
@@ -225,19 +183,30 @@ const mediaResourcesOf = (
     }
   }
   if (kind) {
-    add(merged, kind, "original", "original", [
+    const slot =
+      kind === "sticker" && firstUrl(merged, ["stickerUrl"])
+        ? "static"
+        : "original"
+    add(merged, kind, "original", slot, [
+      "stickerUrl",
       "oriUrl",
       "hdUrl",
       "fileUrl",
       "videoUrl",
+      "voiceUrl",
+      "m4aUrl",
       "audioUrl",
+      "gifUrl",
       "url",
       "href",
     ])
+    if (kind === "sticker" && firstUrl(merged, ["stickerWebpUrl"])) {
+      add(merged, "sticker", "original", "webp", ["stickerWebpUrl"])
+    }
     for (const [role, keys] of [
-      ["thumbnail", ["thumbUrl", "thumb"]],
+      ["thumbnail", ["thumbnailUrl", "thumbUrl", "thumb"]],
       ["poster", ["posterUrl", "poster"]],
-      ["sprite", ["spriteUrl"]],
+      ["sprite", ["stickerSpriteUrl", "spriteUrl"]],
     ] as const) {
       if (firstUrl(merged, [...keys])) {
         add(merged, kind === "sticker" ? "sticker" : "image", role, role, [
@@ -261,29 +230,69 @@ const mediaResourcesOf = (
   return resources.slice(0, 12)
 }
 
-const quoteOf = (value: unknown): ZaloAccountQuote | undefined => {
-  const quote = asObject(value)
-  if (!quote) {
-    return
-  }
-  const providerMessageId = asNonEmptyString(quote.msgId ?? quote.globalMsgId)
-  const senderId = asNonEmptyString(quote.ownerId ?? quote.uidFrom)
-  const msgType = asNonEmptyString(quote.msgType ?? quote.cliMsgType)
-  const timestampMs = Number(quote.ts)
-  if (
-    !(providerMessageId && senderId && msgType && Number.isFinite(timestampMs))
-  ) {
-    return
-  }
-  const text = asNonEmptyString(quote.msg ?? quote.content, 20_000)
-  const clientMessageId = asNonEmptyString(quote.cliMsgId)
-  return {
-    providerMessageId,
-    senderId,
+const normalizeContent = (
+  data: ProviderMessageData | undefined,
+  msgType: string,
+  isSelf: boolean,
+  group: boolean,
+) => {
+  const rawContent = data?.content
+  const content = asObject(rawContent)
+  const presentation = normalizeProviderRichContent({
     msgType,
-    timestampMs,
-    ...(clientMessageId ? { clientMessageId } : {}),
-    ...(text ? { text } : {}),
+    content: rawContent,
+    propertyExt: data?.propertyExt,
+    textProperties: data?.textProperties,
+    isSelf,
+  })
+  const presentationKind = presentation.richContent?.kind
+  const card =
+    presentationKind &&
+    presentationKind !== "styledText" &&
+    presentationKind !== "sticker"
+  const attachment =
+    content && !card ? attachmentOf(msgType, content) : undefined
+  const mediaType = presentationKind === "sticker" ? "sticker" : msgType
+  const mediaResources =
+    content && !card ? mediaResourcesOf(mediaType, content) : []
+  if (presentation.image) {
+    mediaResources.push(presentation.image)
+  }
+  const photo =
+    content && attachment?.kind === "image" && msgType === "chat.photo"
+      ? content
+      : undefined
+  const album = photo ? readProviderAlbum(asObject(data), photo) : undefined
+  const photoCaption = photo
+    ? asNonEmptyString(
+        photo.desc ?? photo.caption ?? parseObject(photo.params)?.desc,
+        20_000,
+      )
+    : undefined
+  const caption =
+    content &&
+    mediaResources.some((resource) =>
+      ["video", "audio", "gif"].includes(resource.kind),
+    )
+      ? asNonEmptyString(content.title ?? content.caption, 20_000)
+      : undefined
+  let text = presentation.text ?? photoCaption ?? caption
+  if (typeof rawContent === "string") {
+    text =
+      group || presentation.richContent
+        ? rawContent
+        : asNonEmptyString(rawContent, 20_000)
+  }
+  const providerTtl = providerNumber(data?.ttl, 0)
+  return {
+    ...(text === undefined ? {} : { text }),
+    attachments: attachment ? [attachment] : [],
+    ...(mediaResources.length ? { mediaResources } : {}),
+    ...(album ? { album } : {}),
+    ...(presentation.richContent
+      ? { richContent: presentation.richContent }
+      : {}),
+    ...(Number.isSafeInteger(providerTtl) ? { providerTtl } : {}),
   }
 }
 
@@ -293,13 +302,11 @@ const normalizeGroupMessage = (
   providerMessageId: string,
 ): NormalizedProviderMessage => {
   const data = input.data
-  const rawContent = data?.content
-  const content = asObject(rawContent)
   const msgType = asNonEmptyString(data?.msgType)
-  const attachment =
-    content && msgType ? attachmentOf(msgType, content) : undefined
-  const mediaResources =
-    content && msgType ? mediaResourcesOf(msgType, content) : []
+  if (!msgType) {
+    return { kind: "unsupported", reason: "invalid_group_message" }
+  }
+  const isSelf = input.isSelf === true
   const extension = asObject(data?.propertyExt)
   const fallback = parseObject(extension?.ext)
   const mentions = data?.mentions ?? fallback?.mentions ?? []
@@ -312,10 +319,8 @@ const normalizeGroupMessage = (
     senderName: asNonEmptyString(data?.dName),
     timestampMs: Number(data?.ts),
     msgType,
-    isSelf: input.isSelf === true,
-    text: typeof rawContent === "string" ? rawContent : undefined,
-    attachments: attachment ? [attachment] : [],
-    ...(mediaResources.length ? { mediaResources } : {}),
+    isSelf,
+    ...normalizeContent(data, msgType, isSelf, true),
     quote: quoteOf(data?.quote),
     mentions: Array.isArray(mentions)
       ? mentions.slice(0, 101).map((value: unknown) => {
@@ -369,16 +374,16 @@ const normalizeLegacyMessage = (
     return { kind: "unsupported", reason: "missing_message_fields" }
   }
 
-  const rawContent = data?.content
-  const text = asNonEmptyString(rawContent, 20_000)
-  const contentObject = asObject(rawContent)
-  const attachment = contentObject
-    ? attachmentOf(msgType, contentObject)
-    : undefined
-  const mediaResources = contentObject
-    ? mediaResourcesOf(msgType, contentObject)
-    : []
-  if (!(text || attachment || mediaResources.length)) {
+  const isSelf = input.isSelf === true
+  const content = normalizeContent(data, msgType, isSelf, false)
+  if (
+    !(
+      content.text ||
+      content.attachments.length ||
+      content.mediaResources?.length ||
+      content.richContent
+    )
+  ) {
     return { kind: "unsupported", reason: "unsupported_content" }
   }
 
@@ -397,10 +402,8 @@ const normalizeLegacyMessage = (
       ...(senderName ? { senderName } : {}),
       timestampMs,
       msgType,
-      isSelf: input.isSelf === true,
-      ...(text ? { text } : {}),
-      attachments: attachment ? [attachment] : [],
-      ...(mediaResources.length ? { mediaResources } : {}),
+      isSelf,
+      ...content,
       ...(quote ? { quote } : {}),
     }),
   }
@@ -409,50 +412,6 @@ const normalizeLegacyMessage = (
 export type MessageNormalizationOptions = {
   ownUid?: string
   messageIntegrityEnabled?: boolean
-}
-
-// Inspect selected evidence before parsing or spreading provider objects.
-const withinBudget = (
-  value: unknown,
-  depth = 0,
-  budget = { bytes: 0 },
-): boolean => {
-  if (typeof value === "string") {
-    budget.bytes += value.length * 2
-    return value.length <= 65_536 && budget.bytes <= 262_144
-  }
-  if (value === null || typeof value !== "object") {
-    return true
-  }
-  if (depth > 4) {
-    return false
-  }
-  if (Array.isArray(value)) {
-    return (
-      value.length <= 100 &&
-      value.every((item) => withinBudget(item, depth + 1, budget))
-    )
-  }
-  let count = 0
-  for (const key in value) {
-    if (!Object.hasOwn(value, key)) {
-      continue
-    }
-    if (
-      (key === "params" || key === "ext") &&
-      typeof (value as Record<string, unknown>)[key] === "string" &&
-      ((value as Record<string, unknown>)[key] as string).length > 16_384
-    ) {
-      return false
-    }
-    if (
-      ++count > 64 ||
-      !withinBudget((value as Record<string, unknown>)[key], depth + 1, budget)
-    ) {
-      return false
-    }
-  }
-  return true
 }
 
 export const normalizeProviderMessage = (

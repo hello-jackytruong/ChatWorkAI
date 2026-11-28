@@ -10,9 +10,11 @@ import {
 } from "@chatbotx.io/business"
 import {
   zaloAccountGroupService,
+  zaloAccountMessageRecallService,
   zaloAccountSendAttemptService,
 } from "@chatbotx.io/business/zalo-account"
 import { zaloAccountCanonicalSendService } from "@chatbotx.io/business/zalo-account/canonical-send"
+import { parseZaloAccountSourceId } from "@chatbotx.io/business/zalo-account/message-projection"
 import {
   channelTypes,
   isLegacyMemberMessage,
@@ -414,14 +416,37 @@ export async function sendMessageToChannel(
       !isComment &&
       contactInbox.channel === channelTypes.enum.zaloAccount &&
       contactInbox.contactKind !== "channelGroup" &&
-      message.parentId &&
-      message.parentCreatedAt
+      message.parentId
     ) {
+      if (!message.parentCreatedAt) {
+        throw new Error("Zalo Account reply target has no timestamp")
+      }
       const parentMsg = await messageService.findWithAttachments({
         id: message.parentId,
         createdAt: new Date(message.parentCreatedAt),
         workspaceId: conversation.workspaceId,
+        conversationId: conversation.id,
+        primaryAndFailOnError: true,
       })
+      const parentSource = parseZaloAccountSourceId(parentMsg?.sourceId)
+      const currentAccount = message.contentAttributes?.zaloAccount as
+        | { accountId?: unknown }
+        | undefined
+      if (
+        !parentMsg ||
+        parentMsg.contactInboxId !== contactInbox.id ||
+        !parentSource ||
+        parentSource.accountId !== currentAccount?.accountId ||
+        parentSource.threadType !== "user" ||
+        parentSource.threadId !== contactInbox.sourceId ||
+        !(await zaloAccountMessageRecallService.isOrdinaryAttachmentVisible({
+          workspaceId: conversation.workspaceId,
+          messageId: parentMsg.id,
+          messageCreatedAt: new Date(parentMsg.createdAt),
+        }))
+      ) {
+        throw new Error("Zalo Account reply target is unavailable")
+      }
       const parentAttributes = parentMsg?.contentAttributes?.zaloAccount
       const providerQuote =
         parentAttributes && typeof parentAttributes === "object"
@@ -430,7 +455,7 @@ export async function sendMessageToChannel(
       const quote = zaloAccountQuoteSchema.safeParse(
         providerQuote
           ? {
-              providerMessageId: providerQuote.providerMessageId,
+              providerMessageId: parentSource.providerMessageId,
               clientMessageId: providerQuote.clientMessageId,
               senderId: providerQuote.senderId,
               msgType: providerQuote.msgType,
@@ -470,6 +495,9 @@ export async function sendMessageToChannel(
           ),
         },
         message: handlerMessage,
+        ...(contactInbox.channel === "zaloAccount" && data.zaloAccountContent
+          ? { zaloAccountContent: data.zaloAccountContent }
+          : {}),
         ...(data.groupAudience ? { groupAudience: data.groupAudience } : {}),
         quickReplies: isComment ? undefined : quickReplies,
         metadata,
