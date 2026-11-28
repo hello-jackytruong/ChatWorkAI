@@ -147,7 +147,7 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P1 · 6. Sticker đầy đủ như ZaloCRM
 
-**Pha 3 · Kiểm thử cục bộ:** nhận diện sticker có category/type, cache theo phiên, tìm và duyệt bộ, gửi qua hàng đợi Inbox, xem sticker tĩnh/động từ CDN Zalo và dùng xem gần đây/yêu thích theo người dùng và tài khoản. Đã kiểm tra fallback, giảm chuyển động, cache và ảnh sticker tải trực tiếp theo ID. Bộ Vui mở mặc định như ZaloCRM. Còn xác nhận trên Zalo thật về payload các bộ sticker và own-echo của lệnh gửi.
+**Pha 3 · Kiểm thử cục bộ:** nhận diện sticker có category/type, cache theo phiên, tìm và duyệt bộ, gửi qua hàng đợi Inbox, xem sticker tĩnh/động từ CDN Zalo và dùng xem gần đây/yêu thích theo người dùng và tài khoản. Đã kiểm tra fallback, giảm chuyển động, cache và ảnh sticker tải trực tiếp theo ID. Picker mở với từ khóa “vui” như ZaloCRM và duyệt các bộ theo ID Zalo trả về. Còn xác nhận trên Zalo thật về payload các bộ sticker và own-echo của lệnh gửi.
 
 **Pha 3 · Kiểm thử cục bộ:** nhận diện sticker có category/type, cache theo phiên, tìm và duyệt bộ, gửi qua hàng đợi Inbox, xem sticker tĩnh/động từ archive và dùng xem gần đây/yêu thích theo người dùng và tài khoản. Đã kiểm tra fallback, giảm chuyển động và cache. Còn xác nhận trên Zalo thật về payload các bộ sticker và own-echo của lệnh gửi.
 

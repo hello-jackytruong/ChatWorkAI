@@ -10,18 +10,11 @@ const sdk = vi.hoisted(() => ({
 vi.mock("../src/runtime/outbound-attachment", () => ({
   downloadOutboundAttachment: sdk.download,
 }))
-vi.mock("zca-js", () => ({
+vi.mock("zca-js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("zca-js")>()),
   Zalo: class {
     login = sdk.login
     loginQR = sdk.loginQR
-  },
-  ThreadType: { User: 0, Group: 1 },
-  LoginQRCallbackEventType: {
-    QRCodeGenerated: 0,
-    QRCodeExpired: 1,
-    QRCodeScanned: 2,
-    QRCodeDeclined: 3,
-    GotLoginInfo: 4,
   },
 }))
 
