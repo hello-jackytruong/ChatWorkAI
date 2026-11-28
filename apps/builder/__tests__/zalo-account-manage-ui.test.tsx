@@ -144,6 +144,13 @@ async function click(text: string) {
     await new Promise((resolve) => setTimeout(resolve, 30))
   })
 }
+
+async function waitForText(container: HTMLElement, text: string) {
+  await vi.waitFor(async () => {
+    await act(async () => undefined)
+    expect(container.textContent).toContain(text)
+  })
+}
 it("keeps details in configuration and discards an in-flight connected result after successful disconnect", async () => {
   client.setQueryData(zaloAccountOperationsKey("w", "a"), data)
   client.setQueryData(zaloAccountStatusKey("w", "a"), data.status)
@@ -278,7 +285,7 @@ it("shows the latest checkpoint in account configuration and resumes only on req
   await click(messages.zaloAccount.configure)
   expect(mocks.historyStatus).toHaveBeenCalledWith("w", "a", {})
   expect(document.body.textContent).toContain("History sync")
-  expect(document.body.textContent).toContain("More history may be available")
+  await waitForText(document.body, "More history may be available")
   expect(document.body.textContent).toContain("41")
   expect(mocks.historyResume).not.toHaveBeenCalled()
   await click("Continue sync")
@@ -286,9 +293,7 @@ it("shows the latest checkpoint in account configuration and resumes only on req
     runId: "run-1",
     commandId: expect.any(String),
   })
-  expect(document.body.textContent).toContain(
-    "Zalo has no more history for this sync",
-  )
+  await waitForText(document.body, "Zalo has no more history for this sync")
 })
 
 it("keeps conversation requests and retries in the selected history scope", async () => {
@@ -310,14 +315,11 @@ it("keeps conversation requests and retries in the selected history scope", asyn
       data: { ...run, status: "complete", canResume: false },
     })
   render(<ZaloHistorySyncControls accountId="a" workspaceId="w" {...target} />)
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 30))
-  })
+  await waitForText(host, "Sync stopped before finishing")
   expect(mocks.historyStatus).toHaveBeenCalledWith("w", "a", target)
   expect(host.textContent).toContain(
     "Sync available history for this conversation.",
   )
-  expect(host.textContent).toContain("Sync stopped before finishing")
   await click("Retry sync")
   const firstInput = mocks.historyResume.mock.calls[0]?.[2]
   expect(firstInput).toEqual({
@@ -325,12 +327,12 @@ it("keeps conversation requests and retries in the selected history scope", asyn
     runId: "9",
     commandId: expect.any(String),
   })
-  expect(host.textContent).toContain("Could not sync the next page. Try again.")
+  await waitForText(host, "Could not sync the next page. Try again.")
   expect(host.textContent).not.toContain("provider-internal-log")
   await click("Retry sync")
   expect(mocks.historyResume).toHaveBeenLastCalledWith("w", "a", firstInput)
   expect(mocks.historyStart).not.toHaveBeenCalled()
-  expect(host.textContent).toContain("Zalo has no more history for this sync")
+  await waitForText(host, "Zalo has no more history for this sync")
 })
 
 it("opens a verified Zalo conversation only after deliberate lookup and result selection", async () => {
@@ -392,6 +394,7 @@ it("opens a verified Zalo conversation only after deliberate lookup and result s
     operation: { kind: "lookupUsername", username: "linh.tran" },
   })
   expect(mocks.contactOpen).not.toHaveBeenCalled()
+  await waitForText(document.body, "Tran Linh")
   await click("Tran Linh")
   expect(mocks.contactOpen).not.toHaveBeenCalled()
   await click("Open conversation")
