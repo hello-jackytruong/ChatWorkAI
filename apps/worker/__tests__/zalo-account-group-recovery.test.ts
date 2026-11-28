@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   pending: vi.fn(),
   recall: vi.fn(),
   reconciliation: vi.fn(),
+  publishTimeline: vi.fn(),
   enqueue: vi.fn(),
   guard: vi.fn(async (_ws, fn) => await fn()),
   lock: vi.fn(async ({ fn }: { fn: () => Promise<unknown> }) => await fn()),
@@ -16,6 +17,9 @@ vi.mock("@chatbotx.io/redis", () => ({
 }))
 vi.mock("@chatbotx.io/business/zalo-account/group-inbox", () => ({
   zaloAccountGroupInboxService: { pickPending: mocks.pending },
+}))
+vi.mock("@chatbotx.io/business/zalo-account/group-lifecycle", () => ({
+  zaloAccountGroupLifecycleService: { publishTimeline: mocks.publishTimeline },
 }))
 vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
   zaloAccountCanonicalSendService: {
@@ -52,6 +56,7 @@ it("re-enqueues bounded durable pending identities with their original policy", 
         id: "i1",
         workspaceId: "w1",
         accountId: "a1",
+        providerMessageId: payload.providerMessageId,
         accountPolicyEpoch: 4,
         groupPolicyEpoch: 5,
         payload,
@@ -95,6 +100,27 @@ it("gives recall recovery the first ten seconds inside the shared deadline", asy
     mocks.pending.mock.invocationCallOrder[0] ?? Number.NaN,
   )
   vi.restoreAllMocks()
+})
+
+it("recovers durable group lifecycle entries with their original scope", async () => {
+  const identity = {
+    id: "i2",
+    workspaceId: "w1",
+    accountId: "a1",
+    providerMessageId: "za:group-event:event-1",
+    accountPolicyEpoch: 4,
+    groupPolicyEpoch: 5,
+    payload: { kind: "joined" },
+  }
+  mocks.pending.mockResolvedValue([{ identity, inboxId: "in1" }])
+
+  await recoverZaloGroupInbox()
+
+  expect(mocks.publishTimeline).toHaveBeenCalledExactlyOnceWith({
+    ...identity,
+    inboxId: "in1",
+  })
+  expect(mocks.enqueue).not.toHaveBeenCalled()
 })
 
 it("recovers local reconciliation after recall without replaying provider sends", async () => {
