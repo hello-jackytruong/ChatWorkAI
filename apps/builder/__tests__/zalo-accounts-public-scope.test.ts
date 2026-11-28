@@ -77,16 +77,27 @@ beforeEach(() => {
   assertApiNotRateLimited.mockResolvedValue(undefined)
 })
 
-const outcome = vi.hoisted(() => vi.fn())
+const { outcome, details, checkConversation, conversationScope } = vi.hoisted(
+  () => ({
+    outcome: vi.fn(),
+    details: vi.fn(),
+    checkConversation: vi.fn(),
+    conversationScope: vi.fn(),
+  }),
+)
 vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountFriendSyncService: {},
   zaloAccountGroupService: {},
   zaloAccountGroupTagService: {},
-  zaloAccountMessageStateService: {},
+  zaloAccountMessageStateService: { getDetails: details },
   zaloAccountService: {},
 }))
 vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
   zaloAccountCanonicalSendService: { getOutcomeByMessage: outcome },
+}))
+vi.mock("@/lib/public-api/member-scope", () => ({
+  assertConversationAccessForCaller: checkConversation,
+  conversationScopeForCaller: conversationScope,
 }))
 const { zaloAccountOperations } = await import(
   "../src/features/zalo-accounts/api/operations"
@@ -122,5 +133,45 @@ describe("Zalo canonical Message inspection authorization", () => {
     )
     await expect(inspect()).rejects.toMatchObject({ code: "FORBIDDEN" })
     expect(outcome).not.toHaveBeenCalled()
+  })
+})
+
+describe("Zalo message participant authorization", () => {
+  const detail = () =>
+    call(
+      zaloAccountOperations.getMessageStateDetails,
+      {
+        accountId: input.accountId,
+        conversationId: "3",
+        messageId: input.messageId,
+        createdAt: input.messageCreatedAt.toISOString(),
+      },
+      {
+        context: { headers: new Headers({ Authorization: `Bearer ${TOKEN}` }) },
+      },
+    )
+
+  test("requires Inbox scope before touching the conversation", async () => {
+    findWorkspaceByTokenHash.mockResolvedValue(
+      authResult(["channels"], "read_only"),
+    )
+    await expect(detail()).rejects.toMatchObject({ code: "FORBIDDEN" })
+    expect(checkConversation).not.toHaveBeenCalled()
+    expect(details).not.toHaveBeenCalled()
+  })
+
+  test("uses the exact conversation and saved message pointer with Inbox scope", async () => {
+    findWorkspaceByTokenHash.mockResolvedValue(
+      authResult(["inbox"], "read_only"),
+    )
+    const result = { receipts: [], reactions: [], truncated: false }
+    details.mockResolvedValue(result)
+    await expect(detail()).resolves.toEqual(result)
+    expect(checkConversation).toHaveBeenCalledWith(expect.anything(), "3")
+    expect(details).toHaveBeenCalledWith({
+      ...input,
+      conversationId: "3",
+      workspaceId: "ws-1",
+    })
   })
 })

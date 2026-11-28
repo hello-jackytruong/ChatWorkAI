@@ -1,6 +1,12 @@
 import { qrImageDataUrlSchema } from "@chatbotx.io/utils/connection"
 import { z } from "zod"
 import {
+  zaloAccountContactOperationSchema,
+  zaloAccountContactResultSchema,
+  zaloAccountFriendEventSchema,
+} from "./zalo-account-contacts"
+import {
+  zaloAccountInlineGifSchema,
   zaloAccountMediaResourcesSchema,
   zaloAccountStickerCatalogEntrySchema,
   zaloAccountStickerCatalogQuerySchema,
@@ -8,6 +14,10 @@ import {
   zaloAccountStickerResourceSchema,
   zaloAccountStickerSendIdentitySchema,
 } from "./zalo-account-media"
+import {
+  zaloAccountProfileRequestSchema,
+  zaloAccountProfileSchema,
+} from "./zalo-account-profile"
 
 const providerTimestampMsSchema = z
   .number()
@@ -19,6 +29,7 @@ export const zaloAccountFriendSchema = z
   .object({
     uid: z.string().regex(/^\d{1,200}$/),
     name: z.string().min(1).max(500),
+    profile: zaloAccountProfileSchema.optional(),
     avatarUrl: z
       .string()
       .url()
@@ -164,6 +175,12 @@ const runtimeEventBaseSchema = z.object({
 })
 
 export const zaloAccountLifecycleEventSchema = z.discriminatedUnion("type", [
+  runtimeEventBaseSchema
+    .extend({
+      type: z.literal("friend_activity"),
+      activity: zaloAccountFriendEventSchema,
+    })
+    .strict(),
   runtimeEventBaseSchema
     .extend({
       type: z.literal("runtime_diagnostic"),
@@ -874,6 +891,7 @@ export type ZaloAccountRichContent = z.infer<
 >
 
 const inboundRichContentFields = {
+  inlineGif: zaloAccountInlineGifSchema.optional(),
   richContent: zaloAccountRichContentSchema.optional(),
   album: zaloAccountAlbumSchema.optional(),
   providerTtl: z
@@ -883,6 +901,14 @@ const inboundRichContentFields = {
     .max(Number.MAX_SAFE_INTEGER)
     .optional(),
 }
+
+export const zaloAccountReceiptReferencesSchema = z
+  .object({
+    st: z.number().int(),
+    at: z.number().int(),
+    cmd: z.number().int(),
+  })
+  .strict()
 
 export const zaloAccountDirectMessageSchema = z
   .object({
@@ -897,6 +923,7 @@ export const zaloAccountDirectMessageSchema = z
     senderName: z.string().trim().min(1).max(255).optional(),
     timestampMs: providerTimestampMsSchema,
     msgType: z.string().min(1).max(100),
+    receiptReferences: zaloAccountReceiptReferencesSchema.optional(),
     isSelf: z.boolean(),
     text: z.string().max(20_000).optional(),
     attachments: z.array(zaloAccountAttachmentSchema).max(10).default([]),
@@ -913,13 +940,15 @@ export const zaloAccountDirectMessageSchema = z
             message.attachments.length ||
             message.mediaResources?.length ||
             message.quote ||
-            message.richContent
+            message.richContent ||
+            message.inlineGif
           )
         : Boolean(
             message.text?.trim() ||
               message.attachments.length ||
               message.mediaResources?.length ||
-              message.richContent,
+              message.richContent ||
+              message.inlineGif,
           ),
     { message: "Zalo Account message has no supported content" },
   )
@@ -939,6 +968,7 @@ const zaloAccountGroupMessageObject = z
     senderName: z.string().trim().min(1).max(255).optional(),
     timestampMs: providerTimestampMsSchema,
     msgType: z.string().min(1).max(100),
+    receiptReferences: zaloAccountReceiptReferencesSchema.optional(),
     isSelf: z.boolean(),
     text: z.string().max(20_000).optional(),
     attachments: z.array(zaloAccountAttachmentSchema).max(10).default([]),
@@ -977,13 +1007,15 @@ export const zaloAccountGroupMessageSchema =
               message.mediaResources?.length ||
               message.quote ||
               message.richContent ||
+              message.inlineGif ||
               message.mentions.length,
           )
         : !(
             message.text?.trim() ||
             message.attachments.length ||
             message.mediaResources?.length ||
-            message.richContent
+            message.richContent ||
+            message.inlineGif
           )
     ) {
       context.addIssue({
@@ -1220,7 +1252,179 @@ export type ZaloAccountNativeOperation = z.infer<
   typeof zaloAccountNativeOperationSchema
 >
 
+export const zaloAccountReactionChoiceSchema = z.enum([
+  "heart",
+  "like",
+  "haha",
+  "wow",
+  "sad",
+  "angry",
+])
+
+const activityId = z.string().min(1).max(200)
+const activityThread = {
+  threadType: z.enum(["user", "group"]),
+  threadId: activityId,
+  accountPolicyEpoch: z.number().int().nonnegative().optional(),
+  groupPolicyEpoch: z.number().int().nonnegative().optional(),
+  providerMessageId: activityId,
+  providerClientMessageId: activityId,
+}
+export const zaloAccountMessageActivitySchema = z
+  .discriminatedUnion("operation", [
+    z
+      .object({
+        ...activityThread,
+        operation: z.literal("setReaction"),
+        reaction: zaloAccountReactionChoiceSchema.nullable(),
+      })
+      .strict(),
+    z
+      .object({
+        ...activityThread,
+        ...zaloAccountReceiptReferencesSchema.shape,
+        operation: z.enum(["sendSeen", "sendDelivered"]),
+        providerSenderId: activityId,
+        providerRecipientId: activityId,
+        msgType: z.string().min(1).max(100),
+        timestampMs: providerTimestampMsSchema,
+      })
+      .strict(),
+    z
+      .object({
+        operation: z.literal("requestReactionHistory"),
+        threadType: z.enum(["user", "group"]),
+      })
+      .strict(),
+  ])
+  .superRefine((activity, context) => {
+    if (activity.operation === "requestReactionHistory") {
+      return
+    }
+    if (
+      activity.threadType === "group" &&
+      (activity.accountPolicyEpoch === undefined ||
+        activity.groupPolicyEpoch === undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Group policy epochs are required",
+      })
+    }
+  })
+export type ZaloAccountMessageActivity = z.infer<
+  typeof zaloAccountMessageActivitySchema
+>
+
+export const ZALO_ACCOUNT_HISTORY_MAX_ROWS = 200
+export const ZALO_ACCOUNT_HISTORY_MAX_BYTES = 240 * 1024
+export const ZALO_ACCOUNT_HISTORY_RESULT_TTL_MS = 60_000
+
+export const zaloAccountHistoryPageRequestSchema = z.discriminatedUnion(
+  "threadType",
+  [
+    z.strictObject({
+      threadType: z.literal("user"),
+      threadId: z.string().min(1).max(200).optional(),
+      cursor: z.string().min(1).max(200).optional(),
+    }),
+    z.strictObject({
+      threadType: z.literal("group"),
+      threadId: z.string().min(1).max(200),
+      accountPolicyEpoch: z.number().int().nonnegative(),
+      groupPolicyEpoch: z.number().int().nonnegative(),
+    }),
+  ],
+)
+export type ZaloAccountHistoryPageRequest = z.infer<
+  typeof zaloAccountHistoryPageRequestSchema
+>
+
+export const zaloAccountHistoryPageSchema = z
+  .strictObject({
+    messages: z
+      .array(
+        z.union([
+          zaloAccountDirectMessageSchema,
+          zaloAccountGroupMessageSchema,
+        ]),
+      )
+      .max(ZALO_ACCOUNT_HISTORY_MAX_ROWS),
+    providerRowCount: z
+      .number()
+      .int()
+      .min(0)
+      .max(ZALO_ACCOUNT_HISTORY_MAX_ROWS),
+    invalidRowCount: z.number().int().min(0).max(ZALO_ACCOUNT_HISTORY_MAX_ROWS),
+    providerExhausted: z.boolean(),
+    fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+    oldestProviderMessageId: z.string().min(1).max(200).optional(),
+  })
+  .refine(
+    (page) =>
+      page.messages.length + page.invalidRowCount <= page.providerRowCount &&
+      (!page.providerExhausted || page.invalidRowCount === 0) &&
+      new TextEncoder().encode(JSON.stringify(page.messages)).length <=
+        ZALO_ACCOUNT_HISTORY_MAX_BYTES,
+    { message: "Zalo Account history page exceeds its bounds" },
+  )
+export type ZaloAccountHistoryPage = z.infer<
+  typeof zaloAccountHistoryPageSchema
+>
+
 export const zaloAccountCommandEnvelopeSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    ...commandBaseShape,
+    kind: z.literal("contact_operation"),
+    route: z.strictObject({
+      kind: z.literal("account"),
+      workspaceId: z.string().min(1),
+      accountId: z.string().min(1),
+      inboxId: z.string().min(1),
+    }),
+    target: commandTargetSchema,
+    contactOperation: zaloAccountContactOperationSchema,
+  }),
+  z.strictObject({
+    ...commandBaseShape,
+    kind: z.literal("read_profiles"),
+    route: z.strictObject({
+      kind: z.literal("account"),
+      workspaceId: z.string().min(1),
+      accountId: z.string().min(1),
+      inboxId: z.string().min(1),
+    }),
+    target: commandTargetSchema,
+    profileQuery: zaloAccountProfileRequestSchema,
+  }),
+  z.strictObject({
+    ...commandBaseShape,
+    kind: z.literal("fetch_history_page"),
+    route: z.strictObject({
+      kind: z.literal("account"),
+      workspaceId: z.string().min(1),
+      accountId: z.string().min(1),
+      inboxId: z.string().min(1),
+    }),
+    target: commandTargetSchema,
+    history: zaloAccountHistoryPageRequestSchema,
+  }),
+  z
+    .object({
+      ...commandBaseShape,
+      kind: z.literal("message_activity"),
+      route: z
+        .object({
+          kind: z.literal("account"),
+          workspaceId: z.string().min(1),
+          accountId: z.string().min(1),
+          inboxId: z.string().min(1),
+        })
+        .strict(),
+      target: commandTargetSchema,
+      activity: zaloAccountMessageActivitySchema,
+    })
+    .strict(),
   z
     .object({
       ...commandBaseShape,
@@ -1469,6 +1673,9 @@ export const zaloAccountCommandResultSchema = z.discriminatedUnion("status", [
           groupSync: zaloAccountGroupSyncSchema.optional(),
           friendSync: zaloAccountFriendSyncSchema.optional(),
           groupMembers: zaloAccountGroupMembersResultSchema.optional(),
+          historyPage: zaloAccountHistoryPageSchema.optional(),
+          profiles: z.array(zaloAccountProfileSchema).max(20).optional(),
+          contactsResult: zaloAccountContactResultSchema.optional(),
           labels: zaloAccountLabelSnapshotSchema.optional(),
           stickerResources: z
             .array(zaloAccountStickerResourceSchema)
@@ -1527,6 +1734,10 @@ const transportEventBaseShape = {
 }
 
 const lifecycleTransportPayloadSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("friend_activity"),
+    activity: zaloAccountFriendEventSchema,
+  }),
   z
     .object({
       type: z.literal("runtime_diagnostic"),

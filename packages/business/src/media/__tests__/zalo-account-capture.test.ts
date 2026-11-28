@@ -15,6 +15,32 @@ const context = {
   providerMessageId: "provider1",
 }
 describe("Zalo archival capture", () => {
+  it("archives eligible media but skips stickers and GIFs with original URLs", () => {
+    const resources = buildZaloMessageResources({
+      ...context,
+      descriptors: [
+        {
+          kind: "sticker",
+          role: "original",
+          slot: "static",
+          url: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=892",
+        },
+        {
+          kind: "gif",
+          role: "original",
+          slot: "animation",
+          url: "https://photo.zdn.vn/a.gif",
+        },
+        {
+          kind: "image",
+          role: "original",
+          slot: "photo",
+          url: "https://photo.zdn.vn/a.jpg",
+        },
+      ],
+    })
+    expect(resources.map(({ kind }) => kind)).toEqual(["image"])
+  })
   it("uses stable provider identity rather than a rotating URL token", () => {
     const first = buildZaloMessageResources({
       ...context,
@@ -116,57 +142,6 @@ describe("Zalo archival capture", () => {
       "poster",
     ])
     expect(resources[0]?.durationMs).toBe(1200)
-  })
-  it("does not fabricate source bytes for a sticker ID without its detail response", () => {
-    const resources = buildZaloMessageResources({
-      ...context,
-      descriptors: [
-        {
-          kind: "sticker",
-          role: "original",
-          slot: "0",
-          providerResourceId: "123",
-          sourceMissing: "source_missing",
-        },
-      ],
-    })
-    expect(resources).toHaveLength(1)
-    expect(resources[0]?.source).toBeUndefined()
-  })
-  it("keeps static and animated sticker assets distinct with bounded sprite metadata", () => {
-    const resources = buildZaloMessageResources({
-      ...context,
-      descriptors: [
-        {
-          kind: "sticker",
-          role: "original",
-          slot: "static",
-          providerResourceId: "892",
-          providerVersion: "3",
-          url: "https://zalo-api.zadn.vn/static",
-        },
-        {
-          kind: "sticker",
-          role: "original",
-          slot: "webp",
-          providerResourceId: "892",
-          providerVersion: "3",
-          url: "https://zalo-api.zadn.vn/webp",
-        },
-        {
-          kind: "sticker",
-          role: "sprite",
-          slot: "sprite",
-          providerResourceId: "892",
-          providerVersion: "3",
-          url: "https://zalo-api.zadn.vn/sprite",
-          frameCount: 4,
-          durationMs: 120,
-        },
-      ],
-    })
-    expect(new Set(resources.map((item) => item.sourceRevision)).size).toBe(3)
-    expect(resources[2]).toMatchObject({ frameCount: 4, durationMs: 120 })
   })
   it("bounds per-message registration and strips source URLs without mutating input", () => {
     const descriptors = Array.from({ length: 30 }, (_, n) => ({

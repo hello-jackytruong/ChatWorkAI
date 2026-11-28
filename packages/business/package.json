@@ -88,6 +88,7 @@
     "./workspace-member/predicates": "./src/workspace-member/predicates.ts",
     "./workspace-member/permissions": "./src/workspace-member/permissions.ts",
     "./zalo-account": "./src/zalo-account/index.ts",
+    "./zalo-account/friend-activity": "./src/zalo-account/friend-activity.service.ts",
     "./zalo-account/group-inbox": "./src/zalo-account/group-inbox.service.ts",
     "./zalo-account/lifecycle": "./src/zalo-account/message-lifecycle.service.ts",
     "./zalo-account/runtime-state": "./src/zalo-account/runtime-state.service.ts",

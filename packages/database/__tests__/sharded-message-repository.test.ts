@@ -3374,6 +3374,53 @@ describe("Zalo historical target locator", () => {
       }),
     ).rejects.toThrow("primary down")
   })
+  test("checks only covering primaries for a Zalo history message at its provider timestamp", async () => {
+    const createdAt = new Date("2020-01-15T11:12:13.000Z")
+    const range = {
+      id: "r",
+      shardId: "old",
+      startTime: new Date("2020-01-01"),
+      endTime: new Date("2020-02-01"),
+      shard: { id: "old" },
+    }
+    const where = vi
+      .fn()
+      .mockReturnValue({ limit: vi.fn().mockResolvedValue([]) })
+    const client = {
+      transaction: vi.fn((fn) =>
+        fn({
+          execute: vi.fn(),
+          select: () => ({ from: () => ({ where }) }),
+        }),
+      ),
+    }
+    const manager = {
+      getShardsForTimeRange: vi.fn().mockResolvedValue([range]),
+      getShardClient: vi.fn().mockResolvedValue(client),
+      getWriteShardInfo: vi.fn(),
+    }
+    const repo = new ShardedMessageRepository(manager as never)
+    await expect(
+      repo.locateZaloAccountTarget({
+        workspaceId: "1",
+        conversationId: "2",
+        contactInboxId: "3",
+        sourceId: "za:4:user:t:m",
+        createdAt,
+        deadline: Date.now() + 2000,
+      }),
+    ).resolves.toEqual({ complete: true })
+    expect(manager.getShardsForTimeRange).toHaveBeenCalledExactlyOnceWith(
+      new Date("2020-01-15T11:00:00.000Z"),
+      new Date("2020-01-15T11:59:59.999Z"),
+    )
+    expect(manager.getWriteShardInfo).not.toHaveBeenCalled()
+    const query = new PgDialect().sqlToQuery(where.mock.calls[0][0])
+    expect(query.params).toEqual(
+      expect.arrayContaining(["1", "2", "3", "za:4:user:t:m"]),
+    )
+    expect(query.sql).toContain('"Message"."createdAt"')
+  })
 })
 
 describe("Zalo retained original after shard rotation", () => {

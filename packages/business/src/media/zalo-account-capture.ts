@@ -37,8 +37,7 @@ type Context = {
   attachments?: Attachment[]
 }
 const numericSlot = /^\d+$/
-const stickerVariants = new Set(["static", "webp", "sprite"])
-const kinds = new Set(["image", "file", "video", "audio", "gif", "sticker"])
+const kinds = new Set(["image", "file", "video", "audio"])
 const roles = new Set([
   "original",
   "thumbnail",
@@ -62,8 +61,17 @@ export function buildZaloMessageResources(
           name: attachment.name ?? undefined,
         }))
       : input.descriptors
+  // Preserve the animation's provider source in the message projection.
+  // Thumbnails and posters belonging to that GIF also stay at the provider.
+  const providerOnly = descriptors.some(
+    ({ kind, role }) =>
+      role === "original" && (kind === "gif" || kind === "sticker"),
+  )
   return descriptors.slice(0, 12).flatMap((descriptor) => {
-    if (!(kinds.has(descriptor.kind) && roles.has(descriptor.role))) {
+    if (
+      !(kinds.has(descriptor.kind) && roles.has(descriptor.role)) ||
+      (providerOnly && descriptor.role !== "original")
+    ) {
       return []
     }
     const attachments = input.attachments ?? []
@@ -98,9 +106,7 @@ export function buildZaloMessageResources(
         role: descriptor.role as RegisterMediaResource["role"],
         slot: descriptor.slot,
         sourceRevision: JSON.stringify([
-          descriptor.kind === "sticker" && !stickerVariants.has(descriptor.slot)
-            ? "sticker"
-            : descriptor.slot,
+          descriptor.slot,
           descriptor.providerResourceId ?? "",
           descriptor.providerVersion ?? "",
           descriptor.role,

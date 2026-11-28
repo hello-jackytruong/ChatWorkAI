@@ -2,6 +2,7 @@
 
 import { Avatar, AvatarFallback } from "@chatbotx.io/ui/components/ui/avatar"
 import { useTranslations } from "next-intl"
+import type { ZaloProfileTarget } from "@/features/zalo-accounts/components/zalo-profile-details"
 import {
   getZaloGroupMessage,
   getZaloGroupQuote,
@@ -9,16 +10,14 @@ import {
 import { isZaloStickerType } from "../lib/zalo-rich-message"
 import { ZaloMemberIdentity } from "./zalo-member-identity"
 
-export type ZaloGroupMessageState = {
-  receipt?: { delivered: number; seen: number }
-  reactions: Array<{ key: string; count: number }>
-}
 export function ZaloGroupMessageContext({
   attributes,
   hideQuote,
+  profileScope,
 }: {
   attributes: unknown
   hideQuote?: boolean
+  profileScope?: Omit<ZaloProfileTarget, "memberUid">
 }) {
   const t = useTranslations("zaloAccount")
   const group = getZaloGroupMessage(attributes)
@@ -27,7 +26,13 @@ export function ZaloGroupMessageContext({
     <>
       {group && !group.isSelf && (
         <span className="text-muted-foreground text-xs">
-          <ZaloMemberIdentity name={group.senderName} uid={group.senderId}>
+          <ZaloMemberIdentity
+            name={group.senderName}
+            profileTarget={
+              profileScope && { ...profileScope, memberUid: group.senderId }
+            }
+            uid={group.senderId}
+          >
             <span className="inline-flex items-center gap-1.5">
               <Avatar aria-hidden="true" className="size-5">
                 <AvatarFallback>
@@ -54,30 +59,5 @@ export function ZaloGroupMessageContext({
         </blockquote>
       )}
     </>
-  )
-}
-export function ZaloGroupMessageStatus({
-  state,
-}: {
-  state: ZaloGroupMessageState | undefined
-}) {
-  const t = useTranslations("zaloAccount")
-  if (!state) {
-    return null
-  }
-  return (
-    <div className="flex flex-wrap gap-2 text-muted-foreground text-xs">
-      {state.receipt && (
-        <>
-          <span>{t("delivered", { count: state.receipt.delivered })}</span>
-          <span>{t("seen", { count: state.receipt.seen })}</span>
-        </>
-      )}
-      {state.reactions.map((reaction) => (
-        <span key={reaction.key}>
-          {reaction.key} {reaction.count}
-        </span>
-      ))}
-    </div>
   )
 }

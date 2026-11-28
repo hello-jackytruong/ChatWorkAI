@@ -78,3 +78,24 @@ it("bounds typing and rejects unsafe numeric identities and malformed payloads",
   ).toEqual([])
   expect(normalizeProviderThreadEvent("reaction", {})).toEqual([])
 })
+
+it("keeps direct receipt and typing evidence inside the peer thread", () => {
+  expect(
+    normalizeProviderThreadEvent("delivered", {
+      type: 0,
+      threadId: "peer",
+      data: {
+        msgId: "message",
+        deliveredUids: ["peer", "peer", "other"],
+        seenUids: ["other"],
+      },
+    }),
+  ).toMatchObject([{ status: "delivered", memberIds: ["peer"] }])
+  expect(
+    normalizeProviderThreadEvent("typing", {
+      type: 0,
+      threadId: "peer",
+      data: { uid: "other" },
+    }),
+  ).toEqual([])
+})

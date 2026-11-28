@@ -44,11 +44,13 @@ import type {
   ZaloAccountStatusResource,
 } from "../schema/resource"
 import { ZaloAccountConnect } from "./zalo-account-connect"
+import { ZaloAccountContacts } from "./zalo-account-contacts"
 import { ZaloAccountGroups } from "./zalo-account-groups"
 import {
   ZaloAccountRuntimeDetails,
   ZaloAccountStatus,
 } from "./zalo-account-status"
+import { ZaloHistorySyncControls } from "./zalo-history-sync-controls"
 
 type ManagedAccount = ZaloAccountResource & {
   connection: ConnectionResource
@@ -265,13 +267,23 @@ function ZaloAccountRow({
               />
             </div>
             {open && (
-              <ZaloAccountGroups
-                accountId={account.id}
-                accountName={account.name}
-                groupMessagingEnabled={account.groupMessagingEnabled}
-                groups={account.groups}
-                workspaceId={workspaceId}
-              />
+              <>
+                <ZaloHistorySyncControls
+                  accountId={account.id}
+                  workspaceId={workspaceId}
+                />
+                <ZaloAccountContacts
+                  accountId={account.id}
+                  workspaceId={workspaceId}
+                />
+                <ZaloAccountGroups
+                  accountId={account.id}
+                  accountName={account.name}
+                  groupMessagingEnabled={account.groupMessagingEnabled}
+                  groups={account.groups}
+                  workspaceId={workspaceId}
+                />
+              </>
             )}
           </DialogContent>
         </Dialog>

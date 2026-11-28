@@ -71,6 +71,8 @@ export const main = async (): Promise<void> => {
     onGroupSendResult: (input) => zaloAccountSendAttemptService.confirm(input),
     admitLabelMutation: (input) => zaloAccountLabelService.admitMutation(input),
     admitGroupSend: (input) => zaloAccountGroupService.admitSend(input),
+    resolveGroupHistoryPolicy: (input) =>
+      zaloAccountGroupService.resolveReceivePolicy(input),
     clientFactory: zcaClientFactory,
     eventSink,
     lease: leaseStore,

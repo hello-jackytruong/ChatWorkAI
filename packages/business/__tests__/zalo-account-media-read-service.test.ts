@@ -255,6 +255,28 @@ it("refuses a non-Zalo redirect and never decrypts a hidden image", async () => 
   expect(mocks.source).not.toHaveBeenCalled()
 })
 
+it("lets an authorized sticker use its provider artwork after an archive failure", async () => {
+  mocks.list.mockResolvedValue([
+    {
+      ...row,
+      asset: {
+        ...row.asset,
+        kind: "sticker",
+        state: "failed",
+        objectKey: null,
+      },
+    },
+  ])
+  const url = "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=892"
+  mocks.source.mockResolvedValue({ type: "provider_url", url })
+  expect(await service.previewImage(input)).toBe(url)
+  mocks.source.mockResolvedValue({
+    type: "provider_url",
+    url: "https://zalo-api.zadn.vn/unknown?eid=892",
+  })
+  expect(await service.previewImage(input)).toBeNull()
+})
+
 it("bounds backfill to persisted rows and supports dry-run without registration", async () => {
   mocks.page.mockResolvedValue({ data: [], nextCursor: null })
   expect(

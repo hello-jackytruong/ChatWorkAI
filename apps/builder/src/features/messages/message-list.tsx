@@ -25,12 +25,19 @@ import { INBOX_MESSAGES_PER_PAGE } from "../chat/store/chat-store"
 import { useChatStore } from "../chat/store/chat-store-provider"
 import { ConversationInfo } from "../conversations/components/conversation-info"
 import {
+  getZaloMessageActivityDetailsAction,
+  setZaloMessageReactionAction,
+} from "../zalo-accounts/actions/message-activity.action"
+import {
   getZaloGroupConversation,
   getZaloGroupMessage,
   getZaloGroupQuote,
-  zaloGroupProviderMessageId,
 } from "../zalo-accounts/lib/group-content"
-import { useZaloGroupMessageState } from "../zalo-accounts/queries/use-group-message-state"
+import {
+  getZaloMessageActivityThread,
+  providerMessageIdForZaloActivity,
+} from "../zalo-accounts/lib/message-activity"
+import { useZaloMessageState } from "../zalo-accounts/queries/use-group-message-state"
 import { changeMessageAttributesAction } from "./actions/change-message-attributes.action"
 import { deleteMessageAction } from "./actions/delete-message.action"
 import { editMessageAction } from "./actions/edit-message.action"
@@ -39,6 +46,8 @@ import { ResendMessageButton } from "./components/resend-message-button"
 import { ZaloAccountMessageActions } from "./components/zalo-account-message-actions"
 import { ZaloAlbumBubble } from "./components/zalo-album-bubble"
 import { ZaloForwardDialog } from "./components/zalo-forward-dialog"
+import type { ZaloMessageActivity } from "./components/zalo-message-activity"
+import { ZaloMessageEvidence } from "./components/zalo-message-evidence"
 import { ZaloQuoteDialog } from "./components/zalo-quote-dialog"
 import { ZaloTimelineDialog } from "./components/zalo-timeline-dialog"
 import { canPrivateReplyToComment } from "./lib/private-reply"
@@ -150,6 +159,23 @@ export function MessageList() {
       })
     : []
   const groupAudience = getZaloGroupConversation(currentConversation)
+  const activityThread = getZaloMessageActivityThread(
+    currentConversation,
+    messages,
+  )
+  const groupProfileScope = activityThread?.group
+    ? {
+        workspaceId,
+        accountId: activityThread.accountId,
+        conversationId: activityThread.conversationId,
+        contactInboxId: activityThread.contactInboxId,
+      }
+    : undefined
+  const groupProfileFor = (message: MessageResourceWithRelations) =>
+    groupProfileScope &&
+    providerMessageIdForZaloActivity(message, activityThread)
+      ? groupProfileScope
+      : undefined
   const activeZaloAccountId =
     activeInbox?.channel === "zaloAccount"
       ? (groupAudience?.accountId ??
@@ -162,18 +188,106 @@ export function MessageList() {
   const timelineAccountId =
     parseZaloAccountSourceId(activeZaloAccountId)?.accountId ??
     activeZaloAccountId
-  const [visibleProviderIds, setVisibleProviderIds] = useState<string[] | null>(
-    null,
-  )
-  const groupState = useZaloGroupMessageState(
+  const [visibleProviderIds, setVisibleProviderIds] = useState<{
+    conversationId: string | null
+    ids: string[]
+  }>()
+  const messageState = useZaloMessageState(
     workspaceId,
-    groupAudience,
-    visibleProviderIds ??
-      messages.slice(-50).flatMap((message) => {
-        const id = zaloGroupProviderMessageId(message, groupAudience)
-        return id ? [id] : []
-      }),
+    activityThread,
+    visibleProviderIds?.conversationId === activeConversationId
+      ? (visibleProviderIds?.ids ?? [])
+      : [],
   )
+  const actorNames = new Map<string, string>()
+  if (activityThread?.group) {
+    for (const message of messages) {
+      const sender = getZaloGroupMessage(message.contentAttributes)
+      if (
+        message.conversationId === activeConversationId &&
+        message.contactInboxId === activityThread.contactInboxId &&
+        sender?.threadId === activityThread.group.providerGroupId &&
+        sender.senderName?.trim()
+      ) {
+        actorNames.set(sender.senderId, sender.senderName.trim())
+      }
+    }
+  } else if (activityThread?.directProviderUid) {
+    const contactName = currentConversation?.contact?.fullName?.trim()
+    if (contactName) {
+      actorNames.set(activityThread.directProviderUid, contactName)
+    }
+  }
+  const activityFor = (
+    message: MessageResourceWithRelations,
+  ): ZaloMessageActivity | undefined => {
+    const providerMessageId = providerMessageIdForZaloActivity(
+      message,
+      activityThread,
+    )
+    if (
+      !(activityThread && providerMessageId) ||
+      message.deletedAt ||
+      zaloMessageLabel(message)
+    ) {
+      return
+    }
+    const { accountId, conversationId } = activityThread
+    const pointer = {
+      conversationId,
+      messageId: message.id,
+      messageCreatedAt: message.createdAt,
+    }
+    const receipt = messageState.data?.receipts.find(
+      (item) => item.providerMessageId === providerMessageId,
+    )
+    const reactions =
+      messageState.data?.reactions.filter(
+        (item) => item.providerMessageId === providerMessageId,
+      ) ?? []
+    return {
+      threadType: activityThread.group ? "group" : "user",
+      outgoing: message.messageType === "outgoing",
+      sent: !message.sendError,
+      receipt,
+      reactions,
+      actorName: (actorId) => actorNames.get(actorId),
+      loadDetails: async () => {
+        const result = await getZaloMessageActivityDetailsAction(
+          workspaceId,
+          accountId,
+          pointer,
+        )
+        if (!result?.data) {
+          throw new Error("Could not load Zalo message activity details")
+        }
+        return result.data
+      },
+      changeReaction: messageState.data?.canReact
+        ? async (reaction) => {
+            try {
+              const result = await setZaloMessageReactionAction(
+                workspaceId,
+                accountId,
+                {
+                  ...pointer,
+                  reaction,
+                  commandId: crypto.randomUUID(),
+                },
+              )
+              if (result?.data?.accepted) {
+                await messageState.invalidate()
+                return true
+              }
+            } catch {
+              // The provider echo is the source of truth for visible evidence.
+            }
+            toast.error(t("zaloAccount.activity.reactionFailed"))
+            return false
+          }
+        : undefined,
+    }
+  }
 
   const { execute: deleteMessage } = useAction(
     deleteMessageAction.bind(null, workspaceId, activeConversationId ?? ""),
@@ -341,7 +455,6 @@ export function MessageList() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: wip
   useEffect(() => {
     setFirstItemIndex(START_INDEX)
-    setVisibleProviderIds(null)
     handleAtBottomStateChange(true)
     prevLengthRef.current = 0
     previousFirstRow.current = undefined
@@ -563,6 +676,7 @@ export function MessageList() {
                 <ZaloAlbumBubble
                   highlightedId={highlightedId}
                   items={row.items}
+                  profileScope={groupProfileFor(message)}
                   renderActions={(item) => (
                     <>
                       {renderZaloActions(item)}
@@ -582,6 +696,18 @@ export function MessageList() {
                         )}
                     </>
                   )}
+                  renderEvidence={(item) => {
+                    const activity = activityFor(item)
+                    return (
+                      activity && (
+                        <ZaloMessageEvidence
+                          activity={activity}
+                          attributes={item.contentAttributes}
+                          message={item}
+                        />
+                      )
+                    )
+                  }}
                 />
               </div>
             )
@@ -628,30 +754,9 @@ export function MessageList() {
                     translation={translation}
                     zaloAccount={zaloInboxes.has(message.contactInboxId)}
                     {...quoteProps(message)}
+                    zaloActivity={activityFor(message)}
                     zaloGroup={!!groupAudience}
-                    zaloState={
-                      groupAudience
-                        ? {
-                            receipt: groupState.data?.receipts.find(
-                              (receipt) =>
-                                receipt.providerMessageId ===
-                                zaloGroupProviderMessageId(
-                                  message,
-                                  groupAudience,
-                                ),
-                            ),
-                            reactions:
-                              groupState.data?.reactions.filter(
-                                (reaction) =>
-                                  reaction.providerMessageId ===
-                                  zaloGroupProviderMessageId(
-                                    message,
-                                    groupAudience,
-                                  ),
-                              ) ?? [],
-                          }
-                        : undefined
-                    }
+                    zaloGroupProfileScope={groupProfileFor(message)}
                   />
                 )}
               </TranslatedMessage>
@@ -659,18 +764,33 @@ export function MessageList() {
           )
         }}
         itemsRendered={(items) => {
-          const ids = items
-            .flatMap((item) => item.data?.items ?? [])
-            .flatMap((message) => {
-              const id = zaloGroupProviderMessageId(message, groupAudience)
-              return id ? [id] : []
-            })
+          if (!activityThread) {
+            return
+          }
+          const ids = [
+            ...new Set(
+              items
+                .flatMap((item) => item.data?.items ?? [])
+                .flatMap((message) => {
+                  const id =
+                    message.deletedAt || zaloMessageLabel(message)
+                      ? null
+                      : providerMessageIdForZaloActivity(
+                          message,
+                          activityThread,
+                        )
+                  return id ? [id] : []
+                }),
+            ),
+          ]
             .slice(0, 50)
+            .sort()
           setVisibleProviderIds((current) =>
-            current?.length === ids.length &&
-            ids.every((id, index) => current[index] === id)
+            current?.conversationId === activeConversationId &&
+            current?.ids.length === ids.length &&
+            ids.every((id, index) => current.ids[index] === id)
               ? current
-              : ids,
+              : { conversationId: activeConversationId, ids },
           )
         }}
         ref={virtuosoRef}

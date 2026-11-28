@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   increment: vi.fn(),
   invalidate: vi.fn(),
   fail: vi.fn(),
+  observe: vi.fn(),
 }))
 vi.mock("@chatbotx.io/database/repositories", () => ({
   zaloAccountFriendImportRepository: {
@@ -20,6 +21,7 @@ vi.mock("@chatbotx.io/database/repositories", () => ({
     acknowledge: mocks.acknowledge,
     fail: mocks.fail,
   },
+  zaloAccountUserProfileRepository: { observe: mocks.observe },
 }))
 vi.mock("../src/zalo-account/service", () => ({
   zaloAccountService: { findById: mocks.account },
@@ -114,4 +116,38 @@ it("records a scoped incomplete status on a provider failure without importing c
     expect.objectContaining({ workspaceId: "w", accountId: "a", runId: "cmd" }),
   )
   expect(mocks.importChunk).not.toHaveBeenCalled()
+})
+
+it("stores only matching source profiles in the same friend-import transaction", async () => {
+  const profile = {
+    uid: "123",
+    fields: {
+      displayName: {
+        value: "Provider alias",
+        observedAt: 100,
+        source: "getAllFriends",
+      },
+    },
+  }
+  mocks.sync.mockResolvedValue({
+    friends: [
+      { uid: "123", name: "Name", profile },
+      { uid: "124", name: "Other name", profile },
+    ],
+    complete: true,
+  })
+  await zaloAccountFriendSyncService.sync({
+    workspaceId: "w",
+    accountId: "a",
+    commandId: "cmd",
+  })
+  expect(mocks.observe).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      workspaceId: "w",
+      accountId: "a",
+      inboxId: "i",
+      profiles: [profile],
+    }),
+    {},
+  )
 })

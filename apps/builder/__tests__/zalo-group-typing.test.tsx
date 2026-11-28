@@ -61,3 +61,57 @@ it("filters other conversations and expires actor typing without a stop event", 
   act(() => vi.advanceTimersByTime(5001))
   expect(host.textContent).toBe("")
 })
+
+it("clears actor timers when the active conversation changes", () => {
+  act(() =>
+    state.handlers.typing?.({
+      data: {
+        conversationId: "c1",
+        audience: "zaloAccountGroup",
+        typing: true,
+        seconds: 5,
+        actor: { uid: "u1", name: "Alice" },
+      },
+    }),
+  )
+  expect(host.textContent).toContain("Alice")
+  act(() => root.render(<ZaloGroupTypingIndicator conversationId="c2" />))
+  expect(host.textContent).toBe("")
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it("uses a known contact name for legacy direct typing and rejects group or actorless group evidence", () => {
+  act(() =>
+    root.render(
+      <ZaloGroupTypingIndicator
+        contactName="Linh"
+        conversationId="c1"
+        threadType="user"
+      />,
+    ),
+  )
+  act(() =>
+    state.handlers.typing?.({
+      data: {
+        conversationId: "c1",
+        audience: "zaloAccountGroup",
+        typing: true,
+        seconds: 5,
+        actor: { uid: "u1", name: "Wrong" },
+      },
+    }),
+  )
+  expect(host.textContent).toBe("")
+  act(() =>
+    state.handlers.typing?.({
+      data: {
+        conversationId: "c1",
+        typing: true,
+        seconds: 5,
+      },
+    }),
+  )
+  expect(host.textContent).toContain("Linh")
+  act(() => vi.advanceTimersByTime(5001))
+  expect(host.textContent).toBe("")
+})

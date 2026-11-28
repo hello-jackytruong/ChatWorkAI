@@ -23,7 +23,7 @@ const clipIcon = {
 } as const
 
 export function ZaloRichClip({ clip }: { clip: Clip }) {
-  const { attachment, kind, media, poster } = clip
+  const { attachment, kind, media, poster, providerGif } = clip
   const t = useTranslations("zaloAccount.richMessage")
   const fields = useTranslations("fields.lastUserInputTypes")
   const actions = useTranslations("actions")
@@ -37,20 +37,30 @@ export function ZaloRichClip({ clip }: { clip: Clip }) {
       : undefined,
   )
   const [failed, setFailed] = useState<string>()
+  const [failedProvider, setFailedProvider] = useState<string>()
   const pending = media?.state === "pending" || media?.state === "downloading"
   const standaloneUrl =
-    media?.state === "stored" || (kind === "gif" && pending)
+    media?.state === "stored" ||
+    (kind === "gif" && (pending || media?.state === "failed"))
       ? getZaloMediaUrl(media?.url)
       : undefined
-  const url = attachment ? source.url : standaloneUrl
+  const fallbackUrl = attachment ? source.url : standaloneUrl
+  const url =
+    providerGif && providerGif.url !== failedProvider
+      ? providerGif.url
+      : fallbackUrl
   const activeUrl = url === failed ? undefined : url
-  const mime = media?.mimeType ?? attachment?.mimeType
+  const mime = providerGif?.mimeType ?? media?.mimeType ?? attachment?.mimeType
   const sourceType = mime === "application/octet-stream" ? undefined : mime
-  const width = attachment?.width ?? media?.width
-  const height = attachment?.height ?? media?.height
+  const width = providerGif?.width ?? attachment?.width ?? media?.width
+  const height = providerGif?.height ?? attachment?.height ?? media?.height
   const aspectRatio = width && height ? `${width} / ${height}` : "4 / 3"
   const duration = media?.durationMs
   const handleError = () => {
+    if (providerGif && url === providerGif.url) {
+      setFailedProvider(url)
+      return
+    }
     if (!source.retryUrl || source.retryUrl === url) {
       setFailed(url)
       return
@@ -109,6 +119,7 @@ export function ZaloRichClip({ clip }: { clip: Clip }) {
               fill
               loading="lazy"
               onError={handleError}
+              referrerPolicy="no-referrer"
               sizes="320px"
               src={activeUrl}
               unoptimized

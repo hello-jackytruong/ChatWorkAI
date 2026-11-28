@@ -1,7 +1,17 @@
 import type { ZaloAccountFriend } from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
-import { and, type DatabaseClient, db, eq, isNull, or, sql } from "../../client"
 import {
+  and,
+  type DatabaseClient,
+  db,
+  eq,
+  isNull,
+  isUniqueViolationError,
+  or,
+  sql,
+} from "../../client"
+import {
+  CONTACT_INBOX_SOURCE_ID_KEY,
   contactInboxModel,
   contactModel,
   integrationZaloAccountModel,
@@ -37,7 +47,134 @@ const lockAccount = async (input: Scope, tx: DatabaseClient) => {
   return account
 }
 
+type QuietContactInput = Scope & {
+  inboxId: string
+  quotaUserIds: string[]
+}
+
+async function importContact(
+  input: QuietContactInput,
+  friend: { uid: string; name?: string; avatarUrl?: string },
+  tx: DatabaseClient,
+) {
+  const contactId = createId()
+  const contactInboxId = createId()
+  // A concurrent inbound winner aborts this transaction at the unique
+  // identity constraint, including its Contact and counter writes.
+  await tx.insert(contactModel).values({
+    id: contactId,
+    workspaceId: input.workspaceId,
+    kind: "person",
+    firstName: friend.name,
+    avatar: friend.avatarUrl,
+  })
+  await tx.insert(contactInboxModel).values({
+    id: contactInboxId,
+    originalContactId: contactId,
+    contactId,
+    contactKind: "person",
+    inboxId: input.inboxId,
+    source: "direct",
+    channel: "zaloAccount",
+    sourceId: friend.uid,
+  })
+  await tx
+    .insert(zaloAccountFriendImportModel)
+    .values({
+      id: createId(),
+      workspaceId: input.workspaceId,
+      accountId: input.accountId,
+      providerUid: friend.uid,
+      contactId,
+      contactInboxId,
+      quotaUserIds: input.quotaUserIds,
+      cacheInvalidatedAt: null,
+      cacheRevision: 1,
+    })
+    .onConflictDoUpdate({
+      target: [
+        zaloAccountFriendImportModel.workspaceId,
+        zaloAccountFriendImportModel.accountId,
+        zaloAccountFriendImportModel.providerUid,
+      ],
+      set: {
+        contactId,
+        contactInboxId,
+        quotaUserIds: input.quotaUserIds,
+        cacheInvalidatedAt: null,
+        cacheRevision: sql`${zaloAccountFriendImportModel.cacheRevision} + 1`,
+        updatedAt: new Date(),
+      },
+    })
+  return { id: contactInboxId, contactId, created: true as const }
+}
+
 export const zaloAccountFriendImportRepository = {
+  async importSelected(
+    input: Scope & { inboxId: string; uid: string; name?: string },
+    quota: {
+      userIdsForOwner: (ownerId: string) => Promise<string[]>
+      countContact: (tx: DatabaseClient, userIds: string[]) => Promise<void>
+    },
+  ) {
+    const run = () =>
+      db.transaction(async (tx) => {
+        await tx.execute(sql`SET LOCAL lock_timeout = '2s'`)
+        await tx.execute(sql`SET LOCAL statement_timeout = '15s'`)
+        const account = await lockAccount(input, tx)
+        if (
+          account.inboxId !== input.inboxId ||
+          input.uid === account.zaloUid ||
+          input.uid === "0"
+        ) {
+          throw new Error("Invalid Zalo Account contact selection")
+        }
+        const existing = await tx.query.contactInboxModel.findFirst({
+          where: { inboxId: input.inboxId, sourceId: input.uid },
+          with: { contact: { columns: { workspaceId: true } } },
+        })
+        if (existing) {
+          if (
+            existing.channel !== "zaloAccount" ||
+            existing.contactKind !== "person" ||
+            existing.contact.workspaceId !== input.workspaceId
+          ) {
+            throw new Error("Zalo Account contact identity conflict")
+          }
+          return {
+            id: existing.id,
+            contactId: existing.contactId,
+            created: false as const,
+          }
+        }
+        const workspace = await tx.query.workspaceModel.findFirst({
+          where: { id: input.workspaceId },
+          columns: { ownerId: true },
+        })
+        if (!workspace) {
+          throw new Error("Workspace not found")
+        }
+        const quotaUserIds = await quota.userIdsForOwner(workspace.ownerId)
+        const imported = await importContact(
+          { ...input, quotaUserIds },
+          input,
+          tx,
+        )
+        await quota.countContact(tx, quotaUserIds)
+        return imported
+      })
+    try {
+      return await run()
+    } catch (error) {
+      if (!isUniqueViolationError(error, CONTACT_INBOX_SOURCE_ID_KEY)) {
+        throw error
+      }
+      // Inbound may have inserted the same Inbox identity outside this
+      // account lock. Its committed binding is resolved on this retry.
+      return await run()
+    }
+  },
+
   async fail(input: Scope & { runId: string }) {
     await db.transaction(async (tx) => {
       const account = await lockAccount(input, tx)
@@ -138,55 +275,7 @@ export const zaloAccountFriendImportRepository = {
             })
             .where(eq(contactModel.id, inbox.contactId))
         } else {
-          const contactId = createId()
-          const contactInboxId = createId()
-          // A concurrent inbound winner aborts this transaction at the unique
-          // identity constraint, including its contact and counter writes.
-          await tx.insert(contactModel).values({
-            id: contactId,
-            workspaceId: input.workspaceId,
-            kind: "person",
-            firstName: friend.name,
-            avatar: friend.avatarUrl,
-          })
-          await tx.insert(contactInboxModel).values({
-            id: contactInboxId,
-            originalContactId: contactId,
-            contactId,
-            contactKind: "person",
-            inboxId: input.inboxId,
-            source: "direct",
-            channel: "zaloAccount",
-            sourceId: friend.uid,
-          })
-          await tx
-            .insert(zaloAccountFriendImportModel)
-            .values({
-              id: createId(),
-              workspaceId: input.workspaceId,
-              accountId: input.accountId,
-              providerUid: friend.uid,
-              contactId,
-              contactInboxId,
-              quotaUserIds: input.quotaUserIds,
-              cacheInvalidatedAt: null,
-              cacheRevision: 1,
-            })
-            .onConflictDoUpdate({
-              target: [
-                zaloAccountFriendImportModel.workspaceId,
-                zaloAccountFriendImportModel.accountId,
-                zaloAccountFriendImportModel.providerUid,
-              ],
-              set: {
-                contactId,
-                contactInboxId,
-                quotaUserIds: input.quotaUserIds,
-                cacheInvalidatedAt: null,
-                cacheRevision: sql`${zaloAccountFriendImportModel.cacheRevision} + 1`,
-                updatedAt: new Date(),
-              },
-            })
+          await importContact(input, friend, tx)
           created++
         }
       }

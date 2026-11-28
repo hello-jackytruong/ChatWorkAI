@@ -2,6 +2,7 @@ export const HEAVY_WORKSPACE_TABLES = [
   "ZaloAccountMessageRecall",
   "ZaloAccountNativeOperationAttempt",
   "ZaloAccountFriendImport",
+  "ZaloAccountUserProfile",
   "ZaloAccountMessageReceipt",
   "ZaloAccountMessageReaction",
   "ZaloAccountSendAttempt",

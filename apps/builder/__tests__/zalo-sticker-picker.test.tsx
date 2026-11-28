@@ -55,6 +55,12 @@ test("catalog never requests while closed and only sends confirmed sticker ident
   expect(list).not.toHaveBeenCalled()
 
   act(() => container?.querySelector("button")?.click())
+  await vi.waitFor(() => {
+    expect(list).toHaveBeenCalledWith("3", "1", {
+      inboxId: "2",
+      query: { kind: "search", query: "vui", limit: 20 },
+    })
+  })
   const input = document.querySelector<HTMLInputElement>('input[type="search"]')
   expect(input).not.toBeNull()
   act(() => {

@@ -112,6 +112,29 @@ describe("group Inbox persistence gate", () => {
     await zaloAccountGroupInboxService.receive(input, onMessage)
     expect(onMessage).not.toHaveBeenCalled()
   })
+  it("keeps a persisted history row out of the live publisher", async () => {
+    const createdAt = new Date(input.message.timestampMs)
+    mocks.persist.mockResolvedValue({
+      historyResult: "imported",
+      historyPointer: { id: "7", createdAt },
+    })
+    await expect(
+      zaloAccountGroupInboxService.importHistory({
+        ...input,
+        groupId: "4",
+        contactInboxId: "5",
+        conversationId: "6",
+      }),
+    ).resolves.toEqual({ status: "imported", mediaQueued: 0, createdAt })
+    expect(mocks.persist).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        history: true,
+        message: input.message,
+      }),
+    )
+    expect(mocks.publish).not.toHaveBeenCalled()
+    expect(mocks.markPublished).not.toHaveBeenCalled()
+  })
   it("drops disabled or stale queued work without persisting or publishing", async () => {
     for (const override of [
       { groupMessagingEnabled: false },

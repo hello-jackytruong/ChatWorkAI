@@ -35,6 +35,24 @@ const asAttributes = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {}
 
+function conversationMessageStart(
+  conversation:
+    | { createdAt: Date; additionalAttributes?: Record<string, unknown> | null }
+    | null
+    | undefined,
+  includeZaloHistory: boolean,
+) {
+  const historyStart = conversation?.additionalAttributes?.zaloHistorySinceMs
+  const normal = getSafeSinceTime(conversation?.createdAt)
+  return includeZaloHistory &&
+    typeof historyStart === "number" &&
+    Number.isSafeInteger(historyStart) &&
+    historyStart > 0 &&
+    (!normal || historyStart < normal.getTime())
+    ? getSafeSinceTime(new Date(historyStart))
+    : normal
+}
+
 async function presignAttachments<T extends { id: string; originPath: string }>(
   attachments: T[],
   context: {
@@ -186,9 +204,11 @@ export async function withResolvedAttachmentUrls(
               mediaResources: resources.map(({ url, ...metadata }) => {
                 const showUrl =
                   !metadata.attachmentId &&
-                  ((metadata.kind === "gif" &&
+                  (((metadata.kind === "gif" || metadata.kind === "sticker") &&
                     metadata.role === "original" &&
-                    ["pending", "downloading"].includes(metadata.state)) ||
+                    ["pending", "downloading", "failed"].includes(
+                      metadata.state,
+                    )) ||
                     (metadata.state === "stored" &&
                       (richCardSlots.has(metadata.slot) ||
                         (metadata.kind === "sticker" &&
@@ -296,11 +316,15 @@ export async function listForConversation(
         })
   }
 
+  const sinceTime = conversationMessageStart(
+    conversation,
+    !input.contactInboxId || contactInbox?.channel === "zaloAccount",
+  )
   const result = await repository.listByConversation({
     workspaceId: input.workspaceId,
     contactInboxId: input.contactInboxId,
     conversationId: input.conversationId,
-    sinceTime: getSafeSinceTime(conversation?.createdAt),
+    sinceTime,
     pagination: {
       limit: input.limit,
       cursor: input.cursor ?? {
@@ -366,7 +390,7 @@ export async function findForContact(input: {
     conversationId,
     workspaceId,
     sinceTime:
-      getSafeSinceTime(conversation.createdAt) ?? conversation.createdAt,
+      conversationMessageStart(conversation, true) ?? conversation.createdAt,
     requireCompleteResults: true,
   })
 

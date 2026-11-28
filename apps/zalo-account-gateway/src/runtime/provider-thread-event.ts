@@ -31,6 +31,7 @@ const timestamp = (value: unknown): number | undefined => {
 export function normalizeProviderThreadEvent(
   kind: "delivered" | "seen" | "typing" | "reaction" | "undo",
   input: unknown,
+  ownUid?: string,
 ): ZaloAccountThreadEvent[] {
   const packet = record(input)
   const data = record(packet.data)
@@ -49,7 +50,15 @@ export function normalizeProviderThreadEvent(
     timestampSource: providerTimestamp ? "provider" : "observed",
   }
   if (kind === "typing") {
-    events.push({ ...base, type: "typing", actorId: id(data.uid), seconds: 5 })
+    const actorId = id(data.uid)
+    if (actorId === ownUid || (threadType === "user" && actorId !== threadId)) {
+      return []
+    }
+    const actorName =
+      typeof data.dName === "string" && data.dName.trim()
+        ? data.dName.trim().slice(0, 255)
+        : undefined
+    events.push({ ...base, type: "typing", actorId, actorName, seconds: 5 })
   } else if (kind === "undo") {
     events.push({
       ...base,
@@ -57,7 +66,11 @@ export function normalizeProviderThreadEvent(
       providerMessageId: id(record(data.content).globalMsgId),
     })
   } else if (kind === "reaction") {
-    if (!providerTimestamp) {
+    const actorId = id(data.uidFrom)
+    if (
+      !(providerTimestamp && actorId) ||
+      (threadType === "user" && actorId !== threadId && actorId !== ownUid)
+    ) {
       return []
     }
     const content = record(data.content)
@@ -70,7 +83,7 @@ export function normalizeProviderThreadEvent(
         ...base,
         type: "reaction",
         providerMessageId: id(record(target).gMsgID),
-        actorId: id(data.uidFrom),
+        actorId,
         reactionKey,
         operation: !reactionKey || Number(content.rType) < 0 ? "remove" : "add",
       })
@@ -78,7 +91,18 @@ export function normalizeProviderThreadEvent(
   } else {
     const members = (value: unknown) =>
       Array.isArray(value)
-        ? [...new Set(value.map(id).filter((item): item is string => !!item))]
+        ? [
+            ...new Set(
+              value
+                .map(id)
+                .filter(
+                  (item): item is string =>
+                    !!item &&
+                    item !== ownUid &&
+                    (threadType === "group" || item === threadId),
+                ),
+            ),
+          ]
         : []
     const delivered = members(data.deliveredUids)
     const seen = members(data.seenUids)
@@ -92,7 +116,8 @@ export function normalizeProviderThreadEvent(
       })
     }
     if (seen.length || kind === "seen") {
-      const fallbackMembers = threadType === "user" ? [threadId] : []
+      const fallbackMembers =
+        threadType === "user" && !Array.isArray(data.seenUids) ? [threadId] : []
       events.push({
         ...base,
         type: "receipt",

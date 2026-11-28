@@ -21,6 +21,50 @@ const base = {
 }
 
 describe("normalizeProviderMessage", () => {
+  it("retains a GIF's trusted provider source without producing a mirrored attachment", () => {
+    const gif = "https://photo.zdn.vn/animation.gif"
+    const result = normalizeProviderMessage({
+      ...base,
+      data: { ...base.data, msgType: "chat.photo", content: { href: gif } },
+    })
+    expect(result).toMatchObject({
+      message: { attachments: [], inlineGif: { url: gif } },
+    })
+  })
+
+  it("recognizes sticker identity when the socket supplies JSON instead of an object", () => {
+    expect(
+      normalizeProviderMessage({
+        ...base,
+        data: {
+          ...base.data,
+          msgType: "chat.sticker",
+          content: JSON.stringify({ id: 23_037, catId: 3, type: 1 }),
+        },
+      }),
+    ).toMatchObject({
+      message: {
+        richContent: { kind: "sticker", stickerId: "23037", categoryId: "3" },
+      },
+    })
+  })
+  it.each([
+    { title: "Mô tả ảnh" },
+    { title: "IMG_0123.jpg", description: "Mô tả ảnh" },
+    { params: JSON.stringify({ description: "Mô tả ảnh" }) },
+  ])("keeps a socket photo caption with the attachment (%j)", (caption) => {
+    const data = {
+      ...base.data,
+      msgType: "chat.photo",
+      content: { href: "https://photo.zdn.vn/photo.jpg", ...caption },
+    }
+    for (const type of [0, 1]) {
+      expect(normalizeProviderMessage({ ...base, type, data })).toMatchObject({
+        message: { text: "Mô tả ảnh", attachments: [{ kind: "image" }] },
+      })
+    }
+  })
+
   it("carries the scoped sticker identity from group and own echoes into private capture", () => {
     const data = {
       ...base.data,

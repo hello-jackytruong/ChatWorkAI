@@ -116,15 +116,18 @@ vi.mock(
 )
 vi.mock("@/features/zalo-accounts/actions/group-inbox.action", () => ({
   getZaloGroupInboxAction: vi.fn(),
-  getZaloGroupMessageStateAction: vi.fn(),
-  sendZaloGroupTypingAction: vi.fn(),
   updateZaloGroupTagAction: vi.fn(),
+}))
+vi.mock("@/features/zalo-accounts/actions/message-activity.action", () => ({
+  getZaloMessageActivityDetailsAction: vi.fn(),
+  sendZaloInboxTypingAction: vi.fn(),
+  setZaloMessageReactionAction: vi.fn(),
 }))
 vi.mock("@/features/zalo-accounts/queries/use-group-inbox", () => ({
   useZaloGroupInbox: () => ({ data: undefined }),
 }))
 vi.mock("@/features/zalo-accounts/queries/use-group-message-state", () => ({
-  useZaloGroupMessageState: () => ({ data: undefined }),
+  useZaloMessageState: () => ({ data: undefined }),
   zaloMessageStateKey: (workspaceId: string) => [
     "zalo-message-state",
     workspaceId,

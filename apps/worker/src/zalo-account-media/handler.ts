@@ -82,6 +82,15 @@ export async function transferZaloAccountMedia(scope: {
     if (!candidate) {
       throw new Error("Media lease lost")
     }
+    if (candidate.asset.kind === "sticker" || candidate.asset.kind === "gif") {
+      await zaloAccountMediaService.fail({
+        ...lease,
+        errorCode: "provider_only",
+        retryable: false,
+        remoteSettled: true,
+      })
+      return
+    }
     let boundedRole = candidate.asset.kind as MediaKind
     if (
       ["avatar", "cover", "thumbnail", "poster", "preview", "sticker"].includes(
@@ -101,6 +110,15 @@ export async function transferZaloAccountMedia(scope: {
       kind: generatedPreview ? "image" : boundedRole,
       signal,
     })
+    if (staged.mime === "image/gif") {
+      await zaloAccountMediaService.fail({
+        ...lease,
+        errorCode: "provider_only",
+        retryable: false,
+        remoteSettled: true,
+      })
+      return
+    }
     if (generatedPreview) {
       const original = staged
       staged = await generateMediaPreview(original, signal)

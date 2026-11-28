@@ -4,5 +4,6 @@ export {
   type CloseHumanReplyWindowResult,
   closeHumanReplyWindow,
   insertDmConversationsIfAbsent,
+  noteZaloHistoryStart,
   unassignUserBatch,
 } from "./repository"

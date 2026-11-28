@@ -77,6 +77,7 @@ export function privateMediaKey(input: {
   return `workspace/${input.workspaceId}/zalo-account/${input.accountId}/${owner}/${input.assetId}/${input.role ?? "original"}/${input.checksum}.${input.extension}`
 }
 const errorCodes = new Set([
+  "provider_only",
   "source_missing",
   "source_expired",
   "source_forbidden",

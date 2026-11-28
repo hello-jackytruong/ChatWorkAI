@@ -67,31 +67,27 @@ describe("Zalo ingress archival boundary", () => {
       }),
     ).rejects.toThrow("database unavailable")
   })
-  it("bounds detail requests and keeps a missing-source record when optional sticker resolution fails", async () => {
-    mocks.stickers.mockRejectedValue(new Error("offline"))
+  it("does not resolve or queue provider-only sticker and GIF assets", async () => {
     await captureZaloAccountMessage({
       ...input,
       descriptors: [
         {
           kind: "sticker",
           role: "original",
-          slot: "0",
+          slot: "static",
           providerResourceId: "42",
-          sourceMissing: "source_missing",
+        },
+        {
+          kind: "gif",
+          role: "original",
+          slot: "animation",
+          url: "https://photo.zdn.vn/a.gif",
         },
       ],
     })
-    expect(mocks.stickers).toHaveBeenCalledWith(
-      expect.objectContaining({ stickerIds: ["42"] }),
-    )
-    expect(mocks.register.mock.calls[0]?.[0].resources[0]).not.toHaveProperty(
-      "source",
-    )
-    expect(mocks.register).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resources: [expect.objectContaining({ kind: "sticker" })],
-      }),
-    )
+    expect(mocks.stickers).not.toHaveBeenCalled()
+    expect(mocks.register).not.toHaveBeenCalled()
+    expect(mocks.requestMedia).not.toHaveBeenCalled()
   })
 
   it("requests live transfer only after durable registration resolves", async () => {

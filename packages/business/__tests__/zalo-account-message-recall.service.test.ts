@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   media: vi.fn(),
   bindMediaAliases: vi.fn(),
   createStable: vi.fn(),
+  locate: vi.fn(),
   observed: vi.fn(),
   lock: vi.fn(),
   account: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@chatbotx.io/database/repositories", () => ({
   createMessageRepository: async () => ({
     reconcileOutgoingSourceId: m.reconcile,
     createWithStableIdentity: m.createStable,
+    locateZaloAccountTarget: m.locate,
     findById: m.message,
     applyZaloAccountLifecycleExact: m.exact,
   }),
@@ -148,6 +150,73 @@ beforeEach(() => {
   m.exact.mockResolvedValue({ id: "m" })
   m.applied.mockResolvedValue(row)
   m.publish.mockResolvedValue(undefined)
+})
+
+describe("quiet direct history identity", () => {
+  const historical = {
+    workspaceId: "w",
+    conversationId: "c",
+    contactInboxId: "ci",
+    sourceId: "za:a:user:u:p",
+    messageType: "incoming" as const,
+    contentType: "text" as const,
+    senderType: "contact" as const,
+    createdAt: new Date("2026-01-01"),
+    id: "original",
+  }
+  const importInput = () => ({
+    inboxId: "in",
+    message: historical,
+    attachments: [],
+    deadline: Date.now() + 2000,
+  })
+
+  it("uses the primary source scan to deduplicate history arriving after realtime", async () => {
+    const existing = { ...historical, id: "live", attachments: [] }
+    m.locate.mockResolvedValueOnce({ message: existing, complete: true })
+    await expect(
+      service.persistHistoryOriginal(importInput()),
+    ).resolves.toEqual({
+      status: "existing",
+      message: existing,
+    })
+    expect(m.createStable).not.toHaveBeenCalled()
+  })
+
+  it("skips a source scan without a complete result", async () => {
+    m.locate.mockResolvedValueOnce({ complete: false })
+    await expect(
+      service.persistHistoryOriginal(importInput()),
+    ).resolves.toEqual({ status: "skipped" })
+    expect(m.createStable).not.toHaveBeenCalled()
+  })
+
+  it("resolves replayed live data to the exact provider-time historical row", async () => {
+    const existing = { ...historical, attachments: [] }
+    const persist = vi.fn()
+    m.locate.mockResolvedValueOnce({ message: existing, complete: true })
+    await expect(
+      service.persistOriginal({
+        ...importInput(),
+        message: {
+          ...historical,
+          id: "late-live",
+          createdAt: new Date(),
+          contentAttributes: {
+            zaloAccount: { timestampMs: historical.createdAt.getTime() },
+          },
+        },
+        persist,
+      }),
+    ).resolves.toEqual({ message: existing, isNew: false })
+    expect(m.locate).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        createdAt: historical.createdAt,
+        sourceId: historical.sourceId,
+      }),
+    )
+    expect(persist).not.toHaveBeenCalled()
+  })
 })
 describe("retained original access", () => {
   it("rejects another account before returning content or signing", async () => {

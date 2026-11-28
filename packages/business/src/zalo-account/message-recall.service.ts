@@ -1,4 +1,9 @@
 import {
+  isMessageStorageError,
+  ZaloAccountMessageIdentityRangeUnavailableError,
+} from "@chatbotx.io/database/errors"
+import type { ZaloAccountRecallScanCursor } from "@chatbotx.io/database/partials"
+import {
   type CreateAttachmentInput,
   type CreateMessageInput,
   contactInboxRepository,
@@ -37,6 +42,12 @@ import { zaloAccountService } from "./service"
 
 const NUMERIC_SLOT = /^\d+$/
 const PROVIDER_URL = /^https?:\/\//i
+type PersistOriginalInput = {
+  inboxId: string
+  message: CreateMessageInput & { id: string; createdAt: Date }
+  attachments: Omit<CreateAttachmentInput, "messageId" | "messageCreatedAt">[]
+}
+class HistoryTargetUnavailable extends Error {}
 type Target = {
   workspaceId: string
   accountId: string
@@ -493,12 +504,81 @@ export const zaloAccountMessageRecallService = {
       await this.repair(row)
     }
   },
-  async persistOriginal(input: {
-    inboxId: string
-    message: CreateMessageInput & { id: string; createdAt: Date }
-    attachments: Omit<CreateAttachmentInput, "messageId" | "messageCreatedAt">[]
-    persist: () => Promise<{ message: MessageWithAttachments; isNew: boolean }>
-  }) {
+  async persistHistoryOriginal(
+    input: PersistOriginalInput & { deadline: number },
+  ) {
+    const sourceId = input.message.sourceId
+    if (
+      parseZaloAccountSourceId(sourceId)?.threadType !== "user" ||
+      !sourceId
+    ) {
+      return { status: "skipped" as const, permanent: true }
+    }
+    try {
+      const result = await this.persistOriginal({
+        ...input,
+        history: true,
+        persist: async () => {
+          const repository = await createMessageRepository()
+          let cursor: ZaloAccountRecallScanCursor | undefined
+          for (
+            let batch = 0;
+            batch < 3 && Date.now() < input.deadline;
+            batch++
+          ) {
+            const existing = await repository.locateZaloAccountTarget({
+              workspaceId: input.message.workspaceId,
+              conversationId: input.message.conversationId,
+              contactInboxId: input.message.contactInboxId,
+              sourceId,
+              deadline: input.deadline,
+              cursor,
+              maxCandidates: 2,
+            })
+            if (existing.message) {
+              return { message: existing.message, isNew: false }
+            }
+            if (existing.complete) {
+              const created = await repository.createWithStableIdentity(
+                input.message,
+                input.attachments,
+              )
+              return { message: created.result, isNew: created.isNew }
+            }
+            if (!existing.cursor) {
+              break
+            }
+            cursor = existing.cursor
+          }
+          throw new HistoryTargetUnavailable()
+        },
+      })
+      return {
+        status: result.isNew ? ("imported" as const) : ("existing" as const),
+        message: result.message,
+      }
+    } catch (error) {
+      if (error instanceof ZaloAccountMessageIdentityRangeUnavailableError) {
+        return { status: "skipped" as const, permanent: true }
+      }
+      if (
+        error instanceof HistoryTargetUnavailable ||
+        isMessageStorageError(error)
+      ) {
+        return { status: "skipped" as const }
+      }
+      throw error
+    }
+  },
+  async persistOriginal(
+    input: PersistOriginalInput & {
+      history?: true
+      persist: () => Promise<{
+        message: MessageWithAttachments
+        isNew: boolean
+      }>
+    },
+  ) {
     const ref = parseZaloAccountSourceId(input.message.sourceId)
     if (ref?.threadType !== "user") {
       return await input.persist()
@@ -593,6 +673,35 @@ export const zaloAccountMessageRecallService = {
         }
       }
       if (!row || row.discardedAt) {
+        const timestampMs = (
+          input.message.contentAttributes?.zaloAccount as
+            | { timestampMs?: number }
+            | undefined
+        )?.timestampMs
+        if (
+          !input.history &&
+          typeof timestampMs === "number" &&
+          Number.isSafeInteger(timestampMs) &&
+          timestampMs > 0
+        ) {
+          // History and live ingest share the target lock. A replica can miss
+          // the just-written provider-time row, even within the live lookback.
+          const existing = await repository.locateZaloAccountTarget({
+            workspaceId: input.message.workspaceId,
+            conversationId: input.message.conversationId,
+            contactInboxId: input.message.contactInboxId,
+            sourceId: canonicalSource,
+            createdAt: new Date(timestampMs),
+            deadline: Date.now() + 2000,
+            maxCandidates: 2,
+          })
+          if (existing.message) {
+            return { message: existing.message, isNew: false }
+          }
+          if (!existing.complete) {
+            throw new Error("Zalo historical source lookup is incomplete")
+          }
+        }
         return await input.persist()
       }
       if (!(row.messageId && row.messageCreatedAt)) {

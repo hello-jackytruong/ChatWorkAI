@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   applyDiagnostics: vi.fn(),
   findSession: vi.fn(),
   failSession: vi.fn(),
+  recordFriendActivity: vi.fn(),
   realtime: vi.fn(),
   markScanned: vi.fn(),
   publishQr: vi.fn(),
@@ -24,6 +25,9 @@ vi.mock("@chatbotx.io/business/zalo-account/runtime-state", () => ({
     apply: mocks.applyRuntime,
     applyDiagnostics: mocks.applyDiagnostics,
   },
+}))
+vi.mock("@chatbotx.io/business/zalo-account/friend-activity", () => ({
+  zaloAccountFriendActivityService: { record: mocks.recordFriendActivity },
 }))
 vi.mock("@chatbotx.io/business/connect-session", () => ({
   connectSessionService: {
@@ -92,6 +96,49 @@ const secretBase = {
 }
 
 describe("handleZaloAccountEvents", () => {
+  it("records scoped friend activity without queueing message work or connection transitions", async () => {
+    mocks.enqueueIntegrationJob.mockClear()
+    mocks.applyRuntime.mockClear()
+    const route = {
+      kind: "account" as const,
+      workspaceId: "w",
+      accountId: "a",
+      inboxId: "i",
+    }
+    const activity = {
+      uid: "42",
+      kind: "request" as const,
+      direction: "incoming" as const,
+    }
+    await handleZaloAccountEvents([
+      {
+        version: 1,
+        eventId: "friend-activity",
+        kind: "lifecycle",
+        route,
+        epoch: 1,
+        fenceToken: "2",
+        socketAttempt: 3,
+        sequence: 4,
+        occurredAt: "2026-11-20T02:00:00.000Z",
+        payload: { type: "friend_activity", activity },
+      },
+    ])
+    expect(mocks.recordFriendActivity).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: "w",
+      accountId: "a",
+      inboxId: "i",
+      eventId: "friend-activity",
+      epoch: 1,
+      fenceToken: "2",
+      socketAttempt: 3,
+      sequence: 4,
+      occurredAt: "2026-11-20T02:00:00.000Z",
+      activity,
+    })
+    expect(mocks.enqueueIntegrationJob).not.toHaveBeenCalled()
+    expect(mocks.applyRuntime).not.toHaveBeenCalled()
+  })
   it("keeps diagnostics separate from Connection transitions and publishes an accepted ID hint", async () => {
     mocks.applyDiagnostics.mockResolvedValueOnce(true)
     await handleZaloAccountEvents([

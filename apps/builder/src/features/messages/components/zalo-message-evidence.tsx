@@ -3,6 +3,10 @@
 import { getZaloAccountMessageEvidence } from "@chatbotx.io/sdk"
 import { useTranslations } from "next-intl"
 import { zaloSendAttemptResource } from "@/features/zalo-accounts/schema/send-attempt"
+import {
+  type ZaloMessageActivity,
+  ZaloMessageActivityControls,
+} from "./zalo-message-activity"
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -42,8 +46,10 @@ export type ZaloMessageInspect = { accountId: string; canInspect: boolean }
 export function ZaloMessageEvidence({
   attributes,
   message,
+  activity,
 }: {
   attributes: unknown
+  activity?: ZaloMessageActivity
   message?: {
     id: string
     workspaceId: string
@@ -52,9 +58,10 @@ export function ZaloMessageEvidence({
   }
 }) {
   const t = useTranslations("zaloAccount.evidence")
+  const tActivity = useTranslations("zaloAccount.activity")
   const evidence = getZaloMessageEvidence(attributes)
   const attempt = evidence?.attempt
-  if (!(evidence || attempt)) {
+  if (!(evidence || activity)) {
     return null
   }
   const unsupportedKeys = {
@@ -89,13 +96,24 @@ export function ZaloMessageEvidence({
   } else if (attempt?.delivery === "accepted_without_id") {
     label = "acceptedWithoutId"
   }
+  const direct =
+    activity?.threadType === "user" && activity.outgoing ? activity : null
+  let statusLabel = label ? t(label) : null
+  if (direct?.receipt?.seen) {
+    statusLabel = tActivity("seen")
+  } else if (direct?.receipt?.delivered) {
+    statusLabel = tActivity("delivered")
+  } else if (!statusLabel && direct?.sent) {
+    statusLabel = t("applied")
+  }
   return (
     <div className="flex flex-col gap-1 text-muted-foreground text-xs">
       {evidence?.unsupported && (
         <span>{t(unsupportedKeys[evidence.unsupported.reason])}</span>
       )}
-      {label && <span role="status">{t(label)}</span>}
+      {statusLabel && <span role="status">{statusLabel}</span>}
       {attempt?.errorInfo && <span>{t("safeFailure")}</span>}
+      {activity && <ZaloMessageActivityControls activity={activity} />}
     </div>
   )
 }

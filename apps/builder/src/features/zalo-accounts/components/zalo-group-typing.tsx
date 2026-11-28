@@ -6,40 +6,84 @@ import { useWorkspaceRealtimeEvents } from "@/features/realtime/use-workspace-re
 
 export function ZaloGroupTypingIndicator({
   conversationId,
+  threadType = "group",
+  contactName,
+  contactUid,
 }: {
   conversationId: string
+  threadType?: "group" | "user"
+  contactName?: string
+  contactUid?: string
+}) {
+  return (
+    <TypingActors
+      contactName={contactName}
+      contactUid={contactUid}
+      conversationId={conversationId}
+      key={`${threadType}:${conversationId}`}
+      threadType={threadType}
+    />
+  )
+}
+
+function TypingActors({
+  conversationId,
+  threadType,
+  contactName,
+  contactUid,
+}: {
+  conversationId: string
+  threadType: "group" | "user"
+  contactName?: string
+  contactUid?: string
 }) {
   const t = useTranslations("zaloAccount")
   const [actors, setActors] = useState<Array<{ uid: string; name: string }>>([])
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   useEffect(() => {
-    setActors([])
-    return () => {
-      for (const timer of timers.current.values()) {
+    const actorTimers = timers.current
+    const clear = () => {
+      for (const timer of actorTimers.values()) {
         clearTimeout(timer)
       }
-      timers.current.clear()
+      actorTimers.clear()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        clear()
+        setActors([])
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+      clear()
     }
   }, [])
   useWorkspaceRealtimeEvents({
     typing: ({ data }) => {
+      const group = threadType === "group"
       if (
+        document.visibilityState === "hidden" ||
         data.conversationId !== conversationId ||
-        data.audience !== "zaloAccountGroup" ||
-        !data.actor
+        (data.audience === "zaloAccountGroup") !== group ||
+        (group && !data.actor?.uid) ||
+        (!group && contactUid && data.actor && data.actor.uid !== contactUid)
       ) {
         return
       }
-      const actor = data.actor
-      const previous = timers.current.get(actor.uid)
+      const uid = data.actor?.uid || contactUid || conversationId
+      const name =
+        data.actor?.name?.trim() ||
+        (!group && contactName) ||
+        t("activity.unknownActor")
+      const previous = timers.current.get(uid)
       if (previous) {
         clearTimeout(previous)
       }
       const remove = () => {
-        timers.current.delete(actor.uid)
-        setActors((current) =>
-          current.filter((entry) => entry.uid !== actor.uid),
-        )
+        timers.current.delete(uid)
+        setActors((current) => current.filter((entry) => entry.uid !== uid))
       }
       const expires = Math.min(
         Date.now() + Math.min(Math.max(data.seconds, 1), 10) * 1000,
@@ -49,14 +93,14 @@ export function ZaloGroupTypingIndicator({
         remove()
         return
       }
-      if (!timers.current.has(actor.uid) && timers.current.size >= 20) {
+      if (!timers.current.has(uid) && timers.current.size >= 20) {
         return
       }
       setActors((current) => [
-        ...current.filter((entry) => entry.uid !== actor.uid),
-        { uid: actor.uid, name: actor.name || actor.uid },
+        ...current.filter((entry) => entry.uid !== uid),
+        { uid, name },
       ])
-      timers.current.set(actor.uid, setTimeout(remove, expires - Date.now()))
+      timers.current.set(uid, setTimeout(remove, expires - Date.now()))
     },
   })
   if (!actors.length) {
@@ -64,12 +108,15 @@ export function ZaloGroupTypingIndicator({
   }
   return (
     <div aria-live="polite" className="px-4 py-1 text-muted-foreground text-xs">
-      {t("typing", {
-        name: actors
-          .slice(0, 3)
-          .map((actor) => actor.name)
-          .join(", "),
-      })}
+      {actors.length === 1
+        ? t("typing", { name: actors[0]?.name ?? t("activity.unknownActor") })
+        : t("activity.multiTyping", {
+            name: actors
+              .slice(0, 2)
+              .map((actor) => actor.name)
+              .join(", "),
+            count: actors.length - 2,
+          })}
     </div>
   )
 }

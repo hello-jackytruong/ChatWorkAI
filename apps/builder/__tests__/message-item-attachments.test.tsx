@@ -1025,13 +1025,55 @@ describe("Zalo Account rich messages", () => {
   test("keeps a missing sticker in a fixed fallback frame and never renders its raw text summary", () => {
     const el = renderComponent(
       <MessageItem
-        message={zaloRichMessage({ kind: "sticker", stickerId: "302" })}
+        message={zaloRichMessage(undefined, {
+          contentAttributes: { zaloAccount: { msgType: "chat.sticker" } },
+        })}
         zaloAccount
       />,
     )
     expect(el.querySelector('[data-slot="zalo-sticker"]')).not.toBeNull()
     expect(el.textContent).toContain("sticker")
     expect(el.textContent).not.toContain("[fallback]")
+  })
+
+  test("renders a sticker ID directly from the public Zalo CDN without a stored asset", () => {
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage({ kind: "sticker", stickerId: "23037" })}
+        zaloAccount
+      />,
+    )
+    expect(
+      el.querySelector('[data-slot="zalo-sticker"] img')?.getAttribute("src"),
+    ).toBe("https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=23037")
+  })
+
+  test("renders sticker artwork from a scoped preview while storage is unavailable", () => {
+    const url = "https://builder.example.com/media/attachment/sticker-preview"
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage(undefined, {
+          contentAttributes: {
+            zaloAccount: {
+              msgType: "chat.sticker",
+              mediaResources: [
+                {
+                  kind: "sticker",
+                  role: "original",
+                  slot: "static",
+                  state: "failed",
+                  url,
+                },
+              ],
+            },
+          },
+        })}
+        zaloAccount
+      />,
+    )
+    expect(
+      el.querySelector('[data-slot="zalo-sticker"] img')?.getAttribute("src"),
+    ).toBe(url)
   })
 
   test("opens a safe original link with an archived lazy thumbnail and escapes provider markup", () => {
@@ -1307,6 +1349,25 @@ describe("Zalo Account rich messages", () => {
     expect(el.textContent).toContain("mediaUnavailable")
     expect(el.querySelector("video, audio, a")).toBeNull()
     expect(el.innerHTML).not.toContain("pending/pending")
+  })
+
+  test("renders a provider GIF and its caption before any archive exists", () => {
+    const url = "https://photo.zdn.vn/original/animation.gif"
+    const el = renderComponent(
+      <MessageItem
+        message={zaloRichMessage(undefined, {
+          text: "Caption from the Zalo socket",
+          contentAttributes: {
+            zaloAccount: { inlineGif: { url, mimeType: "image/gif" } },
+          },
+        })}
+        zaloAccount
+      />,
+    )
+
+    expect(el.textContent).toContain("Caption from the Zalo socket")
+    expect(el.querySelector("img")?.getAttribute("src")).toBe(url)
+    expect(el.textContent).not.toContain("processingMedia")
   })
 
   test("updates a standalone GIF from processing to the original animation", () => {

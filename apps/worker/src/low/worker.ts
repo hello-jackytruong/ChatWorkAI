@@ -2,6 +2,7 @@ import {
   commentAutomationService,
   withBlockedOwnerGuard,
 } from "@chatbotx.io/business"
+import { zaloAccountHistorySyncService } from "@chatbotx.io/business/zalo-account"
 import {
   type ContactInfoCaptureJobData,
   type LeaderboardJobData,
@@ -66,6 +67,9 @@ async function processLowJob(
       async () => {
         const jobData = job.data
         switch (jobData.type) {
+          case LowJobAction.zaloAccountHistoryCatchup:
+            await zaloAccountHistorySyncService.startAutomatic(jobData.data)
+            return
           case LowJobAction.zaloAccountThreadEvent:
             await handleZaloAccountThreadEvent(jobData.data, job)
             return

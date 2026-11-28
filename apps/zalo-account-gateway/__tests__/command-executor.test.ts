@@ -5,6 +5,8 @@ import type {
 } from "@chatbotx.io/sdk"
 import { ZaloAccountPreDispatchError } from "@chatbotx.io/sdk"
 import { describe, expect, it, vi } from "vitest"
+import { ZaloAccountHistoryPageError } from "../src/runtime/history-page"
+import type { ZaloAccountPool } from "../src/runtime/zalo-account-pool"
 import {
   commandStateKey,
   InMemoryCommandStateStore,
@@ -26,8 +28,26 @@ const reconnectCommand: ZaloAccountCommandEnvelope = {
   expiresAt: "2026-11-20T02:01:00.000Z",
 }
 
+const historyCommand = {
+  ...reconnectCommand,
+  kind: "fetch_history_page",
+  target: { ownerId: "owner-1", fenceToken: "7" },
+  history: { threadType: "user", threadId: "peer-1" },
+} as const
+
+const historyPage = {
+  messages: [],
+  providerRowCount: 0,
+  invalidRowCount: 0,
+  providerExhausted: true,
+  fingerprint: "a".repeat(64),
+}
+
 const makeHarness = (admission?: ProviderAdmissionPort) => {
   const pool = {
+    fetchHistoryPage: vi.fn<ZaloAccountPool["fetchHistoryPage"]>(
+      async () => historyPage,
+    ),
     getGroupMembers: vi.fn(async () => ({ members: [], complete: true })),
     getStickerCatalog: vi.fn(async () => []),
     getStickerResources: vi.fn(async () => []),
@@ -74,6 +94,64 @@ const makeHarness = (admission?: ProviderAdmissionPort) => {
 }
 
 describe("ZaloAccountCommandExecutor", () => {
+  it("returns a history page only after the targeted lease is rechecked", async () => {
+    const { executor, ownsTarget, pool } = makeHarness()
+    pool.fetchHistoryPage.mockImplementation(async ({ authorizeLease }) => {
+      await authorizeLease()
+      await authorizeLease()
+      return historyPage
+    })
+
+    await expect(executor.execute(historyCommand)).resolves.toEqual({
+      status: "applied",
+      result: { status: "synced", historyPage },
+    })
+    expect(ownsTarget).toHaveBeenCalledTimes(3)
+    expect(pool.fetchHistoryPage).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        inboxId: "inbox-1",
+        history: historyCommand.history,
+      }),
+    )
+  })
+
+  it("returns the safe history failure code and never retries a timed-out socket request", async () => {
+    const { executor, pool } = makeHarness()
+    pool.fetchHistoryPage.mockRejectedValueOnce(
+      new ZaloAccountHistoryPageError("history_timeout"),
+    )
+
+    await expect(executor.execute(historyCommand)).resolves.toMatchObject({
+      status: "failed",
+      error: "history_timeout",
+    })
+    expect(pool.fetchHistoryPage).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects group history with no policy epochs or a synthetic cursor", async () => {
+    const { executor, pool } = makeHarness()
+    await expect(
+      executor.execute({
+        ...historyCommand,
+        history: { threadType: "group", threadId: "group-1" },
+      }),
+    ).rejects.toThrow()
+    await expect(
+      executor.execute({
+        ...historyCommand,
+        history: {
+          threadType: "group",
+          threadId: "group-1",
+          accountPolicyEpoch: 1,
+          groupPolicyEpoch: 2,
+          cursor: "unused-action-id",
+        },
+      }),
+    ).rejects.toThrow()
+    expect(pool.fetchHistoryPage).not.toHaveBeenCalled()
+  })
+
   it("dispatches a catalog read for the targeted account and sticker pack", async () => {
     const { executor, pool } = makeHarness()
     const stickerCatalogQuery = {

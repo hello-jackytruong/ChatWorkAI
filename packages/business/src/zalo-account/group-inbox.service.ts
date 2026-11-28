@@ -21,6 +21,61 @@ import { projectZaloAccountRetainedMessage } from "./message-projection"
 import { zaloAccountService } from "./service"
 
 export const zaloAccountGroupInboxService = {
+  async importHistory(input: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    groupId: string
+    conversationId: string
+    contactInboxId: string
+    accountPolicyEpoch: number
+    groupPolicyEpoch: number
+    message: ZaloAccountGroupMessage
+  }) {
+    const message = zaloAccountGroupMessageSchema.parse(input.message)
+    const archive = getZaloAccountMediaPolicy().enabled
+    const result = await zaloAccountGroupInboxRepository.persist({
+      ...input,
+      message,
+      history: true,
+      ...(archive ? { archiveHistoryMedia: true } : {}),
+    })
+    const pointer =
+      "historyPointer" in result ? result.historyPointer : undefined
+    const storedMessage = "message" in result ? result.message : undefined
+    const mediaQueued =
+      archive && pointer
+        ? await captureZaloAccountMessage({
+            workspaceId: input.workspaceId,
+            accountId: input.accountId,
+            inboxId: input.inboxId,
+            conversationId: input.conversationId,
+            channel: "zaloAccount",
+            messageId: pointer.id,
+            messageCreatedAt: pointer.createdAt,
+            threadType: "group",
+            threadId: message.threadId,
+            providerMessageId: message.providerMessageId,
+            descriptors: message.mediaResources,
+            attachments:
+              storedMessage?.attachments ??
+              message.attachments.map((attachment) => ({
+                fileType: attachment.kind,
+                url: attachment.url,
+                name: attachment.name,
+              })),
+            priority: "backfill",
+          })
+        : 0
+    return {
+      status: result.historyResult,
+      mediaQueued,
+      createdAt: pointer?.createdAt,
+      ...("permanentHistorySkip" in result && result.permanentHistorySkip
+        ? { permanent: true }
+        : {}),
+    }
+  },
   pickPending: (limit: number) =>
     zaloAccountGroupInboxRepository.pickPending(limit),
   async receive(

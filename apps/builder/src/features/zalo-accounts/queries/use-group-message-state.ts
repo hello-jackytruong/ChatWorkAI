@@ -1,34 +1,43 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
-import { getZaloGroupMessageStateAction } from "../actions/group-inbox.action"
-import type { ZaloGroupConversation } from "../lib/group-content"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { getZaloMessageStateAction } from "../actions/message-activity.action"
+import type { ZaloMessageActivityThread } from "../lib/message-activity"
 
 export const zaloMessageStateKey = (workspaceId: string) =>
   ["zalo-message-state", workspaceId] as const
-export function useZaloGroupMessageState(
+export function useZaloMessageState(
   workspaceId: string,
-  audience: ZaloGroupConversation | null,
+  thread: ZaloMessageActivityThread | null,
   providerMessageIds: string[],
 ) {
   const ids = [...new Set(providerMessageIds)].sort().slice(0, 50)
-  return useQuery({
-    queryKey: [
-      ...zaloMessageStateKey(workspaceId),
-      audience?.accountId,
-      audience?.groupId,
-      ids.join(","),
-    ],
-    enabled: !!audience && ids.length > 0,
+  const queryClient = useQueryClient()
+  const queryKey = [
+    ...zaloMessageStateKey(workspaceId),
+    thread?.accountId,
+    thread?.conversationId,
+    thread?.contactInboxId,
+    thread?.group?.groupId,
+    ids,
+  ]
+  const query = useQuery({
+    queryKey,
+    enabled: !!thread && ids.length > 0,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!audience) {
-        throw new Error("Zalo group is required")
+      if (!thread) {
+        throw new Error("Zalo thread is required")
       }
-      const result = await getZaloGroupMessageStateAction(
+      const result = await getZaloMessageStateAction(
         workspaceId,
-        audience.accountId,
-        { groupId: audience.groupId, providerMessageIds: ids },
+        thread.accountId,
+        {
+          conversationId: thread.conversationId,
+          contactInboxId: thread.contactInboxId,
+          groupId: thread.group?.groupId,
+          providerMessageIds: ids,
+        },
       )
       if (!result?.data) {
         throw new Error(
@@ -38,4 +47,8 @@ export function useZaloGroupMessageState(
       return result.data
     },
   })
+  return {
+    ...query,
+    invalidate: () => queryClient.invalidateQueries({ queryKey }),
+  }
 }

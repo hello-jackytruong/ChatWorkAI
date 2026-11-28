@@ -71,3 +71,57 @@ it("retains late receipts after serializing against recall without resurrecting 
   expect(result).toBe(true)
   expect(tx.insert).toHaveBeenCalledTimes(1)
 })
+
+it("does not add historical reactions after a provider recall wins the target lock", async () => {
+  let locked = false
+  const tx = {
+    execute: vi.fn((query) => {
+      if (
+        new PgDialect().sqlToQuery(query).sql.includes("pg_advisory_xact_lock")
+      ) {
+        locked = true
+      }
+      return Promise.resolve({ rows: [] })
+    }),
+    select: () => ({
+      from: (table: unknown) => ({
+        where: () => ({
+          limit: () =>
+            table === integrationZaloAccountModel
+              ? { for: async () => [{ id: "account" }] }
+              : Promise.resolve(
+                  locked ? [{ recallReceivedAt: new Date() }] : [],
+                ),
+        }),
+      }),
+    }),
+    query: {
+      zaloAccountMessageReactionModel: { findFirst: vi.fn() },
+    },
+    insert: vi.fn(() => ({
+      values: () => ({
+        onConflictDoUpdate: () => ({
+          returning: async () => [{ id: "reaction" }],
+        }),
+      }),
+    })),
+  }
+  mocks.transaction.mockImplementation(async (fn) => await fn(tx))
+  const result = await zaloAccountMessageStateRepository.applyReaction({
+    workspaceId: "workspace",
+    accountId: "account",
+    inboxId: "inbox",
+    event: {
+      type: "reaction",
+      threadType: "user",
+      threadId: "peer",
+      providerMessageId: "message",
+      actorId: "peer",
+      operation: "add",
+      reactionKey: "like",
+      timestampMs: Date.now(),
+    },
+  })
+  expect(result).toBe(false)
+  expect(tx.insert).not.toHaveBeenCalled()
+})

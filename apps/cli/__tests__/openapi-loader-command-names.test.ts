@@ -413,6 +413,53 @@ describe("pathAndMethodToCommandName — repeating broadcasts", () => {
   })
 })
 
+describe("pathAndMethodToCommandName — Zalo Account contacts", () => {
+  test("uses the account contacts group for lookups, presence and relationship changes", () => {
+    const path = "/v1/zalo-accounts/{accountId}/contacts"
+    const names = [
+      pathAndMethodToCommandName(`${path}/lookup`, "POST"),
+      pathAndMethodToCommandName(`${path}/relationships`, "GET"),
+      pathAndMethodToCommandName(`${path}/open-conversation`, "POST"),
+      pathAndMethodToCommandName(`${path}/friend-request-status`, "POST"),
+      pathAndMethodToCommandName(`${path}/presence`, "POST"),
+      pathAndMethodToCommandName(`${path}/relationship-actions`, "POST"),
+    ]
+
+    expect(names).toEqual([
+      "zalo-accounts:contacts:lookup",
+      "zalo-accounts:contacts:relationships",
+      "zalo-accounts:contacts:open-conversation",
+      "zalo-accounts:contacts:request-status",
+      "zalo-accounts:contacts:presence",
+      "zalo-accounts:contacts:change-relationship",
+    ])
+    expect(new Set(names).size).toBe(names.length)
+  })
+})
+
+describe("pathAndMethodToCommandName — Zalo Account history", () => {
+  test("preserves separate account and conversation sync commands", () => {
+    const account = "/v1/zalo-accounts/{accountId}/history-sync"
+    const conversation =
+      "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/history-sync"
+    const names = [account, conversation].flatMap((path) => [
+      pathAndMethodToCommandName(path, "GET"),
+      pathAndMethodToCommandName(path, "POST"),
+      pathAndMethodToCommandName(`${path}/{runId}/resume`, "POST"),
+    ])
+
+    expect(names).toEqual([
+      "zalo-accounts:history-sync:status",
+      "zalo-accounts:history-sync:start",
+      "zalo-accounts:history-sync:resume",
+      "zalo-accounts:conversation-history-sync:status",
+      "zalo-accounts:conversation-history-sync:start",
+      "zalo-accounts:conversation-history-sync:resume",
+    ])
+    expect(new Set(names).size).toBe(names.length)
+  })
+})
+
 describe("pathAndMethodToCommandName — ecommerce", () => {
   // A command whose derived name collides is silently dropped by the CLI, so
   // every ecommerce operation is pinned here.

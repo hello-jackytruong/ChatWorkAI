@@ -96,8 +96,8 @@ export function ZaloStickerPicker({
   }, [open, tab, trimmedSearch])
 
   let query: ZaloAccountStickerCatalogQuery | undefined
-  if (tab === "search" && searchTerm && searchTerm === trimmedSearch) {
-    query = { kind: "search", query: searchTerm, limit: 20 }
+  if (tab === "search" && searchTerm === trimmedSearch) {
+    query = { kind: "search", query: searchTerm || "vui", limit: 20 }
   } else if (tab === "category" && categoryId) {
     query = { kind: "category", categoryId, limit: 20 }
   }

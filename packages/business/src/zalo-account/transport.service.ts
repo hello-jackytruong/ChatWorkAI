@@ -5,13 +5,17 @@ import {
   parseZaloAccountCommandEnvelope,
   type ZaloAccountCommandEnvelope,
   type ZaloAccountCommandResult,
+  type ZaloAccountContactOperation,
   type ZaloAccountGroup,
   type ZaloAccountGroupMembersQuery,
+  type ZaloAccountHistoryPageRequest,
   type ZaloAccountLabel,
   type ZaloAccountLabelSnapshot,
+  type ZaloAccountMessageActivity,
   type ZaloAccountNativeOperation,
   type ZaloAccountOutboundMessage,
   ZaloAccountPreDispatchError,
+  type ZaloAccountProfileRequest,
   type ZaloAccountSendResult,
   type ZaloAccountStickerCatalogQuery,
   zaloAccountCommandResultSchema,
@@ -20,11 +24,13 @@ import {
   zaloAccountSendResultSchema,
   zaloAccountTransportKeys,
 } from "@chatbotx.io/sdk"
+import { sha256Hex } from "@chatbotx.io/utils/crypto"
 
 type RedisPort = Pick<Redis, "eval" | "get">
 
 const COMMAND_STREAM_MAX_LEN = 10_000
 const OWNER_MAILBOX_TTL_MS = 24 * 60 * 60 * 1000
+const REACTION_HISTORY_THROTTLE_MS = 24 * 60 * 60 * 1000
 const FENCE_TOKEN_PATTERN = /^\d+$/
 const ENQUEUE_SCRIPT = `
 if redis.call("XLEN", KEYS[1]) >= tonumber(ARGV[1]) then
@@ -56,6 +62,8 @@ const readLease = (value: string | null) => {
   return FENCE_TOKEN_PATTERN.test(fenceToken) ? { ownerId, fenceToken } : null
 }
 
+type HistoryLease = NonNullable<ReturnType<typeof readLease>>
+
 const readSendResult = ({
   messageIds = [],
   sentCount = messageIds.length,
@@ -70,6 +78,159 @@ const readSendResult = ({
   })
 
 export class ZaloAccountCommandTransport {
+  async contactOperationAndWait(
+    input: AccountCommandInput & {
+      contactOperation: ZaloAccountContactOperation
+      waitTimeoutMs: number
+    },
+  ) {
+    const previous = await this.readCommandStatus(input.commandId)
+    if (previous) {
+      return previous
+    }
+    const lease = await this.requireLease(input)
+    const createdAt = this.now()
+    const command = parseZaloAccountCommandEnvelope({
+      version: 1,
+      kind: "contact_operation",
+      commandId: input.commandId,
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      contactOperation: input.contactOperation,
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    return await this.waitForCommandStatus(input.commandId, input.waitTimeoutMs)
+  }
+
+  async readProfilesAndWait(
+    input: AccountCommandInput & {
+      profileQuery: ZaloAccountProfileRequest
+      waitTimeoutMs: number
+    },
+  ) {
+    const lease = await this.requireLease(input)
+    const createdAt = this.now()
+    const command = parseZaloAccountCommandEnvelope({
+      version: 1,
+      kind: "read_profiles",
+      commandId: input.commandId,
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      profileQuery: input.profileQuery,
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const result = await this.waitForCommandStatus(
+      input.commandId,
+      input.waitTimeoutMs,
+    )
+    const current = await this.requireLease(input)
+    if (
+      current.ownerId !== lease.ownerId ||
+      current.fenceToken !== lease.fenceToken
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account profile lease is stale",
+      )
+    }
+    if (result.status === "applied" && result.result.profiles) {
+      return result.result.profiles
+    }
+    throw new ZaloAccountPreDispatchError("Zalo Account profiles unavailable")
+  }
+
+  async historyPageAndWait(
+    input: AccountCommandInput & {
+      history: ZaloAccountHistoryPageRequest
+      waitTimeoutMs: number
+      expectedFenceToken?: string
+    },
+  ) {
+    const lease = await this.requireLease(input)
+    if (
+      input.expectedFenceToken &&
+      input.expectedFenceToken !== lease.fenceToken
+    ) {
+      return { status: "rejected_stale" as const }
+    }
+    const commandId = `zalo-history-${await sha256Hex(
+      JSON.stringify([
+        input.workspaceId,
+        input.accountId,
+        input.inboxId,
+        input.commandId,
+        lease.ownerId,
+        lease.fenceToken,
+        input.history,
+      ]),
+    )}`
+    let outcome = await this.readCommandStatus(commandId)
+    if (!outcome) {
+      const createdAt = this.now()
+      const command = parseZaloAccountCommandEnvelope({
+        version: 1,
+        kind: "fetch_history_page",
+        commandId,
+        route: {
+          kind: "account",
+          workspaceId: input.workspaceId,
+          accountId: input.accountId,
+          inboxId: input.inboxId,
+        },
+        target: lease,
+        history: input.history,
+        createdAt: createdAt.toISOString(),
+        expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
+      })
+      await this.enqueue(
+        zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+        command,
+      )
+      outcome = await this.waitForCommandStatus(commandId, input.waitTimeoutMs)
+    }
+    if (!(await this.historyLeaseIsCurrent({ ...input, lease }))) {
+      return { status: "rejected_stale" as const }
+    }
+    return { ...outcome, historyLease: lease }
+  }
+
+  async historyLeaseIsCurrent(input: {
+    workspaceId: string
+    accountId: string
+    lease: HistoryLease
+  }): Promise<boolean> {
+    const value = await this.redis.get(
+      zaloAccountTransportKeys.lease({
+        workspaceId: input.workspaceId,
+        runtime: { kind: "account", id: input.accountId },
+      }),
+    )
+    const current = readLease(value)
+    return (
+      current?.ownerId === input.lease.ownerId &&
+      current?.fenceToken === input.lease.fenceToken
+    )
+  }
+
   async syncFriendsAndWait(
     input: AccountCommandInput & { cursor: number; waitTimeoutMs: number },
   ) {
@@ -132,19 +293,77 @@ export class ZaloAccountCommandTransport {
       zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
       command,
     )
-    const deadline = Date.now() + input.waitTimeoutMs
+    return await this.waitForCommandStatus(input.commandId, input.waitTimeoutMs)
+  }
+
+  async messageActivityAndWait(
+    input: AccountCommandInput & {
+      activity: ZaloAccountMessageActivity
+      waitTimeoutMs: number
+    },
+  ): Promise<ZaloAccountCommandResult> {
+    const existing = await this.readCommandStatus(input.commandId)
+    if (existing) {
+      return existing
+    }
+    const lease = await this.requireLease(input)
+    const command = this.command({
+      commandId: input.commandId,
+      kind: "message_activity",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      activity: input.activity,
+      ttlMs: input.ttlMs,
+    })
+    if (input.activity.operation === "requestReactionHistory") {
+      const throttle = `zalo-reaction-history:${input.workspaceId}:${input.accountId}:${input.activity.threadType}`
+      if (
+        !(await this.redis.eval(
+          "return redis.call('SET', KEYS[1], '1', 'PX', ARGV[1], 'NX')",
+          1,
+          throttle,
+          REACTION_HISTORY_THROTTLE_MS,
+        ))
+      ) {
+        return { status: "failed", error: "reaction_history_throttled" }
+      }
+    }
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    return await this.waitForCommandStatus(input.commandId, input.waitTimeoutMs)
+  }
+
+  private async waitForCommandStatus(
+    commandId: string,
+    waitTimeoutMs: number,
+  ): Promise<ZaloAccountCommandResult> {
+    const deadline = Date.now() + waitTimeoutMs
     while (Date.now() < deadline) {
-      const result = await this.redis.get(
-        zaloAccountTransportKeys.commandResult(input.commandId),
-      )
+      const result = await this.readCommandStatus(commandId)
       if (result) {
-        return zaloAccountCommandResultSchema.parse(
-          JSON.parse(result) as unknown,
-        )
+        return result
       }
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
     return { status: "unknown" }
+  }
+
+  private async readCommandStatus(
+    commandId: string,
+  ): Promise<ZaloAccountCommandResult | null> {
+    const result = await this.redis.get(
+      zaloAccountTransportKeys.commandResult(commandId),
+    )
+    return result
+      ? zaloAccountCommandResultSchema.parse(JSON.parse(result) as unknown)
+      : null
   }
 
   async sendTyping(
@@ -668,6 +887,7 @@ export class ZaloAccountCommandTransport {
     expectedVersion?: number
     labelData?: ZaloAccountLabel[]
     message?: ZaloAccountOutboundMessage
+    activity?: ZaloAccountMessageActivity
     ttlMs: number
   }): ZaloAccountCommandEnvelope {
     const createdAt = this.now()
@@ -703,6 +923,7 @@ export class ZaloAccountCommandTransport {
         : { expectedVersion: input.expectedVersion }),
       ...(input.labelData ? { labelData: input.labelData } : {}),
       ...(input.message ? { message: input.message } : {}),
+      ...(input.activity ? { activity: input.activity } : {}),
     })
   }
 
@@ -805,6 +1026,20 @@ const withTransport = async <T>(
 }
 
 export const zaloAccountCommandTransportService = {
+  contactOperationAndWait: (
+    input: Parameters<
+      ZaloAccountCommandTransport["contactOperationAndWait"]
+    >[0],
+  ) => withTransport((transport) => transport.contactOperationAndWait(input)),
+  readProfilesAndWait: (
+    input: Parameters<ZaloAccountCommandTransport["readProfilesAndWait"]>[0],
+  ) => withTransport((transport) => transport.readProfilesAndWait(input)),
+  historyPageAndWait: (
+    input: Parameters<ZaloAccountCommandTransport["historyPageAndWait"]>[0],
+  ) => withTransport((transport) => transport.historyPageAndWait(input)),
+  historyLeaseIsCurrent: (
+    input: Parameters<ZaloAccountCommandTransport["historyLeaseIsCurrent"]>[0],
+  ) => withTransport((transport) => transport.historyLeaseIsCurrent(input)),
   getGroupMembersAndWait: (
     input: Parameters<ZaloAccountCommandTransport["getGroupMembersAndWait"]>[0],
   ) => withTransport((transport) => transport.getGroupMembersAndWait(input)),
@@ -822,6 +1057,9 @@ export const zaloAccountCommandTransportService = {
   nativeOperationAndWait: (
     input: Parameters<ZaloAccountCommandTransport["nativeOperationAndWait"]>[0],
   ) => withTransport((transport) => transport.nativeOperationAndWait(input)),
+  messageActivityAndWait: (
+    input: Parameters<ZaloAccountCommandTransport["messageActivityAndWait"]>[0],
+  ) => withTransport((transport) => transport.messageActivityAndWait(input)),
 
   sendTyping: (
     input: Parameters<ZaloAccountCommandTransport["sendTyping"]>[0],

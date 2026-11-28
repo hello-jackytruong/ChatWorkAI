@@ -65,6 +65,7 @@ import {
   OutgoingTranslationStatus,
   useOutgoingTranslationStatus,
 } from "@/features/translation/components/outgoing-translation-status"
+import type { ZaloProfileTarget } from "@/features/zalo-accounts/components/zalo-profile-details"
 import {
   getZaloGroupMessage,
   getZaloGroupQuote,
@@ -98,12 +99,9 @@ import { WhatsappCallCard } from "./whatsapp-call-card"
 import { WhatsappFlowResponseCard } from "./whatsapp-flow-response-card"
 import { WhatsappPaymentConfirmation } from "./whatsapp-payment-confirmation"
 import { WhatsappPaymentRequestCard } from "./whatsapp-payment-request-card"
-import {
-  ZaloGroupMessageContext,
-  type ZaloGroupMessageState,
-  ZaloGroupMessageStatus,
-} from "./zalo-group-message-context"
+import { ZaloGroupMessageContext } from "./zalo-group-message-context"
 import { ZaloGroupText } from "./zalo-group-text"
+import type { ZaloMessageActivity } from "./zalo-message-activity"
 import {
   canResendZaloMessage,
   getZaloMessageEvidence,
@@ -118,7 +116,8 @@ import { ZaloStyledText } from "./zalo-styled-text"
 type MessageItemProps = {
   zaloAccount?: boolean
   zaloGroup?: boolean
-  zaloState?: ZaloGroupMessageState
+  zaloActivity?: ZaloMessageActivity
+  zaloGroupProfileScope?: Omit<ZaloProfileTarget, "memberUid">
   message: MessageResourceWithRelations
   guestDisplay?: boolean
   /**
@@ -353,6 +352,9 @@ export const MessageItem = (props: MessageItemProps) => {
           <ZaloGroupMessageContext
             attributes={message.contentAttributes}
             hideQuote={Boolean(zaloQuote || retainedQuoteLabel)}
+            profileScope={
+              guestDisplay ? undefined : props.zaloGroupProfileScope
+            }
           />
         )}
         {isPartnerEcho && (
@@ -483,20 +485,19 @@ export const MessageItem = (props: MessageItemProps) => {
             )}
           </>
         )}
-        {!isDeleted && zaloEvidence && (
-          <ZaloMessageEvidence
-            attributes={message.contentAttributes}
-            message={
-              guestDisplay || message.messageType !== "outgoing"
-                ? undefined
-                : message
-            }
-          />
-        )}
+        {!isDeleted &&
+          (zaloEvidence || (!guestDisplay && props.zaloActivity)) && (
+            <ZaloMessageEvidence
+              activity={guestDisplay ? undefined : props.zaloActivity}
+              attributes={message.contentAttributes}
+              message={
+                guestDisplay || message.messageType !== "outgoing"
+                  ? undefined
+                  : message
+              }
+            />
+          )}
         {RenderContentAttributes({ ...props, message }, paymentRequests)}
-        {props.zaloGroup && !isDeleted && (
-          <ZaloGroupMessageStatus state={props.zaloState} />
-        )}
         {props.zaloGroup && !isDeleted && message.sourceId && onReply && (
           <Button
             className="self-start"

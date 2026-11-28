@@ -4,6 +4,7 @@ import { cn } from "@chatbotx.io/ui/lib/utils"
 import { format } from "date-fns"
 import { useTranslations } from "next-intl"
 import type { ReactNode } from "react"
+import type { ZaloProfileTarget } from "@/features/zalo-accounts/components/zalo-profile-details"
 import { getZaloGroupMessage } from "@/features/zalo-accounts/lib/group-content"
 import { zaloMessageLabel } from "../lib/zalo-message-label"
 import {
@@ -13,6 +14,7 @@ import {
 import type { MessageResourceWithRelations } from "../schema/resource"
 import { MessageBubble } from "./message-bubble"
 import { RenderImageGridItem } from "./message-item"
+import { ZaloMemberIdentity } from "./zalo-member-identity"
 
 type Message = MessageResourceWithRelations
 
@@ -20,10 +22,14 @@ export function ZaloAlbumBubble({
   items,
   highlightedId,
   renderActions,
+  renderEvidence,
+  profileScope,
 }: {
   items: Message[]
   highlightedId?: string
   renderActions?: (message: Message) => ReactNode
+  renderEvidence?: (message: Message) => ReactNode
+  profileScope?: Omit<ZaloProfileTarget, "memberUid">
 }) {
   const t = useTranslations("zaloAccount")
   const tMessages = useTranslations("messages")
@@ -45,7 +51,13 @@ export function ZaloAlbumBubble({
       <div className="flex min-w-0 max-w-[70%] flex-col gap-1">
         {sender && (
           <p className="text-muted-foreground text-xs">
-            {sender.senderName || sender.senderId}
+            <ZaloMemberIdentity
+              name={sender.senderName}
+              profileTarget={
+                profileScope && { ...profileScope, memberUid: sender.senderId }
+              }
+              uid={sender.senderId}
+            />
           </p>
         )}
         <div
@@ -82,42 +94,44 @@ export function ZaloAlbumBubble({
                 resource.role === "thumbnail" && resource.state === "stored",
             )
             return (
-              <div
-                className={cn(
-                  "group relative aspect-square min-w-0 rounded-lg",
-                  message.id === highlightedId &&
-                    "ring-2 ring-primary ring-offset-2",
-                )}
-                data-message-id={message.id}
-                key={message.id}
-              >
-                {label || message.deletedAt || !attachment ? (
-                  <div className="flex size-full items-center justify-center rounded-lg bg-muted p-1.5 text-center text-muted-foreground text-xs">
-                    {label
-                      ? t(label)
-                      : tMessages(
-                          message.deletedAt
-                            ? "messageDeleted"
-                            : "failedToPreviewImage",
-                        )}
-                  </div>
-                ) : (
-                  <RenderImageGridItem
-                    attachment={attachment}
-                    isZalo
-                    previewUrl={
-                      preview
-                        ? getZaloMediaUrl(attachment.thumbnailPath)
-                        : undefined
-                    }
-                    processing={processing}
-                  />
-                )}
-                {renderActions && (
-                  <div className="absolute end-1 top-1 flex gap-1 rounded bg-background/80">
-                    {renderActions(message)}
-                  </div>
-                )}
+              <div key={message.id}>
+                <div
+                  className={cn(
+                    "group relative aspect-square min-w-0 rounded-lg",
+                    message.id === highlightedId &&
+                      "ring-2 ring-primary ring-offset-2",
+                  )}
+                  data-message-id={message.id}
+                >
+                  {label || message.deletedAt || !attachment ? (
+                    <div className="flex size-full items-center justify-center rounded-lg bg-muted p-1.5 text-center text-muted-foreground text-xs">
+                      {label
+                        ? t(label)
+                        : tMessages(
+                            message.deletedAt
+                              ? "messageDeleted"
+                              : "failedToPreviewImage",
+                          )}
+                    </div>
+                  ) : (
+                    <RenderImageGridItem
+                      attachment={attachment}
+                      isZalo
+                      previewUrl={
+                        preview
+                          ? getZaloMediaUrl(attachment.thumbnailPath)
+                          : undefined
+                      }
+                      processing={processing}
+                    />
+                  )}
+                  {renderActions && (
+                    <div className="absolute end-1 top-1 flex gap-1 rounded bg-background/80">
+                      {renderActions(message)}
+                    </div>
+                  )}
+                </div>
+                {renderEvidence?.(message)}
               </div>
             )
           })}
