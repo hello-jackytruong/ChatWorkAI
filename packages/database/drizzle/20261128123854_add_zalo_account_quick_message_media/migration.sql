@@ -1,0 +1,1 @@
+ALTER TYPE "zaloAccountMediaOwnerKind" ADD VALUE 'quickMessage';

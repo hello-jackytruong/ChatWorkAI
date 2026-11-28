@@ -29,6 +29,64 @@ const auth = {
 }
 beforeEach(() => vi.clearAllMocks())
 
+it("emits scoped group membership evidence from the SDK group event", async () => {
+  const listener = Object.assign(new EventEmitter(), {
+    start: vi.fn(),
+    stop: vi.fn(),
+  })
+  sdk.login.mockResolvedValue({ listener })
+  const api = await zcaClientFactory.create().login(auth)
+  const onGroupEvent = vi.fn()
+  api
+    .listen({ ownUid: "123", onGroupEvent } as unknown as ZcaListenerHandlers)
+    .start()
+  const data = {
+    groupId: "42",
+    sourceId: "456",
+    updateMembers: [{ id: "123", dName: "never forward" }],
+    version: "1711112223333",
+    time: "1711112223333",
+    info: { group_link: "never forward" },
+  }
+  listener.emit("group_event", {
+    type: "remove_member",
+    threadId: "42",
+    isSelf: true,
+    data,
+  })
+  listener.emit("group_event", {
+    type: "remove_member",
+    threadId: "42",
+    isSelf: true,
+    data: { ...data, updateMembers: [{ id: "789" }] },
+  })
+  listener.emit("group_event", {
+    type: "remove_member",
+    threadId: "42",
+    isSelf: true,
+    data: { ...data, time: "" },
+  })
+  expect(onGroupEvent).toHaveBeenCalledTimes(3)
+  expect(onGroupEvent).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({
+      providerGroupId: "42",
+      kind: "removed",
+      targetIncludesAccount: true,
+      timestampMs: 1_711_112_223_333,
+      identity: expect.any(String),
+    }),
+  )
+  expect(onGroupEvent.mock.calls[0]?.[0]).not.toHaveProperty("data")
+  expect(onGroupEvent.mock.calls[1]?.[0]).toMatchObject({
+    targetIncludesAccount: false,
+  })
+  expect(onGroupEvent.mock.calls[2]?.[0]).toEqual({
+    providerGroupId: "42",
+    kind: "refresh",
+  })
+})
+
 it("forwards socket open and safe lifecycle codes, and starts only once", async () => {
   const listener = Object.assign(new EventEmitter(), {
     start: vi.fn(),

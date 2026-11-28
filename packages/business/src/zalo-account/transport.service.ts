@@ -1,3 +1,4 @@
+import { encryptUtils } from "@chatbotx.io/encryption"
 import { cacheConnections, type Redis } from "@chatbotx.io/redis"
 import {
   getZaloAccountErrorInfo,
@@ -7,12 +8,16 @@ import {
   type ZaloAccountCommandResult,
   type ZaloAccountContactOperation,
   type ZaloAccountGroup,
+  type ZaloAccountGroupAdministrationRead,
+  type ZaloAccountGroupManagementOperation,
   type ZaloAccountGroupMembersQuery,
   type ZaloAccountHistoryPageRequest,
   type ZaloAccountLabel,
   type ZaloAccountLabelSnapshot,
   type ZaloAccountMessageActivity,
   type ZaloAccountNativeOperation,
+  type ZaloAccountNativeThread,
+  type ZaloAccountNativeToolOperation,
   type ZaloAccountOutboundMessage,
   ZaloAccountPreDispatchError,
   type ZaloAccountProfileRequest,
@@ -20,6 +25,8 @@ import {
   type ZaloAccountStickerCatalogQuery,
   zaloAccountCommandResultSchema,
   zaloAccountFriendSyncSchema,
+  zaloAccountNativeToolResultAad,
+  zaloAccountNativeToolResultSchema,
   zaloAccountOutboundMessageSchema,
   zaloAccountSendResultSchema,
   zaloAccountTransportKeys,
@@ -795,6 +802,164 @@ export class ZaloAccountCommandTransport {
     return result.groupMembers
   }
 
+  async readGroupAdministrationAndWait(
+    input: AccountCommandInput & {
+      groupId: string
+      accountPolicyEpoch: number
+      groupPolicyEpoch: number
+      groupRead: ZaloAccountGroupAdministrationRead
+      waitTimeoutMs: number
+    },
+  ) {
+    const lease = await this.requireLease(input)
+    const command = this.command({
+      commandId: input.commandId,
+      kind: "read_group_administration",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      ttlMs: input.ttlMs,
+      groupId: input.groupId,
+      accountPolicyEpoch: input.accountPolicyEpoch,
+      groupPolicyEpoch: input.groupPolicyEpoch,
+      groupRead: input.groupRead,
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const { result } = await this.waitForResult(
+      input.commandId,
+      input.waitTimeoutMs,
+      "group administration",
+    )
+    if (result.groupAdministration?.kind !== input.groupRead.kind) {
+      throw new Error(
+        "Zalo Account command returned no matching group administration result",
+      )
+    }
+    return result.groupAdministration
+  }
+
+  async groupManagementAndWait(
+    input: AccountCommandInput & {
+      groupId?: string
+      providerGroupId?: string
+      accountPolicyEpoch: number
+      groupPolicyEpoch?: number
+      attemptCommandId?: string
+      operation: ZaloAccountGroupManagementOperation
+      waitTimeoutMs: number
+    },
+  ) {
+    const lease = await this.requireLease(input)
+    const createdAt = this.now()
+    const command = parseZaloAccountCommandEnvelope({
+      version: 1,
+      commandId: input.commandId,
+      kind: "group_management",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
+      accountPolicyEpoch: input.accountPolicyEpoch,
+      groupPolicyEpoch: input.groupPolicyEpoch,
+      groupId: input.groupId,
+      providerGroupId: input.providerGroupId,
+      attemptCommandId: input.attemptCommandId,
+      groupManagement: input.operation,
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const { result } = await this.waitForResult(
+      input.commandId,
+      input.waitTimeoutMs,
+      "group management",
+    )
+    if (result.groupManagement?.kind !== input.operation.kind) {
+      throw new Error(
+        "Zalo Account command returned no matching group management result",
+      )
+    }
+    return result.groupManagement
+  }
+
+  async nativeToolAndWait(
+    input: AccountCommandInput & {
+      conversationId?: string
+      contactInboxId?: string
+      thread?: ZaloAccountNativeThread
+      accountPolicyEpoch: number
+      groupPolicyEpoch?: number
+      attemptCommandId?: string
+      operation: ZaloAccountNativeToolOperation
+      waitTimeoutMs: number
+    },
+  ) {
+    const lease = await this.requireLease(input)
+    const createdAt = this.now()
+    const command = parseZaloAccountCommandEnvelope({
+      version: 1,
+      commandId: input.commandId,
+      kind: "native_tool",
+      route: {
+        kind: "account",
+        workspaceId: input.workspaceId,
+        accountId: input.accountId,
+        inboxId: input.inboxId,
+      },
+      target: lease,
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + input.ttlMs).toISOString(),
+      conversationId: input.conversationId,
+      contactInboxId: input.contactInboxId,
+      thread: input.thread,
+      accountPolicyEpoch: input.accountPolicyEpoch,
+      groupPolicyEpoch: input.groupPolicyEpoch,
+      attemptCommandId: input.attemptCommandId,
+      nativeTool: input.operation,
+    })
+    await this.enqueue(
+      zaloAccountTransportKeys.ownerMailbox(lease.ownerId),
+      command,
+    )
+    const { result } = await this.waitForResult(
+      input.commandId,
+      input.waitTimeoutMs,
+      "native Zalo setting",
+    )
+    const aad = zaloAccountNativeToolResultAad({
+      ...input,
+      operationKind: input.operation.kind,
+    })
+    if (result.nativeToolCiphertext?.aad === aad) {
+      const native = await encryptUtils
+        .decryptObject(
+          result.nativeToolCiphertext,
+          zaloAccountNativeToolResultSchema,
+          aad,
+        )
+        .catch(() => null)
+      if (native?.kind === input.operation.kind) {
+        return native
+      }
+    }
+    throw new Error(
+      "Zalo Account command returned no matching native setting result",
+    )
+  }
+
   async getLabelsAndWait(
     input: AccountCommandInput & { waitTimeoutMs: number },
   ): Promise<ZaloAccountLabelSnapshot> {
@@ -832,6 +997,7 @@ export class ZaloAccountCommandTransport {
     input: AccountCommandInput & {
       operationToken?: string
       expectedVersion: number
+      expectedHash?: string
       labelData: ZaloAccountLabel[]
       waitTimeoutMs: number
     },
@@ -849,6 +1015,7 @@ export class ZaloAccountCommandTransport {
       },
       target: lease,
       expectedVersion: input.expectedVersion,
+      expectedHash: input.expectedHash,
       labelData: input.labelData,
       ttlMs: input.ttlMs,
     })
@@ -874,6 +1041,7 @@ export class ZaloAccountCommandTransport {
     stickerIds?: string[]
     stickerCatalogQuery?: ZaloAccountStickerCatalogQuery
     groupMemberQuery?: ZaloAccountGroupMembersQuery
+    groupRead?: ZaloAccountGroupAdministrationRead
     threadType?: "user" | "group"
     threadId?: string
     operationToken?: string
@@ -885,6 +1053,7 @@ export class ZaloAccountCommandTransport {
     accountPolicyEpoch?: number
     groupPolicyEpoch?: number
     expectedVersion?: number
+    expectedHash?: string
     labelData?: ZaloAccountLabel[]
     message?: ZaloAccountOutboundMessage
     activity?: ZaloAccountMessageActivity
@@ -907,6 +1076,7 @@ export class ZaloAccountCommandTransport {
       ...(input.groupMemberQuery
         ? { groupMemberQuery: input.groupMemberQuery }
         : {}),
+      ...(input.groupRead ? { groupRead: input.groupRead } : {}),
       ...(input.operationToken ? { operationToken: input.operationToken } : {}),
       ...(input.groupId ? { groupId: input.groupId } : {}),
       ...(input.threadId
@@ -921,6 +1091,7 @@ export class ZaloAccountCommandTransport {
       ...(input.expectedVersion === undefined
         ? {}
         : { expectedVersion: input.expectedVersion }),
+      ...(input.expectedHash ? { expectedHash: input.expectedHash } : {}),
       ...(input.labelData ? { labelData: input.labelData } : {}),
       ...(input.message ? { message: input.message } : {}),
       ...(input.activity ? { activity: input.activity } : {}),
@@ -1043,6 +1214,17 @@ export const zaloAccountCommandTransportService = {
   getGroupMembersAndWait: (
     input: Parameters<ZaloAccountCommandTransport["getGroupMembersAndWait"]>[0],
   ) => withTransport((transport) => transport.getGroupMembersAndWait(input)),
+  readGroupAdministrationAndWait: (
+    input: Parameters<
+      ZaloAccountCommandTransport["readGroupAdministrationAndWait"]
+    >[0],
+  ) =>
+    withTransport((transport) =>
+      transport.readGroupAdministrationAndWait(input),
+    ),
+  groupManagementAndWait: (
+    input: Parameters<ZaloAccountCommandTransport["groupManagementAndWait"]>[0],
+  ) => withTransport((transport) => transport.groupManagementAndWait(input)),
   getStickerCatalogAndWait: (
     input: Parameters<
       ZaloAccountCommandTransport["getStickerCatalogAndWait"]
@@ -1057,6 +1239,9 @@ export const zaloAccountCommandTransportService = {
   nativeOperationAndWait: (
     input: Parameters<ZaloAccountCommandTransport["nativeOperationAndWait"]>[0],
   ) => withTransport((transport) => transport.nativeOperationAndWait(input)),
+  nativeToolAndWait: (
+    input: Parameters<ZaloAccountCommandTransport["nativeToolAndWait"]>[0],
+  ) => withTransport((transport) => transport.nativeToolAndWait(input)),
   messageActivityAndWait: (
     input: Parameters<ZaloAccountCommandTransport["messageActivityAndWait"]>[0],
   ) => withTransport((transport) => transport.messageActivityAndWait(input)),

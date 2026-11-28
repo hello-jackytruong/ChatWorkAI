@@ -505,6 +505,30 @@ export const integrationZaloAccountRepository = {
     return row ?? null
   },
 
+  async findConnectedRuntimeOrder(input: WorkspaceInboxRef & { id: string }) {
+    const [row] = await db
+      .select({
+        runtime: sql<ZaloAccountRuntimeOrder | null>`${integrationZaloAccountModel.operations}->'runtime'`,
+        diagnostics: sql<ZaloAccountDiagnosticState | null>`${integrationZaloAccountModel.operations}->'diagnostics'`,
+      })
+      .from(integrationZaloAccountModel)
+      .innerJoin(
+        connectionModel,
+        and(
+          eq(
+            connectionModel.workspaceId,
+            integrationZaloAccountModel.workspaceId,
+          ),
+          eq(connectionModel.inboxId, integrationZaloAccountModel.inboxId),
+          eq(connectionModel.provider, "zaloAccount"),
+          eq(connectionModel.status, "connected"),
+        ),
+      )
+      .where(and(byInbox(input), eq(integrationZaloAccountModel.id, input.id)))
+      .limit(1)
+    return row ?? null
+  },
+
   async findByInboxIdForWorkspace(
     input: WorkspaceInboxRef,
     tx: DatabaseClient = db,

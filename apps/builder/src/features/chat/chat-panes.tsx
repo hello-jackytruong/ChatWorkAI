@@ -9,7 +9,7 @@ import {
 } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { useAction } from "next-safe-action/hooks"
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { ContactInboxPanel } from "../contacts/contact-inbox-panel"
 import { disableBotAction } from "../conversations/actions/disable-bot.action"
@@ -97,6 +97,7 @@ export function MessageThreadPane({
   const t = useTranslations()
   const updateConversation = useChatStore((state) => state.updateConversation)
   const threadReadHandlers = useThreadReadTracking(activeConversation)
+  const [timelineSlot, setTimelineSlot] = useState<HTMLDivElement | null>(null)
   const activeListConversation = useChatStore((state) =>
     activeConversation
       ? state.conversations.find(
@@ -141,7 +142,11 @@ export function MessageThreadPane({
           className="flex h-full min-h-0 w-full flex-col"
           {...threadReadHandlers}
         >
-          <MessageHead onBack={onBack} onOpenContact={onOpenContact} />
+          <MessageHead
+            onBack={onBack}
+            onOpenContact={onOpenContact}
+            timelineSlotRef={setTimelineSlot}
+          />
           {isConversationActive(activeConversation) &&
             !getZaloGroupConversation(activeConversation) &&
             !isThreadOnStandby && (
@@ -157,7 +162,7 @@ export function MessageThreadPane({
                 {t("messages.botIsActive")}
               </Button>
             )}
-          <MessageList />
+          <MessageList timelineSlot={timelineSlot} />
           {(typingGroup || typingInbox?.channel === "zaloAccount") && (
             <ZaloGroupTypingIndicator
               contactName={

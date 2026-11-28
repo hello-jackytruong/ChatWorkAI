@@ -1,9 +1,13 @@
+import { isZaloAccountEnabledByDefault } from "../zalo-account/native-operation-policy"
+
 const namespacePattern = /^[a-zA-Z0-9_-]+$/
 export const mediaChecksumPattern = /^[a-f0-9]{64}$/
 export const getZaloAccountMediaPolicy = (
   environment: Record<string, string | undefined> = process.env,
 ) => ({
-  enabled: environment.ZALO_ACCOUNT_MEDIA_STORAGE_ENABLED === "true",
+  enabled: isZaloAccountEnabledByDefault(
+    environment.ZALO_ACCOUNT_MEDIA_STORAGE_ENABLED,
+  ),
   maxAttempts: 5,
   pageSize: 50,
   purgeBatchSize: 100,

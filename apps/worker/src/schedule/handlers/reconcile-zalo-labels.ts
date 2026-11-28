@@ -4,7 +4,7 @@ import {
   zaloAccountService,
 } from "@chatbotx.io/business/zalo-account"
 import { distributedLock, distributedStore } from "@chatbotx.io/redis"
-import { DefaultJobAction, defaultQueue } from "@chatbotx.io/worker-config"
+import { enqueueZaloAccountLabelSync } from "@chatbotx.io/worker-config"
 
 const CURSOR = "schedule:zalo-labels:cursor"
 export async function reconcileZaloLabels(): Promise<void> {
@@ -24,20 +24,10 @@ export async function reconcileZaloLabels(): Promise<void> {
             workspaceId: account.workspaceId,
             accountId: account.id,
           })
-          await defaultQueue.add(
-            DefaultJobAction.syncChannelLabels,
-            {
-              type: DefaultJobAction.syncChannelLabels,
-              data: {
-                workspaceId: account.workspaceId,
-                channelType: "zaloAccount",
-                integrationId: account.id,
-              },
-            },
-            {
-              jobId: `zalo-label-reconcile-${account.id}-${Math.floor(Date.now() / 300_000)}`,
-            },
-          )
+          await enqueueZaloAccountLabelSync({
+            workspaceId: account.workspaceId,
+            accountId: account.id,
+          })
         })
       }
       await distributedStore.put(

@@ -1,6 +1,7 @@
 import { withBlockedOwnerGuard } from "@chatbotx.io/business"
 import { zaloAccountCanonicalSendService } from "@chatbotx.io/business/zalo-account/canonical-send"
 import { zaloAccountGroupInboxService } from "@chatbotx.io/business/zalo-account/group-inbox"
+import { zaloAccountGroupLifecycleService } from "@chatbotx.io/business/zalo-account/group-lifecycle"
 import { zaloAccountMessageRecallService } from "@chatbotx.io/business/zalo-account/message-recall"
 import logger from "@chatbotx.io/logger"
 import { distributedLock } from "@chatbotx.io/redis"
@@ -58,6 +59,13 @@ async function recoverPending(): Promise<void> {
       continue
     }
     await withBlockedOwnerGuard(identity.workspaceId, async () => {
+      if (identity.providerMessageId.startsWith("za:group-event:")) {
+        await zaloAccountGroupLifecycleService.publishTimeline({
+          ...identity,
+          inboxId,
+        })
+        return
+      }
       await enqueueIntegrationJob(
         {
           type: IntegrationJobAction.zaloAccountGroupMessage,

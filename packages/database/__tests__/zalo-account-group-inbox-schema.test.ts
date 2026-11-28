@@ -23,14 +23,13 @@ describe("Zalo Account group Inbox isolation", () => {
     expect(migration).toContain("EXECUTE FUNCTION stamp_contact_inbox_kind()")
     expect(migration).toContain("ci.\"contactKind\" = 'person'")
   })
-  it("defaults existing contacts to people and all group automation controls off", () => {
+  it("defaults group messaging on and keeps automation disabled", () => {
     expect(contactModel.kind.default).toBe("person")
     expect(contactModel.kind.notNull).toBe(true)
     expect(contactInboxModel.contactKind.default).toBe("person")
-    expect(integrationZaloAccountModel.groupMessagingEnabled.default).toBe(
-      false,
-    )
-    expect(integrationZaloAccountGroupModel.receiveEnabled.default).toBe(false)
+    expect(integrationZaloAccountModel.groupMessagingEnabled.default).toBe(true)
+    expect(integrationZaloAccountGroupModel.receiveEnabled.default).toBe(true)
+    expect(integrationZaloAccountGroupModel.sendEnabled.default).toBe(true)
     expect(integrationZaloAccountGroupModel.automationMode.default).toBe(
       "disabled",
     )

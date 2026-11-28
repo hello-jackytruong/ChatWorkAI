@@ -1,6 +1,15 @@
 const LABEL_WRITE_COMMAND_PATTERN = /^zalo-labels-write-[a-f0-9]{64}$/
+const LABEL_HASH_PATTERN = /^[a-f0-9]{64}$/
 
+import { ZaloAccountPreDispatchError } from "@chatbotx.io/sdk"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const versionConflict = () =>
+  new ZaloAccountPreDispatchError("Zalo Account label version conflict", {
+    code: "label_version_conflict",
+    phase: "validation",
+    safeAction: "new_attempt",
+  })
 
 const mocks = vi.hoisted(() => ({
   deleteAssignments: vi.fn(),
@@ -20,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   listContactIds: vi.fn(),
   listInboxes: vi.fn(),
   listMappings: vi.fn(),
+  listNamedMappings: vi.fn(),
+  insertMappingPreservingIdentity: vi.fn(),
   syncName: vi.fn(),
   unlinkContactInbox: vi.fn(),
   updateLabels: vi.fn(),
@@ -48,7 +59,9 @@ vi.mock("@chatbotx.io/database/repositories", () => ({
   integrationZaloAccountGroupRepository: { list: mocks.groups },
   tagChannelRepository: {
     findByTagAndIntegration: mocks.findMappingByTag,
+    insertMappingPreservingIdentity: mocks.insertMappingPreservingIdentity,
     listByIntegration: mocks.listMappings,
+    listNamedByIntegration: mocks.listNamedMappings,
     listContactInboxIdsForChannelPage: mocks.listAssignmentPage,
     listUnmappedContactIds: vi.fn().mockResolvedValue([]),
   },
@@ -93,6 +106,8 @@ const account = {
   inboxId: "inbox-1",
 }
 
+const scope = { workspaceId: account.workspaceId, accountId: account.id }
+
 const label = (overrides: Record<string, unknown> = {}) => ({
   id: 1,
   text: "Priority",
@@ -131,14 +146,20 @@ describe("zaloAccountLabelService", () => {
   })
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubEnv("ZALO_ACCOUNT_LABEL_EDIT_ACCOUNT_IDS", undefined)
     mocks.findAccount.mockResolvedValue(account)
     mocks.state = { version: 0, complete: false }
     mocks.groups.mockResolvedValue([{ providerGroupId: "group-1" }])
     mocks.listMappings.mockResolvedValue([])
+    mocks.listNamedMappings.mockResolvedValue([])
     mocks.listAssignmentPage.mockResolvedValue([])
     mocks.findMapping.mockResolvedValue(undefined)
     mocks.ensureTagByName.mockResolvedValue("tag-1")
     mocks.ensureTagChannel.mockResolvedValue("tag-channel-1")
+    mocks.insertMappingPreservingIdentity.mockResolvedValue({
+      id: "tag-channel-1",
+      tagId: "tag-1",
+    })
     mocks.listInboxes.mockResolvedValue([
       { id: "contact-inbox-1", contactId: "contact-1", sourceId: "user-1" },
     ])
@@ -361,7 +382,7 @@ describe("zaloAccountLabelService", () => {
         complete: true,
       })
     mocks.updateLabels
-      .mockRejectedValueOnce(new Error("Zalo Account label version conflict"))
+      .mockRejectedValueOnce(versionConflict())
       .mockResolvedValueOnce({
         labelData: [label({ conversations: ["other-user", "user-1"] })],
         version: 9,
@@ -391,5 +412,271 @@ describe("zaloAccountLabelService", () => {
         ],
       }),
     )
+  })
+
+  it("edits only one label definition against a fresh whole document after a conflict", async () => {
+    vi.stubEnv(
+      "ZALO_ACCOUNT_LABEL_EDIT_ACCOUNT_IDS",
+      "another-account, account-1",
+    )
+    const initial = label({ id: 1 })
+    const latest = { ...initial, conversations: ["new-DM", "new-group"] }
+    const untouched = label({
+      id: 2,
+      text: "Other",
+      textKey: "untouched",
+      offset: 7,
+      color: "0068FF",
+      emoji: "💬",
+      createTime: 2,
+      conversations: ["different-DM", "different-group"],
+    })
+    const expected = {
+      ...latest,
+      text: "New name",
+      color: "#aabbcc",
+      emoji: "",
+    }
+    mocks.getLabels
+      .mockResolvedValueOnce({
+        labelData: [initial, untouched],
+        version: 7,
+        lastUpdateTime: 30,
+        complete: true,
+      })
+      .mockResolvedValueOnce({
+        labelData: [latest, untouched],
+        version: 8,
+        lastUpdateTime: 31,
+        complete: true,
+      })
+    mocks.updateLabels
+      .mockRejectedValueOnce(versionConflict())
+      .mockResolvedValueOnce({
+        labelData: [expected, untouched],
+        version: 9,
+        lastUpdateTime: 32,
+        complete: true,
+      })
+    await expect(
+      zaloAccountLabelService.updateDefinition({
+        ...scope,
+        commandId: "rename-1",
+        labelId: 1,
+        patch: { text: " New name ", color: "#AABBCC", emoji: "" },
+      }),
+    ).resolves.toMatchObject({
+      outcome: "confirmed",
+      version: 9,
+      label: { id: 1, text: "New name", color: "#aabbcc", emoji: "" },
+    })
+    expect(mocks.updateLabels).toHaveBeenCalledTimes(2)
+    expect(mocks.updateLabels).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        expectedVersion: 8,
+        expectedHash: expect.stringMatching(LABEL_HASH_PATTERN),
+        labelData: [expected, untouched],
+      }),
+    )
+    expect(mocks.linkAssignments).not.toHaveBeenCalled()
+    expect(mocks.syncName).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "false",
+    "another-account",
+  ])("leaves native edits unavailable when account configuration %s excludes the account", async (configuration) => {
+    vi.stubEnv("ZALO_ACCOUNT_LABEL_EDIT_ACCOUNT_IDS", configuration)
+    await expect(
+      zaloAccountLabelService.updateDefinition({
+        ...scope,
+        commandId: "disabled",
+        labelId: 1,
+        patch: { text: "New label" },
+      }),
+    ).resolves.toEqual({ outcome: "unavailable" })
+    expect(mocks.getLabels).not.toHaveBeenCalled()
+    expect(mocks.updateLabels).not.toHaveBeenCalled()
+  })
+
+  it("checks the definition gate and expected base hash again at dispatch", async () => {
+    vi.stubEnv("ZALO_ACCOUNT_LABEL_EDIT_ACCOUNT_IDS", "false")
+    const state = {
+      token: "current",
+      version: 8,
+      hash: "base-hash",
+      commandId: "write-current",
+      reason: "mutationPending",
+      mutationKind: "definition",
+    }
+    mocks.findAccount.mockResolvedValue({
+      ...account,
+      operations: { labels: state },
+    })
+    const input = {
+      ...scope,
+      inboxId: account.inboxId,
+      operationToken: state.token,
+      commandId: state.commandId,
+      expectedVersion: state.version,
+      expectedHash: state.hash,
+    }
+    await expect(zaloAccountLabelService.admitMutation(input)).rejects.toThrow()
+    vi.stubEnv("ZALO_ACCOUNT_LABEL_EDIT_ACCOUNT_IDS", account.id)
+    await expect(
+      zaloAccountLabelService.admitMutation({
+        ...input,
+        expectedHash: "other",
+      }),
+    ).rejects.toThrow()
+    await expect(
+      zaloAccountLabelService.admitMutation(input),
+    ).resolves.toBeUndefined()
+  })
+
+  it("does not pause definitions as unknown for a known rejection before provider dispatch", async () => {
+    vi.stubEnv("ZALO_ACCOUNT_LABEL_EDIT_ACCOUNT_IDS", account.id)
+    mocks.getLabels.mockResolvedValue({
+      labelData: [label()],
+      version: 8,
+      lastUpdateTime: 31,
+      complete: true,
+    })
+    mocks.updateLabels.mockRejectedValueOnce(
+      new ZaloAccountPreDispatchError("disabled before dispatch"),
+    )
+    await expect(
+      zaloAccountLabelService.updateDefinition({
+        ...scope,
+        commandId: "gate-withdrawn",
+        labelId: 1,
+        patch: { text: "Changed" },
+      }),
+    ).resolves.toEqual({ outcome: "unavailable", version: 8 })
+    expect(mocks.state).toMatchObject({
+      paused: false,
+      pendingHash: undefined,
+      mutationKind: undefined,
+    })
+    expect(mocks.updateLabels).toHaveBeenCalledOnce()
+  })
+
+  it("does not confirm a provider response that changed unrelated assignments", async () => {
+    vi.stubEnv("ZALO_ACCOUNT_LABEL_EDIT_ACCOUNT_IDS", account.id)
+    mocks.getLabels.mockResolvedValue({
+      labelData: [label(), label({ id: 2 })],
+      version: 8,
+      lastUpdateTime: 31,
+      complete: true,
+    })
+    mocks.updateLabels.mockResolvedValue({
+      labelData: [
+        label({ text: "Changed" }),
+        label({ id: 2, conversations: [] }),
+      ],
+      version: 9,
+      lastUpdateTime: 32,
+      complete: true,
+    })
+    await expect(
+      zaloAccountLabelService.updateDefinition({
+        ...scope,
+        commandId: "race",
+        labelId: 1,
+        patch: { text: "Changed" },
+      }),
+    ).resolves.toMatchObject({ outcome: "unknown" })
+    expect(mocks.updateLabels).toHaveBeenCalledOnce()
+    expect(mocks.state).toMatchObject({
+      paused: true,
+      reason: "outcomeUnknown",
+    })
+    expect(mocks.linkAssignments).not.toHaveBeenCalled()
+  })
+
+  it("lists safe native definitions by provider order with only ID-scoped mappings", async () => {
+    const lastSuccessAt = "2026-11-28T11:11:00.000Z"
+    mocks.findAccount.mockResolvedValueOnce({
+      ...account,
+      operations: { labels: { version: 6, complete: true, lastSuccessAt } },
+    })
+    mocks.getLabels.mockResolvedValue({
+      labelData: [
+        label({ id: 1, offset: 10, color: "evil()" }),
+        label({ id: 2, offset: 1, color: "AABBCC" }),
+      ],
+      version: 6,
+      lastUpdateTime: 30,
+      complete: true,
+    })
+    mocks.listNamedMappings.mockResolvedValueOnce([
+      { externalLabelId: "2", tagId: "tag-2", tagName: "CRM name" },
+    ])
+    await expect(zaloAccountLabelService.listNative(scope)).resolves.toEqual({
+      available: true,
+      complete: true,
+      version: 6,
+      editEnabled: true,
+      lastSuccessAt,
+      labels: [
+        {
+          id: 2,
+          text: "Priority",
+          color: "#aabbcc",
+          emoji: "",
+          offset: 1,
+          tagId: "tag-2",
+          tagName: "CRM name",
+        },
+        { id: 1, text: "Priority", emoji: "", offset: 10 },
+      ],
+    })
+    expect(mocks.listNamedMappings).toHaveBeenCalledWith({
+      externalLabelIds: ["1", "2"],
+      workspaceId: account.workspaceId,
+      integrationId: account.id,
+      channelType: "zaloAccount",
+    })
+  })
+
+  it("keeps a same-name tag's established provider identity and leaves the new label unmapped", async () => {
+    mocks.getLabels.mockResolvedValue({
+      labelData: [label({ id: 2 })],
+      version: 8,
+      lastUpdateTime: 30,
+      complete: true,
+    })
+    mocks.insertMappingPreservingIdentity.mockResolvedValueOnce(undefined)
+    await zaloAccountLabelService.sync({ ...scope, commandId: "same-name" })
+    expect(mocks.insertMappingPreservingIdentity).toHaveBeenCalledWith(
+      {
+        workspaceId: account.workspaceId,
+        integrationId: account.id,
+        channelType: "zaloAccount",
+        tagId: "tag-1",
+        externalLabelId: "2",
+      },
+      expect.anything(),
+    )
+    expect(mocks.ensureTagChannel).not.toHaveBeenCalled()
+    expect(mocks.linkContacts).not.toHaveBeenCalled()
+  })
+
+  it("advances the successful sync time only after the last completely reconciled batch", async () => {
+    const previous = "2026-11-28T10:00:00.000Z"
+    mocks.state = { version: 4, complete: true, lastSuccessAt: previous }
+    mocks.getLabels.mockResolvedValue({
+      labelData: Array.from({ length: 11 }, (_, index) =>
+        label({ id: index + 1, offset: index }),
+      ),
+      version: 5,
+      lastUpdateTime: 20,
+      complete: true,
+    })
+    await zaloAccountLabelService.sync({ ...scope, commandId: "first-batch" })
+    expect(mocks.state.lastSuccessAt).toBe(previous)
+    await zaloAccountLabelService.sync({ ...scope, commandId: "last-batch" })
+    expect(mocks.state.lastSuccessAt).not.toBe(previous)
+    expect(typeof mocks.state.lastSuccessAt).toBe("string")
   })
 })

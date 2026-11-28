@@ -85,6 +85,7 @@ const HITL_NONE_WRITE_ALLOWLIST: Record<string, true> = {
   "templates.previewDependencies": true,
   "zaloAccounts.getContactPresence": true,
   "zaloAccounts.getFriendRequestStatus": true,
+  "zaloAccounts.inspectGroupLink": true,
   "zaloAccounts.lookupContacts": true,
 }
 

@@ -10,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@chatbotx.io/ui/components/ui/select"
-import { Switch } from "@chatbotx.io/ui/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -19,14 +18,12 @@ import {
   TableHeader,
   TableRow,
 } from "@chatbotx.io/ui/components/ui/table"
+import { useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
 import { useAction } from "next-safe-action/hooks"
 import { useState } from "react"
 import { toast } from "sonner"
-import {
-  setZaloAccountGroupMessagingAction,
-  syncZaloAccountFriendsAction,
-} from "../actions/account-operations.action"
+import { syncZaloAccountFriendsAction } from "../actions/account-operations.action"
 import { sendZaloAccountGroupMessageAction } from "../actions/send-group-message.action"
 import { syncZaloAccountGroupsAction } from "../actions/sync-groups.action"
 import { syncZaloAccountLabelsAction } from "../actions/sync-labels.action"
@@ -37,6 +34,8 @@ import {
 } from "../queries/use-account-operations"
 import type { ZaloAccountGroupResource } from "../schema/resource"
 import { ZaloAccountStatus } from "./zalo-account-status"
+import { ZaloGroupAdministrationSheet } from "./zalo-group-administration-sheet"
+import { ZaloGroupManagementControls } from "./zalo-group-management-controls"
 
 const showActionError = (error: { serverError?: string }) => {
   if (error.serverError) {
@@ -89,7 +88,12 @@ function GroupRow({
             </Avatar>
           )}
           <div>
-            <div>{group.name}</div>
+            <ZaloGroupAdministrationSheet
+              accountId={accountId}
+              groupId={group.id}
+              name={group.name}
+              workspaceId={workspaceId}
+            />
             <div className="text-muted-foreground text-xs">
               {group.memberCount}
             </div>
@@ -100,26 +104,6 @@ function GroupRow({
             )}
           </div>
         </div>
-      </TableCell>
-      <TableCell>
-        <Switch
-          aria-label={t("zaloAccount.receive")}
-          checked={group.receiveEnabled}
-          disabled={!(enabled && group.accessible) || policy.isPending}
-          onCheckedChange={(receiveEnabled) =>
-            policy.execute({ groupId: group.id, receiveEnabled })
-          }
-        />
-      </TableCell>
-      <TableCell>
-        <Switch
-          aria-label={t("zaloAccount.send")}
-          checked={group.accessible && group.sendEnabled}
-          disabled={!(enabled && group.accessible) || policy.isPending}
-          onCheckedChange={(sendEnabled) =>
-            policy.execute({ groupId: group.id, sendEnabled })
-          }
-        />
       </TableCell>
       <TableCell>
         <Select
@@ -202,7 +186,9 @@ export function ZaloAccountGroups({
 }) {
   const t = useTranslations()
   const query = useZaloAccountOperations(workspaceId, accountId)
+  const queryClient = useQueryClient()
   const invalidate = useInvalidateZaloAccountOperations(workspaceId, accountId)
+  const [managementOpen, setManagementOpen] = useState(false)
   const status = query.data?.status
   let labelStatus = status?.labels.complete
     ? t("zaloAccount.complete")
@@ -221,10 +207,6 @@ export function ZaloAccountGroups({
     status?.status === "connected" &&
     status.gatewayAvailable &&
     status.runtime?.socketOpen === true
-  const setMessaging = useAction(
-    setZaloAccountGroupMessagingAction.bind(null, workspaceId, accountId),
-    { onSuccess: invalidate, onError: ({ error }) => showActionError(error) },
-  )
   const syncFriends = useAction(
     syncZaloAccountFriendsAction.bind(null, workspaceId, accountId),
     { onSuccess: invalidate, onError: ({ error }) => showActionError(error) },
@@ -239,7 +221,12 @@ export function ZaloAccountGroups({
   const syncLabels = useAction(
     syncZaloAccountLabelsAction.bind(null, workspaceId, accountId),
     {
-      onSuccess: invalidate,
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({
+          queryKey: ["zalo-native-labels", workspaceId, accountId],
+        })
+        await invalidate()
+      },
       onError: ({ error }) => showActionError(error),
     },
   )
@@ -249,6 +236,15 @@ export function ZaloAccountGroups({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-medium">{accountName}</h3>
         <div className="flex flex-wrap gap-2">
+          <Button
+            aria-expanded={managementOpen}
+            onClick={() => setManagementOpen(!managementOpen)}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            {t("zaloAccount.groupManagement.label")}
+          </Button>
           <Button
             disabled={syncFriends.isPending}
             onClick={() =>
@@ -285,21 +281,17 @@ export function ZaloAccountGroups({
           </Button>
         </div>
       </div>
+      {managementOpen && (
+        <ZaloGroupManagementControls
+          accountId={accountId}
+          key={`${workspaceId}:${accountId}`}
+          onChanged={invalidate}
+          workspaceId={workspaceId}
+        />
+      )}
       <p className="text-muted-foreground text-xs">
         {t("zaloAccount.unofficialWarning")}
       </p>
-      <label
-        className="flex items-center gap-2 text-sm"
-        htmlFor={`zalo-group-messaging-${accountId}`}
-      >
-        <Switch
-          checked={enabled}
-          disabled={setMessaging.isPending}
-          id={`zalo-group-messaging-${accountId}`}
-          onCheckedChange={(enabled) => setMessaging.execute({ enabled })}
-        />
-        {t("zaloAccount.groupMessaging")}
-      </label>
       <div
         aria-live="polite"
         className="flex flex-wrap gap-3 text-muted-foreground text-xs"
@@ -350,8 +342,6 @@ export function ZaloAccountGroups({
           <TableHeader>
             <TableRow>
               <TableHead>{t("fields.name.label")}</TableHead>
-              <TableHead>{t("zaloAccount.receive")}</TableHead>
-              <TableHead>{t("zaloAccount.send")}</TableHead>
               <TableHead>{t("zaloAccount.automation")}</TableHead>
               <TableHead>{t("fields.message.label")}</TableHead>
             </TableRow>
@@ -362,14 +352,14 @@ export function ZaloAccountGroups({
                 accountId={accountId}
                 enabled={enabled}
                 group={group}
-                key={group.id}
+                key={`${workspaceId}:${accountId}:${group.id}`}
                 sendReady={sendReady}
                 workspaceId={workspaceId}
               />
             ))}
             {(query.data?.groups ?? groups).length === 0 && (
               <TableRow>
-                <TableCell colSpan={5}>{t("messages.noData")}</TableCell>
+                <TableCell colSpan={3}>{t("messages.noData")}</TableCell>
               </TableRow>
             )}
           </TableBody>

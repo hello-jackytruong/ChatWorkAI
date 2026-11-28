@@ -1,9 +1,13 @@
+import { encryptUtils } from "@chatbotx.io/encryption"
 import type {
   ZaloAccountCommandEnvelope,
   ZaloAccountGroup,
   ZaloAccountLabelSnapshot,
 } from "@chatbotx.io/sdk"
-import { ZaloAccountPreDispatchError } from "@chatbotx.io/sdk"
+import {
+  ZaloAccountPreDispatchError,
+  zaloAccountNativeToolResultSchema,
+} from "@chatbotx.io/sdk"
 import { describe, expect, it, vi } from "vitest"
 import { ZaloAccountHistoryPageError } from "../src/runtime/history-page"
 import type { ZaloAccountPool } from "../src/runtime/zalo-account-pool"
@@ -43,12 +47,46 @@ const historyPage = {
   fingerprint: "a".repeat(64),
 }
 
+const groupReadCommand = {
+  ...reconnectCommand,
+  kind: "read_group_administration",
+  commandId: "group-read-1",
+  target: { ownerId: "owner-1", fenceToken: "7" },
+  groupId: "provider-group-1",
+  accountPolicyEpoch: 2,
+  groupPolicyEpoch: 3,
+  groupRead: { kind: "overview" },
+} as const
+
+const groupAdministration = {
+  kind: "overview",
+  overview: { name: "Team", accessible: true, role: "owner" },
+} as const
+
 const makeHarness = (admission?: ProviderAdmissionPort) => {
+  const groupManagement = {
+    admit: vi.fn(async () => undefined),
+    claimDispatch: vi.fn(async () => true),
+    settle: vi.fn(async () => undefined),
+  }
   const pool = {
     fetchHistoryPage: vi.fn<ZaloAccountPool["fetchHistoryPage"]>(
       async () => historyPage,
     ),
     getGroupMembers: vi.fn(async () => ({ members: [], complete: true })),
+    readGroupAdministration: vi.fn(async () => groupAdministration),
+    groupManagement: vi.fn<ZaloAccountPool["groupManagement"]>(
+      async ({ operation, authorizeDispatch }) => {
+        await authorizeDispatch()
+        return { kind: operation.kind, outcome: "confirmed" }
+      },
+    ),
+    nativeTool: vi.fn<ZaloAccountPool["nativeTool"]>(
+      async ({ operation, authorizeDispatch }) => {
+        await authorizeDispatch()
+        return { kind: operation.kind, outcome: "confirmed" }
+      },
+    ),
     getStickerCatalog: vi.fn(async () => []),
     getStickerResources: vi.fn(async () => []),
     getLabels: vi.fn(
@@ -84,16 +122,177 @@ const makeHarness = (admission?: ProviderAdmissionPort) => {
   const ownsTarget = vi.fn(async () => true)
   const executor = new ZaloAccountCommandExecutor({
     admission,
+    groupManagement,
+    nativeTool: groupManagement,
     now: () => new Date("2026-11-20T02:00:30.000Z"),
     ownerId: "owner-1",
     pool,
     stateStore,
     ownsTarget,
   })
-  return { executor, ownsTarget, pool, stateStore }
+  return { executor, ownsTarget, pool, stateStore, groupManagement }
 }
 
 describe("ZaloAccountCommandExecutor", () => {
+  it.each([
+    "groupManagement",
+    "nativeTool",
+  ] as const)("does not dispatch %s after claiming if account ownership was lost", async (kind) => {
+    const { executor, ownsTarget, pool, groupManagement } = makeHarness()
+    const providerWrite = vi.fn()
+    let owned = true
+    ownsTarget.mockImplementation(() => Promise.resolve(owned))
+    groupManagement.claimDispatch.mockImplementation(() => {
+      owned = false
+      return Promise.resolve(true)
+    })
+    if (kind === "groupManagement") {
+      pool.groupManagement.mockImplementation(
+        async ({ operation, authorizeDispatch }) => {
+          await authorizeDispatch()
+          providerWrite()
+          return { kind: operation.kind, outcome: "confirmed" }
+        },
+      )
+    } else {
+      pool.nativeTool.mockImplementation(
+        async ({ operation, authorizeDispatch }) => {
+          await authorizeDispatch()
+          providerWrite()
+          return { kind: operation.kind, outcome: "confirmed" }
+        },
+      )
+    }
+    const base = {
+      ...reconnectCommand,
+      target: { ownerId: "owner-1", fenceToken: "7" },
+      accountPolicyEpoch: 2,
+      attemptCommandId: "1795140030000:f9cc28e5-7124-412c-a54c-d6871987c73e",
+    }
+    const command =
+      kind === "groupManagement"
+        ? {
+            ...base,
+            kind: "group_management" as const,
+            groupId: "known-group",
+            providerGroupId: "99",
+            groupPolicyEpoch: 3,
+            groupManagement: {
+              kind: "changeGroupName" as const,
+              name: "Updated",
+            },
+          }
+        : {
+            ...base,
+            kind: "native_tool" as const,
+            conversationId: "conversation",
+            contactInboxId: "anchor",
+            thread: { threadType: "user" as const, threadId: "42" },
+            nativeTool: { kind: "setUnread" as const, enabled: true },
+          }
+    const outcome = await executor.execute(command)
+    expect(providerWrite).not.toHaveBeenCalled()
+    expect(outcome.status).toBe("applied")
+    if (outcome.status !== "applied") {
+      throw new Error("Expected an applied result envelope")
+    }
+    if (kind === "groupManagement") {
+      expect(outcome.result.groupManagement).toMatchObject({
+        outcome: "unknown",
+      })
+    } else {
+      const ciphertext = outcome.result.nativeToolCiphertext
+      if (!ciphertext) {
+        throw new Error("Expected an encrypted native tool result")
+      }
+      expect(outcome.result).not.toHaveProperty("nativeTool")
+      await expect(
+        encryptUtils.decryptObject(
+          ciphertext,
+          zaloAccountNativeToolResultSchema,
+        ),
+      ).resolves.toMatchObject({
+        kind: "setUnread",
+        outcome: "unknown",
+      })
+    }
+    expect(groupManagement.settle).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ dispatched: true }),
+      expect.objectContaining({ outcome: "unknown" }),
+    )
+    await executor.execute(command)
+    expect(groupManagement.claimDispatch).toHaveBeenCalledOnce()
+  })
+  it("uses the scoped durable claim before a group write and keeps uncertain writes inspectable", async () => {
+    const { executor, groupManagement, pool } = makeHarness()
+    const input = {
+      ...reconnectCommand,
+      kind: "group_management",
+      commandId: "scoped-redis-id",
+      target: { ownerId: "owner-1", fenceToken: "7" },
+      accountPolicyEpoch: 1,
+      attemptCommandId: "1795140000000:8e250019-f49e-4d18-99fb-5d7ff7b7f047",
+      groupManagement: {
+        kind: "createGroup",
+        name: "Support",
+        memberUids: ["1"],
+      },
+    } as const
+    pool.groupManagement.mockImplementationOnce(
+      async ({ authorizeDispatch }) => {
+        await authorizeDispatch()
+        throw new Error("Provider response interrupted")
+      },
+    )
+    const outcome = await executor.execute(input)
+    expect(outcome).toMatchObject({
+      status: "applied",
+      result: { groupManagement: { kind: "createGroup", outcome: "unknown" } },
+    })
+    expect(groupManagement.claimDispatch).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        commandId: input.attemptCommandId,
+        fenceToken: "7",
+      }),
+    )
+    expect(groupManagement.settle).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        commandId: input.attemptCommandId,
+        dispatched: true,
+      }),
+      expect.objectContaining({ outcome: "unknown" }),
+    )
+    await expect(executor.execute(input)).resolves.toEqual(outcome)
+    expect(pool.groupManagement).toHaveBeenCalledOnce()
+  })
+  it("routes a fenced group administration read with the scoped group policy", async () => {
+    const { executor, pool } = makeHarness()
+
+    await expect(executor.execute(groupReadCommand)).resolves.toEqual({
+      status: "applied",
+      result: { status: "synced", groupAdministration },
+    })
+    expect(pool.readGroupAdministration).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        inboxId: "inbox-1",
+        groupId: "provider-group-1",
+        accountPolicyEpoch: 2,
+        groupPolicyEpoch: 3,
+        groupRead: { kind: "overview" },
+      }),
+    )
+  })
+
+  it("does not read group administration from a stale account lease", async () => {
+    const { executor, ownsTarget, pool } = makeHarness()
+    ownsTarget.mockResolvedValue(false)
+
+    await expect(executor.execute(groupReadCommand)).resolves.toEqual({
+      status: "rejected_stale",
+    })
+    expect(pool.readGroupAdministration).not.toHaveBeenCalled()
+  })
   it("returns a history page only after the targeted lease is rechecked", async () => {
     const { executor, ownsTarget, pool } = makeHarness()
     pool.fetchHistoryPage.mockImplementation(async ({ authorizeLease }) => {

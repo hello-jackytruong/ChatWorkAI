@@ -188,6 +188,10 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 **Pha 1 · Kiểm thử cục bộ:** Inbox hiển thị trạng thái DM, đếm receipt nhóm, popup có giới hạn, typing tự hết hạn và reaction theo kênh. Gửi reaction, request lịch sử reaction và các receipt outbound đã nối qua API có kiểm tra quyền. Cấu hình mặc định tắt; thay đổi, gỡ reaction, hiệu lực receipt và dữ liệu lịch sử còn chờ Zalo staging.
 
+Đã kiểm thử hồi quy reaction từ tài khoản kết nối và người đối thoại, kể cả
+payload lịch sử và reaction trỏ đến ID phụ của cùng tin nhắn. Cần đối chiếu
+hiển thị trên tài khoản Zalo thật.
+
 - [x] Nhận delivered/seen/typing/reaction; gửi typing đã có đường xử lý.
 - [x] Hiển thị nhất quán trạng thái gửi/đã giao/đã xem cho DM.
 - [x] Hiển thị số người đã giao/đã xem trong nhóm.
@@ -262,10 +266,18 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P1 · 12. Thông tin và quản trị nhóm
 
+**Pha 1 · Kiểm thử cục bộ:** trang quản lý tải chi tiết và danh sách thành viên theo nhu cầu. Chi tiết tách vai trò và hạn chế Zalo khỏi thiết lập Inbox; roster có cursor theo phiên bản, tải tối đa 50 người và báo khi Zalo hạn chế hoặc trả thiếu. Luồng sự kiện có kiểm tra membership và chống trùng; nghiệm thu socket trên tài khoản thật vẫn để mở.
+
+**Pha 2 · Kiểm thử cục bộ:** đã nối các thao tác tạo, quản trị thành viên, ảnh/tên, duyệt, chặn và lời mời. Kiểm tra vai trò ngay trước khi gọi Zalo và giữ kết quả theo mã lệnh để đối soát khi timeout. Các thao tác đã hỗ trợ mở mặc định cho quản trị viên đủ quyền. Sửa settings toàn bộ và nâng community vẫn khóa. Các thao tác ghi bên dưới còn chờ nghiệm thu trên nhóm Zalo thử.
+
+Gửi và nhận mặc định bật cho nhóm đã xác minh. Hệ thống phát hiện nhóm sau khi
+socket kết nối và khi tài khoản tham gia nhóm. Giao diện cài đặt nhóm chỉ hiện
+ba chế độ tự động hóa: Tắt mặc định, Chỉ khi được nhắc, và Mọi tin nhắn.
+
 - [x] Group list, Inbox, receive/send policy, automation mode và kill switch đã có nền tảng.
-- [ ] Lưu mô tả, loại nhóm/community, owner/admin và settings ngoài metadata cơ bản.
-- [ ] Xem thành viên qua `getGroupMembersInfo`; có phân trang và cờ snapshot chưa đầy đủ.
-- [ ] Phân biệt owner/admin/member và quyền thực tế của account hiện tại.
+- [x] Lưu mô tả, loại nhóm/community, owner/admin và settings ngoài metadata cơ bản.
+- [x] Xem thành viên qua `getGroupMembersInfo`; có phân trang và cờ snapshot chưa đầy đủ.
+- [x] Phân biệt owner/admin/member và quyền thực tế của account hiện tại.
 - [ ] Tạo nhóm bằng `createGroup`.
 - [ ] Đổi tên/avatar bằng `changeGroupName`, `changeGroupAvatar`.
 - [ ] Thêm/mời/xóa thành viên bằng `addUserToGroup`, `inviteUserToGroups`, `removeUserFromGroup`.
@@ -280,24 +292,30 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 - [ ] Rời nhóm/giải tán bằng `leaveGroup`, `disperseGroup`.
 - [ ] Kiểm chứng nâng cấp community bằng `upgradeGroupToCommunity`.
 - [ ] Nhận đầy đủ `group_event`, cập nhật metadata/quyền ngay.
+  - Luồng đã nối và kiểm tra với payload cố định. Chờ xác nhận loại sự kiện và khóa sắp thứ tự bằng tài khoản Zalo thử.
 - [ ] Render system message: vào/rời/bị xóa, đổi admin, tên/avatar/settings, link và topic.
 - [ ] Khi bị xóa khỏi nhóm hoặc mất quyền, cập nhật khả năng nhận/gửi; giữ lịch sử cũ.
 - [ ] Tận dụng `getRelatedFriendGroup` cho ngữ cảnh nhóm chung khi phù hợp.
-- [ ] Thành viên nhóm vẫn là identity/profile nhóm; chỉ tạo Contact khi có hành động chuyển đổi rõ ràng.
+  - Đã nối thao tác đọc dành cho thành viên đã xác minh là bạn. Chờ xác nhận trên tài khoản có gói phù hợp.
+- [x] Thành viên nhóm vẫn là identity/profile nhóm; chỉ tạo Contact khi có hành động chuyển đổi rõ ràng.
 
 ## P2 · 13. Nhãn Zalo và tag ChatbotX
 
+**Pha 3 · Kiểm thử cục bộ:** đã có danh sách nhãn theo thứ tự, màu và liên kết tag. Sửa tên/màu/emoji dùng cả phiên bản và mã kiểm tra nội dung danh sách. Sync thủ công và khi reconnect dùng cùng hàng đợi. Reconnect tự đồng bộ nhãn mặc định. Tạo và xóa nhãn vẫn chờ xác nhận cách cấp ID và tác động trên Zalo thật.
+
 - [x] Có `getLabels`, `updateLabels`, mapping và cập nhật nhãn đã map.
-- [ ] Hiển thị nhãn native, màu/thứ tự nếu payload cung cấp.
-- [ ] UI thể hiện rõ nhãn Zalo và tag chỉ tồn tại trong ChatbotX.
+- [x] Hiển thị nhãn native, màu/thứ tự nếu payload cung cấp.
+- [x] UI phân biệt tag có liên kết định nghĩa nhãn Zalo của tài khoản và tag ChatbotX.
 - [ ] Kiểm chứng tạo/đổi tên/xóa nhãn native bằng whole-document update.
-- [ ] Sync sau reconnect và sync thủ công, có tiến độ/last success.
-- [ ] Hiển thị trạng thái conflict, partial, pending, unknown và thao tác đối soát.
-- [ ] Không mất label/assignment không liên quan khi sửa một hội thoại.
-- [ ] Không xóa mapping vì snapshot rỗng, stale hoặc chưa hoàn chỉnh.
-- [ ] Thống nhất nhãn trên DM và nhóm được phép quản lý.
+- [x] Sync sau reconnect và sync thủ công, có tiến độ và lần đồng bộ thành công gần nhất.
+- [x] Hiển thị trạng thái conflict, partial, pending, unknown và thao tác đối soát.
+- [x] Không mất label/assignment không liên quan khi sửa một hội thoại.
+- [x] Không xóa mapping vì snapshot rỗng, stale hoặc chưa hoàn chỉnh.
+- [x] Hiển thị liên kết định nghĩa nhãn trên DM và nhóm được phép quản lý.
 
 ## P2 · 14. Thiết lập hội thoại native
+
+**Pha 4 · Kiểm thử cục bộ:** đọc thiết lập theo đúng thread và ContactInbox. Sau mỗi thao tác, đọc lại giá trị trên Zalo. Trường chưa có bằng chứng hiển thị là chưa rõ. PIN được loại tại gateway; cập nhật và reset PIN vẫn chờ nghiệm thu. Các thiết lập đã hỗ trợ có thể ghi theo quyền tài khoản.
 
 - [ ] Đọc/ghi pin qua `getPinConversations`, `setPinnedConversations`.
 - [ ] Đọc/ghi mute qua `getMute`, `setMute`.
@@ -306,7 +324,7 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 - [ ] Đọc/ghi auto-delete qua `getAutoDeleteChat`, `updateAutoDeleteChat`.
 - [ ] Hội thoại ẩn qua `getHiddenConversations`, `setHiddenConversations`.
 - [ ] Quản lý PIN ẩn qua `updateHiddenConversPin`, `resetHiddenConversPin`.
-- [ ] Hiển thị riêng thiết lập Zalo và thiết lập CRM, tránh ghi đè lẫn nhau.
+- [x] Hiển thị riêng thiết lập Zalo và thiết lập CRM, tránh ghi đè lẫn nhau.
 - [ ] Đồng bộ thay đổi từ thiết bị khác khi event/API cho phép.
 
 ## P2 · 15. Poll, note, board và reminder
@@ -324,26 +342,33 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P2 · 16. Profile, avatar và thiết lập tài khoản
 
-- [ ] Thông tin chính chủ qua `fetchAccountInfo`, `getUserInfo`.
-- [ ] Sửa profile/bio qua `updateProfile`, `updateProfileBio`.
-- [ ] Danh sách avatar qua `getAvatarList`.
-- [ ] Đổi/xóa/dùng lại avatar qua `changeAccountAvatar`, `deleteAvatar`, `reuseAvatar`.
-- [ ] Lấy QR profile qua `getQR`; phân biệt với QR đăng nhập.
-- [ ] Đọc business account/package qua `getBizAccount`.
-- [ ] Đọc/ghi settings qua `getSettings`, `updateSettings`.
+- [x] Thông tin chính chủ qua `fetchAccountInfo`, `getUserInfo`.
+- [x] Sửa profile/bio qua `updateProfile`, `updateProfileBio`.
+- [x] Danh sách avatar qua `getAvatarList`.
+- [x] Đổi/xóa/dùng lại avatar qua `changeAccountAvatar`, `deleteAvatar`, `reuseAvatar`.
+- [x] Lấy QR profile qua `getQR`; phân biệt với QR đăng nhập.
+- [x] Đọc business account/package qua `getBizAccount`.
+- [x] Đọc/ghi settings qua `getSettings`, `updateSettings`.
 - [ ] Thiết lập ngôn ngữ qua `updateLang`.
 - [ ] Kiểm chứng trạng thái hoạt động qua `updateActiveStatus`.
-- [ ] Chỉ hiển thị các settings có contract và ý nghĩa đã được xác nhận.
+- [x] Chỉ hiển thị các settings có contract và ý nghĩa đã được xác nhận.
 - [ ] Proxy HTTP/SOCKS theo account nếu cần; kiểm tra kết nối và giữ bí mật thông tin proxy.
+
+> Pha 5 đã có API/CLI và giao diện tài khoản. Quyền ghi yêu cầu quản trị tài khoản và xác minh phiên Zalo. Cần xác minh phiên Zalo thật cho thao tác ghi, ngôn ngữ và trạng thái hoạt động.
 
 ## P2 · 17. Quick message và auto-reply native
 
-- [ ] Quick message CRUD qua `getQuickMessageList`, `addQuickMessage`, `updateQuickMessage`, `removeQuickMessage`.
-- [ ] Preview nội dung/media của quick message và lưu media cần thiết trên R2/S3.
+**Pha 6 · Kiểm thử cục bộ:** đã có danh sách, thêm/sửa/xóa mẫu Zalo, đính kèm
+một ảnh hoặc xác nhận thay/gỡ ảnh. Ảnh hiển thị qua URL Zalo khi chờ lưu nền và
+ưu tiên bản R2/S3 đã lưu. Auto-reply Business có đọc và xóa theo đúng quy tắc
+được chọn. Tạo/sửa auto-reply và xác nhận giờ theo thiết bị còn chờ Zalo thật.
+
+- [x] Quick message CRUD qua `getQuickMessageList`, `addQuickMessage`, `updateQuickMessage`, `removeQuickMessage`.
+- [x] Preview nội dung/media của quick message và lưu media cần thiết trên R2/S3.
 - [ ] Auto-reply CRUD qua `getAutoReplyList`, `createAutoReply`, `updateAutoReply`, `deleteAutoReply`.
 - [ ] Hiển thị phạm vi/thời gian/kích hoạt đúng contract provider.
-- [ ] Phân biệt quick message native với mẫu trả lời nhanh ChatbotX.
-- [ ] Phân biệt auto-reply native với Flow/AI Agent; cảnh báo cấu hình có thể trả lời kép.
+- [x] Phân biệt quick message native với mẫu trả lời nhanh ChatbotX.
+- [x] Phân biệt auto-reply native với Flow/AI Agent; cảnh báo cấu hình có thể trả lời kép.
 
 ## P2 · 18. Dashboard và vận hành tài khoản
 

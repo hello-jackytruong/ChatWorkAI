@@ -4,6 +4,7 @@ import {
   isZaloAccountRichSendEnabled,
   zaloAccountGroupService,
   zaloAccountGroupTagService,
+  zaloAccountLabelService,
   zaloAccountService,
 } from "@chatbotx.io/business/zalo-account"
 import { zodBigintAsString } from "@chatbotx.io/utils"
@@ -31,6 +32,11 @@ export const getZaloGroupInboxAction = workspaceActionClient
         workspaceId,
         accountId,
       })
+      const tags = await zaloAccountGroupTagService.list({
+        workspaceId,
+        accountId,
+        groupId: group.id,
+      })
       return {
         group,
         richSendEnabled: isZaloAccountRichSendEnabled(accountId),
@@ -42,10 +48,11 @@ export const getZaloGroupInboxAction = workspaceActionClient
           account.groupMessagingEnabled &&
           group.accessible &&
           group.sendEnabled,
-        tags: await zaloAccountGroupTagService.list({
+        tags,
+        nativeTagIds: await zaloAccountLabelService.listMappedTagIds({
           workspaceId,
           accountId,
-          groupId: group.id,
+          tagIds: tags.map((tag) => tag.id),
         }),
       }
     },

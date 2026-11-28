@@ -4,7 +4,11 @@ import {
 } from "@chatbotx.io/business"
 import { connectSessionService } from "@chatbotx.io/business/connect-session"
 import { zaloAccountFriendActivityService } from "@chatbotx.io/business/zalo-account/friend-activity"
-import { isZaloAccountHistoryAutoSyncEnabled } from "@chatbotx.io/business/zalo-account/native-operation-policy"
+import { zaloAccountGroupLifecycleService } from "@chatbotx.io/business/zalo-account/group-lifecycle"
+import {
+  isZaloAccountHistoryAutoSyncEnabled,
+  isZaloAccountLabelReconnectSyncEnabled,
+} from "@chatbotx.io/business/zalo-account/native-operation-policy"
 import { zaloAccountRuntimeStateService } from "@chatbotx.io/business/zalo-account/runtime-state"
 import { connectionService } from "@chatbotx.io/connections"
 import { encryptUtils } from "@chatbotx.io/encryption"
@@ -12,10 +16,12 @@ import {
   isZaloAccountSecretEventAadValid,
   type ZaloAccountTransportEvent,
   zaloAccountAuthSchema,
+  zaloAccountOwnGroupMembership,
 } from "@chatbotx.io/sdk"
 import { sha256Hex } from "@chatbotx.io/utils/crypto"
 import {
   enqueueIntegrationJob,
+  enqueueZaloAccountLabelSync,
   IntegrationJobAction,
   LOW_BULK_PRIORITY,
   LowJobAction,
@@ -67,6 +73,43 @@ const notifyStatusChanged = (workspaceId: string, accountId: string) =>
     eventType: "zaloAccountStatusChanged",
     data: { accountId },
   }).catch(() => undefined)
+
+const groupDiscoveryCooldownMs = 60_000
+const maxSocketOpenReplayAgeMs = 300_000
+
+async function enqueueGroupDiscovery(input: {
+  workspaceId: string
+  accountId: string
+  occurredAt: string
+  providerGroupId?: string
+}) {
+  const { workspaceId, accountId, occurredAt, providerGroupId } = input
+  const scope = `${workspaceId}\n${accountId}`
+  const [refreshId, cooldownId] = await Promise.all([
+    sha256Hex(`${scope}\n${occurredAt.slice(0, 16)}`),
+    sha256Hex(scope),
+  ])
+  const commandId = `zalo-group-refresh-${refreshId}`
+  return enqueueIntegrationJob(
+    {
+      type: IntegrationJobAction.zaloAccountGroupRefresh,
+      data: {
+        workspaceId,
+        accountId,
+        ...(providerGroupId ? { providerGroupId } : {}),
+        commandId,
+      },
+    },
+    {
+      jobId: commandId,
+      delay: 10_000,
+      deduplication: {
+        id: `zalo-group-refresh-${cooldownId}`,
+        ttl: groupDiscoveryCooldownMs,
+      },
+    },
+  )
+}
 
 const handleConnectSessionEvent = async (
   event: ZaloAccountTransportEvent & {
@@ -246,6 +289,36 @@ export const handleZaloAccountEvents = async (
         }
         if (
           event.payload.type === "connected" &&
+          event.socketAttempt &&
+          event.sequence &&
+          Date.now() - Date.parse(event.occurredAt) <= maxSocketOpenReplayAgeMs
+        ) {
+          const { workspaceId, accountId, inboxId } = event.route
+          const { fenceToken, epoch, socketAttempt, sequence } = event
+          // Check durable state even on replay, after the lifecycle write has committed.
+          if (
+            await zaloAccountRuntimeStateService.isCurrentConnectedSocket({
+              workspaceId,
+              accountId,
+              inboxId,
+              fenceToken,
+              epoch,
+              socketAttempt,
+              sequence,
+            })
+          ) {
+            await enqueueGroupDiscovery({
+              workspaceId,
+              accountId,
+              occurredAt: event.occurredAt,
+            })
+            if (isZaloAccountLabelReconnectSyncEnabled()) {
+              await enqueueZaloAccountLabelSync({ workspaceId, accountId })
+            }
+          }
+        }
+        if (
+          event.payload.type === "connected" &&
           event.socketAttempt !== undefined &&
           isZaloAccountHistoryAutoSyncEnabled()
         ) {
@@ -422,24 +495,61 @@ export const handleZaloAccountEvents = async (
         )
         return
       }
-      if (event.kind === "group_activity" && event.route.kind === "account") {
-        const minuteBucket = event.occurredAt.slice(0, 16)
-        const refreshId = await sha256Hex(
-          `${event.route.workspaceId}\n${event.route.accountId}\n${minuteBucket}`,
-        )
-        const commandId = `zalo-group-refresh-${refreshId}`
-        await enqueueIntegrationJob(
-          {
-            type: IntegrationJobAction.zaloAccountGroupRefresh,
-            data: {
-              workspaceId: event.route.workspaceId,
-              accountId: event.route.accountId,
-              providerGroupId: event.payload.providerGroupId,
-              commandId,
+      if (event.kind === "group_event") {
+        const { workspaceId, accountId, inboxId } = event.route
+        const { providerGroupId } = event.payload
+        const refresh = await zaloAccountGroupLifecycleService.handle({
+          workspaceId,
+          accountId,
+          inboxId,
+          epoch: event.epoch,
+          fenceToken: event.fenceToken,
+          event: event.payload,
+        })
+        if (refresh) {
+          if (zaloAccountOwnGroupMembership(event.payload) === "joined") {
+            await enqueueGroupDiscovery({
+              workspaceId,
+              accountId,
+              occurredAt: event.occurredAt,
+            })
+          }
+          const key = await sha256Hex(
+            JSON.stringify([
+              workspaceId,
+              accountId,
+              providerGroupId,
+              event.occurredAt.slice(0, 16),
+            ]),
+          )
+          const commandId = `zalo-group-event-refresh-${key}`
+          await enqueueIntegrationJob(
+            {
+              type: IntegrationJobAction.zaloAccountGroupRefresh,
+              data: {
+                workspaceId,
+                accountId,
+                providerGroupId,
+                commandId,
+                nativeEvent: true,
+              },
             },
-          },
-          { jobId: commandId, delay: 10_000 },
-        )
+            {
+              jobId: commandId,
+              delay: 2000,
+              removeOnComplete: { age: 600, count: 1000 },
+            },
+          )
+        }
+        return
+      }
+      if (event.kind === "group_activity" && event.route.kind === "account") {
+        await enqueueGroupDiscovery({
+          workspaceId: event.route.workspaceId,
+          accountId: event.route.accountId,
+          providerGroupId: event.payload.providerGroupId,
+          occurredAt: event.occurredAt,
+        })
         return
       }
       if (event.route.kind === "connect_session") {

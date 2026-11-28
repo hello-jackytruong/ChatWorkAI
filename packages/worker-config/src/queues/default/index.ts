@@ -216,6 +216,66 @@ export type JobSyncChannelLabels = {
   }
 }
 
+export const ZALO_ACCOUNT_LABEL_SYNC_WINDOW_MS = 5 * 60_000
+
+type ZaloAccountLabelSyncScope = { workspaceId: string; accountId: string }
+const zaloLabelSyncBucket = () =>
+  Math.floor(Date.now() / ZALO_ACCOUNT_LABEL_SYNC_WINDOW_MS)
+const zaloLabelSyncJobId = (accountId: string, bucket: number) =>
+  `zalo-label-reconcile-${accountId}-${bucket}`
+
+export function enqueueZaloAccountLabelSync(input: ZaloAccountLabelSyncScope) {
+  return defaultQueue.add(
+    DefaultJobAction.syncChannelLabels,
+    {
+      type: DefaultJobAction.syncChannelLabels,
+      data: {
+        workspaceId: input.workspaceId,
+        channelType: "zaloAccount",
+        integrationId: input.accountId,
+      },
+    },
+    {
+      jobId: zaloLabelSyncJobId(input.accountId, zaloLabelSyncBucket()),
+      removeOnComplete: { age: 600 },
+      removeOnFail: { age: 600 },
+    },
+  )
+}
+
+export async function readZaloAccountLabelSyncStatus(
+  input: ZaloAccountLabelSyncScope,
+): Promise<"idle" | "queued" | "running"> {
+  const bucket = zaloLabelSyncBucket()
+  const states = await Promise.all(
+    [bucket, bucket - 1].map(async (value) => {
+      const job = await defaultQueue.getJob(
+        zaloLabelSyncJobId(input.accountId, value),
+      )
+      if (job?.data.type !== DefaultJobAction.syncChannelLabels) {
+        return
+      }
+      const { workspaceId, channelType, integrationId } = job.data.data
+      if (
+        workspaceId === input.workspaceId &&
+        channelType === "zaloAccount" &&
+        integrationId === input.accountId
+      ) {
+        return await job.getState()
+      }
+    }),
+  )
+  if (states.includes("active")) {
+    return "running"
+  }
+  return states.some(
+    (state) =>
+      state === "waiting" || state === "delayed" || state === "prioritized",
+  )
+    ? "queued"
+    : "idle"
+}
+
 export type JobSubmitMetaCatalogSync = {
   type: typeof DefaultJobAction.submitMetaCatalogSync
   data: {

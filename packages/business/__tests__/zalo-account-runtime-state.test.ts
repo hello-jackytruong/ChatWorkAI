@@ -7,13 +7,22 @@ const mocks = vi.hoisted(() => ({
   connection: vi.fn(),
   transition: vi.fn(),
   release: vi.fn(),
+  runtimeOrder: vi.fn(),
+  lease: vi.fn(),
 }))
 vi.mock("@chatbotx.io/database/repositories", () => ({
   integrationZaloAccountRepository: {
     withRuntimeFence: mocks.fence,
     withDiagnosticFence: mocks.diagnosticFence,
+    findConnectedRuntimeOrder: mocks.runtimeOrder,
   },
   connectionRepository: { findByInboxId: mocks.connection },
+}))
+vi.mock("@chatbotx.io/redis", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@chatbotx.io/redis")>()),
+  cacheConnections: {
+    useExisting: () => Promise.resolve({ get: mocks.lease }),
+  },
 }))
 vi.mock("../src/connection/state-service", () => ({
   connectionStateService: {
@@ -88,6 +97,57 @@ it("does not mutate a connection from another workspace", async () => {
   })
   await zaloAccountRuntimeStateService.apply(input)
   expect(mocks.transition).not.toHaveBeenCalled()
+})
+it("requires the same connected socket, no newer backoff and the current Redis lease for replayed label sync", async () => {
+  const { workspaceId, accountId, inboxId } = input
+  const order = {
+    ...input.order,
+    state: "connected",
+    socketAttempt: 2,
+    sequence: 3,
+  }
+  const socket = {
+    workspaceId,
+    accountId,
+    inboxId,
+    fenceToken: order.fenceToken,
+    epoch: order.epoch,
+    socketAttempt: 2,
+    sequence: 3,
+  }
+  mocks.runtimeOrder.mockResolvedValue({
+    runtime: order,
+    diagnostics: { ...order, phase: "connected" },
+  })
+  mocks.lease
+    .mockResolvedValueOnce("old-owner:8")
+    .mockResolvedValueOnce("owner:9")
+  await expect(
+    zaloAccountRuntimeStateService.isCurrentConnectedSocket({
+      ...socket,
+      socketAttempt: 1,
+    }),
+  ).resolves.toBe(false)
+  expect(mocks.lease).not.toHaveBeenCalled()
+  await expect(
+    zaloAccountRuntimeStateService.isCurrentConnectedSocket(socket),
+  ).resolves.toBe(false)
+  await expect(
+    zaloAccountRuntimeStateService.isCurrentConnectedSocket(socket),
+  ).resolves.toBe(true)
+  expect(mocks.runtimeOrder).toHaveBeenCalledWith({
+    workspaceId,
+    id: accountId,
+    inboxId,
+  })
+  mocks.runtimeOrder.mockResolvedValue({
+    runtime: order,
+    diagnostics: { ...order, phase: "backoff", sequence: 4 },
+  })
+  await expect(
+    zaloAccountRuntimeStateService.isCurrentConnectedSocket(socket),
+  ).resolves.toBe(false)
+  expect(mocks.lease).toHaveBeenCalledTimes(2)
 })
 it("does not release quota when the state transaction fails", async () => {
   mocks.transition.mockRejectedValueOnce(new Error("database unavailable"))

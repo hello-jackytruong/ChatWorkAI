@@ -1,6 +1,22 @@
-import { zaloAccountTransportKeys } from "@chatbotx.io/sdk"
+import { encryptUtils } from "@chatbotx.io/encryption"
+import {
+  type ZaloAccountNativeToolResult,
+  zaloAccountNativeToolResultSchema,
+  zaloAccountTransportKeys,
+} from "@chatbotx.io/sdk"
 import { describe, expect, it, vi } from "vitest"
+import {
+  commandStateKey,
+  ZaloAccountCommandExecutor,
+} from "../src/transport/command-executor"
 import { RedisCommandConsumer } from "../src/transport/redis-command-consumer"
+import { RedisCommandStateStore } from "../src/transport/redis-command-state-store"
+
+const qr = {
+  kind: "readOwnQr",
+  outcome: "confirmed",
+  profileQr: { imageUrl: "https://qr.zalo.me/test-result?token=fixture" },
+} satisfies ZaloAccountNativeToolResult
 
 const createStartupConsumer = () => {
   const connected = Promise.withResolvers<void>()
@@ -48,6 +64,121 @@ const createStartupConsumer = () => {
 }
 
 describe("RedisCommandConsumer", () => {
+  it("encrypts the native tool result before publishing it to Redis", async () => {
+    const command = {
+      version: 1,
+      commandId: "native-result",
+      kind: "native_tool",
+      route: {
+        kind: "account",
+        workspaceId: "workspace-1",
+        accountId: "account-1",
+        inboxId: "inbox-1",
+      },
+      target: { ownerId: "owner-1", fenceToken: "1" },
+      createdAt: "2026-11-20T02:00:00.000Z",
+      expiresAt: "2099-11-20T02:01:00.000Z",
+      accountPolicyEpoch: 0,
+      nativeTool: { kind: "readOwnQr" },
+    } as const
+    const call = vi.fn((operation: string, stream: string) => {
+      if (operation === "XAUTOCLAIM") {
+        const entries =
+          stream === zaloAccountTransportKeys.ownerMailbox("owner-1")
+            ? [["10-0", ["command", JSON.stringify(command)]]]
+            : []
+        return ["0-0", entries, []]
+      }
+      if (operation === "XPENDING") {
+        return [["10-0", "owner-old", 31_000, 1]]
+      }
+      throw new Error(`Unexpected Redis call: ${operation}`)
+    })
+    const stored = new Map<string, string>()
+    const set = vi.fn(
+      (
+        key: string,
+        value: string,
+        _mode: string,
+        _ttl: number,
+        condition?: string,
+      ) => {
+        if (condition === "NX" && stored.has(key)) {
+          return Promise.resolve(null)
+        }
+        stored.set(key, value)
+        return Promise.resolve("OK")
+      },
+    )
+    const get = vi.fn(async (key: string) => stored.get(key) ?? null)
+    const redis = {
+      call,
+      set,
+      get,
+      xack: vi.fn(async () => 1),
+      xdel: vi.fn(async () => 1),
+    }
+    const nativeTool = vi.fn(async () => qr)
+    const executor = new ZaloAccountCommandExecutor({
+      ownerId: "owner-1",
+      stateStore: new RedisCommandStateStore(redis as never),
+      pool: { nativeTool } as never,
+      ownsTarget: vi.fn(async () => true),
+      nativeAccountTool: {
+        admit: vi.fn(async () => undefined),
+        claimDispatch: vi.fn(async () => true),
+        settle: vi.fn(async () => undefined),
+      },
+    })
+    const consumer = new RedisCommandConsumer({
+      executor,
+      logger: { warn: vi.fn() },
+      ownerId: "owner-1",
+      redis: redis as never,
+    })
+    await consumer.reclaimPending()
+    const resultKey = zaloAccountTransportKeys.commandResult(command.commandId)
+    const stateKey = zaloAccountTransportKeys.commandState(
+      commandStateKey(command),
+    )
+    expect(stored.get(resultKey)).not.toContain("token=fixture")
+    expect(stored.get(stateKey)).not.toContain("token=fixture")
+    const parsed = JSON.parse(stored.get(resultKey) ?? "{}")
+    const state = JSON.parse(stored.get(stateKey) ?? "{}")
+    expect(parsed.result).not.toHaveProperty("nativeTool")
+    expect(parsed.result).toHaveProperty("nativeToolCiphertext")
+    expect(state.outcome.result).toEqual(parsed.result)
+    const aad = JSON.stringify([
+      "zalo-native-tool-result-v1",
+      "workspace-1",
+      "account-1",
+      "inbox-1",
+      "native-result",
+      "readOwnQr",
+    ])
+    await expect(
+      encryptUtils.decryptObject(
+        parsed.result.nativeToolCiphertext,
+        zaloAccountNativeToolResultSchema,
+        aad,
+      ),
+    ).resolves.toEqual(qr)
+    expect(redis.xack).toHaveBeenCalledOnce()
+    stored.set(
+      stateKey,
+      JSON.stringify({
+        status: "applied",
+        outcome: {
+          status: "applied",
+          result: { status: "synced", nativeTool: qr },
+        },
+      }),
+    )
+    await consumer.reclaimPending()
+    expect(stored.get(resultKey)).toBe(JSON.stringify({ status: "unknown" }))
+    expect(nativeTool).toHaveBeenCalledOnce()
+  })
+
   it("connects the lazy blocking client before reading or reporting ready", async () => {
     const { blocking, connected, consumer, redis } = createStartupConsumer()
     const started = consumer.start()

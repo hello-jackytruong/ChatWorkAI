@@ -17,6 +17,12 @@ const mocks = vi.hoisted(() => ({
   contactCapability: vi.fn(),
   contactLookup: vi.fn(),
   contactOpen: vi.fn(),
+  labelList: vi.fn(),
+  labelUpdate: vi.fn(),
+  labelSync: vi.fn(),
+  nativeAccountRead: vi.fn(),
+  nativeAccountMutate: vi.fn(),
+  nativeAccountAttempt: vi.fn(),
   push: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({
@@ -47,6 +53,28 @@ vi.mock(
     getZaloContactRequestStatusAction: vi.fn(),
     getZaloContactPresenceAction: vi.fn(),
     mutateZaloContactAction: vi.fn(),
+  }),
+)
+vi.mock("../src/features/zalo-accounts/actions/native-labels.action", () => ({
+  listZaloNativeLabelsAction: mocks.labelList,
+  updateZaloNativeLabelAction: mocks.labelUpdate,
+  queueZaloNativeLabelSyncAction: mocks.labelSync,
+}))
+vi.mock("../src/features/zalo-accounts/actions/sync-labels.action", () => ({
+  syncZaloAccountLabelsAction: mocks.labelSync,
+}))
+vi.mock(
+  "../src/features/zalo-accounts/actions/native-account-tools.action",
+  () => ({
+    readZaloNativeAccountToolAction: mocks.nativeAccountRead,
+    mutateZaloNativeAccountToolAction: mocks.nativeAccountMutate,
+    getZaloNativeAccountToolAttemptAction: mocks.nativeAccountAttempt,
+  }),
+)
+vi.mock(
+  "../src/features/media-library/components/media-library-trigger",
+  () => ({
+    MediaLibraryTrigger: () => null,
   }),
 )
 vi.mock(
@@ -127,7 +155,7 @@ function render(children: ReactNode) {
   act(() =>
     root.render(
       <QueryClientProvider client={client}>
-        <NextIntlClientProvider locale="en" messages={messages}>
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           {children}
         </NextIntlClientProvider>
       </QueryClientProvider>,
@@ -137,7 +165,7 @@ function render(children: ReactNode) {
 async function click(text: string) {
   await act(async () => {
     const button = Array.from(document.querySelectorAll("button")).find(
-      (item) => item.textContent === text,
+      (item) => (item.getAttribute("aria-label") ?? item.textContent) === text,
     )
     expect(button).toBeDefined()
     button?.click()
@@ -402,4 +430,381 @@ it("opens a verified Zalo conversation only after deliberate lookup and result s
     selectionToken: "verified-selection",
   })
   expect(mocks.push).toHaveBeenCalledWith("/space/w/inbox?conversationId=12")
+})
+
+it("loads native labels only in their panel and applies an explicit label edit", async () => {
+  const lastSuccessAt = "2026-11-27T12:00:00.000Z"
+  const list = {
+    available: true,
+    complete: true,
+    version: 4,
+    editEnabled: true,
+    lastSuccessAt,
+    labels: [
+      {
+        id: 6,
+        text: "Later follow-up",
+        color: "#556677",
+        emoji: "",
+        offset: 8,
+      },
+      {
+        id: 4,
+        text: "Earlier follow-up",
+        color: "#112233",
+        emoji: "🟢",
+        offset: 1,
+        tagId: "45",
+        tagName: "Mapped CRM tag",
+      },
+    ],
+  }
+  mocks.labelList.mockResolvedValue({ data: list })
+  mocks.labelUpdate.mockResolvedValue({
+    data: { outcome: "confirmed", version: 5 },
+  })
+  render(
+    <ZaloAccountManage
+      accounts={[
+        {
+          id: "a",
+          name: "Personal Zalo",
+          inboxId: "i",
+          groups: [],
+          connection: { id: "c", status: "connected" },
+        } as never,
+      ]}
+      canCreate
+      workspaceId="w"
+    />,
+  )
+  await click(messages.zaloAccount.configure)
+  expect(mocks.labelList).not.toHaveBeenCalled()
+  await click("Zalo labels")
+  await waitForText(document.body, "Mapped CRM tag")
+  const body = document.body.textContent ?? ""
+  expect(body.indexOf("Earlier follow-up")).toBeLessThan(
+    body.indexOf("Later follow-up"),
+  )
+  expect(
+    document.querySelector(`time[datetime="${lastSuccessAt}"]`),
+  ).not.toBeNull()
+  expect(mocks.labelList).toHaveBeenCalledExactlyOnceWith("w", "a")
+  await click("Edit Zalo label: Earlier follow-up")
+  const field = document.querySelector<HTMLInputElement>(
+    'input[aria-label="Label name"]',
+  )
+  if (!field) {
+    throw new Error("Label name field missing")
+  }
+  act(() => {
+    Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set?.call(field, "Follow-up tomorrow")
+    field.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  expect(mocks.labelUpdate).not.toHaveBeenCalled()
+  await click(messages.actions.save)
+  expect(mocks.labelUpdate).toHaveBeenCalledExactlyOnceWith("w", "a", {
+    labelId: 4,
+    commandId: expect.any(String),
+    patch: { text: "Follow-up tomorrow" },
+  })
+  await waitForText(document.body, "Zalo confirmed the label change.")
+  expect(mocks.labelList).toHaveBeenCalledTimes(2)
+})
+
+it("blocks a second native label write until an unknown result has been reconciled", async () => {
+  const list = {
+    available: true,
+    complete: true,
+    version: 4,
+    editEnabled: true,
+    labels: [
+      { id: 4, text: "Follow up", color: "#123456", emoji: "!", offset: 1 },
+    ],
+  }
+  mocks.labelList.mockResolvedValueOnce({ data: list }).mockResolvedValue({
+    data: {
+      ...list,
+      syncState: "idle",
+      lastSuccessAt: "2026-11-27T12:00:00.000Z",
+    },
+  })
+  mocks.labelUpdate.mockResolvedValue({ data: { outcome: "unknown" } })
+  mocks.labelSync.mockResolvedValue({ data: { state: "queued" } })
+  render(
+    <ZaloAccountManage
+      accounts={[
+        {
+          id: "a",
+          name: "Personal Zalo",
+          inboxId: "i",
+          groups: [],
+          connection: { id: "c", status: "connected" },
+        } as never,
+      ]}
+      canCreate
+      workspaceId="w"
+    />,
+  )
+  await click(messages.zaloAccount.configure)
+  await click("Zalo labels")
+  await waitForText(document.body, "Follow up")
+  await click("Edit Zalo label: Follow up")
+  const field = document.querySelector<HTMLInputElement>(
+    'input[aria-label="Label emoji"]',
+  )
+  if (!field) {
+    throw new Error("Label emoji field missing")
+  }
+  act(() => {
+    Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set?.call(field, "")
+    field.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  await click(messages.actions.save)
+  await waitForText(document.body, messages.zaloAccount.labelUnknown)
+  expect(mocks.labelUpdate).toHaveBeenCalledExactlyOnceWith("w", "a", {
+    labelId: 4,
+    commandId: expect.any(String),
+    patch: { emoji: "" },
+  })
+  expect(
+    document.querySelector('[aria-label="Edit Zalo label: Follow up"]'),
+  ).toBeNull()
+  expect(mocks.labelSync).not.toHaveBeenCalled()
+  await click("Reconcile labels")
+  expect(mocks.labelSync).toHaveBeenCalledExactlyOnceWith("w", "a")
+  expect(mocks.labelUpdate).toHaveBeenCalledTimes(1)
+  await waitForText(document.body, "Label sync queued.")
+  expect(mocks.labelList).toHaveBeenCalledTimes(1)
+  await click("Refresh label status")
+  expect(mocks.labelList).toHaveBeenCalledTimes(2)
+  expect(
+    document.querySelector('[aria-label="Edit Zalo label: Follow up"]'),
+  ).not.toBeNull()
+})
+
+function renderProfileTools() {
+  render(
+    <ZaloAccountManage
+      accounts={[
+        {
+          id: "a",
+          name: "Personal Zalo",
+          inboxId: "i",
+          groups: [],
+          connection: { id: "c", status: "connected" },
+        } as never,
+      ]}
+      canCreate
+      workspaceId="w"
+    />,
+  )
+}
+
+it("loads the selected account profile on demand and requests QR and business details only explicitly", async () => {
+  mocks.nativeAccountRead.mockImplementation(
+    (_workspace, _account, input: { operation: { kind: string } }) => {
+      const outcomes = {
+        readOwnProfile: {
+          ownProfile: {
+            uid: "123",
+            name: "Zalo Sofia",
+            bio: "A provider biography",
+          },
+          writeEnabled: false,
+        },
+        readOwnQr: {
+          profileQr: { imageUrl: "https://zalo.me/profile-qr.png" },
+        },
+        readOwnBusiness: {
+          ownBusiness: { packageId: 451, category: "Consulting" },
+        },
+      }
+      return Promise.resolve({
+        data: {
+          kind: input.operation.kind,
+          outcome: "confirmed",
+          ...outcomes[input.operation.kind as keyof typeof outcomes],
+        },
+      })
+    },
+  )
+  renderProfileTools()
+  await click(messages.zaloAccount.configure)
+  expect(mocks.nativeAccountRead).not.toHaveBeenCalled()
+  await click("Zalo profile and settings")
+  await waitForText(document.body, "A provider biography")
+  expect(mocks.nativeAccountRead).toHaveBeenCalledExactlyOnceWith("w", "a", {
+    operation: { kind: "readOwnProfile" },
+  })
+  expect(document.body.textContent).not.toContain("451")
+  await click("Show profile QR")
+  expect(mocks.nativeAccountRead).toHaveBeenLastCalledWith("w", "a", {
+    operation: { kind: "readOwnQr" },
+  })
+  expect(
+    document.body.querySelector('img[alt="Zalo profile QR"]'),
+  ).not.toBeNull()
+  await click("Show business information")
+  await waitForText(document.body, "451")
+  expect(mocks.nativeAccountRead).toHaveBeenLastCalledWith("w", "a", {
+    operation: { kind: "readOwnBusiness" },
+  })
+  expect(mocks.nativeAccountMutate).not.toHaveBeenCalled()
+})
+
+it("loads avatar pages on request and confirms the selected historical image before deleting", async () => {
+  mocks.nativeAccountRead.mockImplementation(
+    (
+      _workspace,
+      _account,
+      input: { operation: { kind: string; page?: number } },
+    ) => {
+      const { kind, page } = input.operation
+      if (kind === "readOwnProfile") {
+        return Promise.resolve({
+          data: {
+            kind,
+            outcome: "confirmed",
+            ownProfile: { uid: "123", name: "Zalo Sofia" },
+            writeEnabled: true,
+          },
+        })
+      }
+      return Promise.resolve({
+        data: {
+          kind,
+          outcome: "confirmed",
+          writeEnabled: true,
+          avatarPage:
+            (page ?? 1) === 1
+              ? {
+                  page: 1,
+                  complete: true,
+                  nextPage: 2,
+                  photos: [
+                    { photoId: "88", thumbnailUrl: "https://zalo.me/old.png" },
+                  ],
+                }
+              : {
+                  page: 2,
+                  complete: true,
+                  photos: [
+                    {
+                      photoId: "99",
+                      thumbnailUrl: "https://zalo.me/older.png",
+                    },
+                  ],
+                },
+        },
+      })
+    },
+  )
+  mocks.nativeAccountMutate.mockImplementation(
+    (_workspace, _account, input: { commandId: string }) =>
+      Promise.resolve({
+        data: {
+          commandId: input.commandId,
+          operation: "deleteOwnAvatar",
+          status: "confirmed",
+          result: { kind: "deleteOwnAvatar", outcome: "confirmed" },
+        },
+      }),
+  )
+  renderProfileTools()
+  await click(messages.zaloAccount.configure)
+  await click("Zalo profile and settings")
+  await waitForText(document.body, "Zalo Sofia")
+  expect(mocks.nativeAccountRead).toHaveBeenCalledTimes(1)
+  await click("Avatar history")
+  await waitForText(document.body, "Avatar 88")
+  expect(mocks.nativeAccountRead).toHaveBeenLastCalledWith("w", "a", {
+    operation: { kind: "listOwnAvatars" },
+  })
+  await click(messages.actions.loadMore)
+  await waitForText(document.body, "Avatar 99")
+  expect(mocks.nativeAccountRead).toHaveBeenLastCalledWith("w", "a", {
+    operation: { kind: "listOwnAvatars", page: 2 },
+  })
+  await click("Delete avatar 99")
+  await waitForText(document.body, "Delete avatar 99 from Zalo?")
+  expect(mocks.nativeAccountMutate).not.toHaveBeenCalled()
+  await click("Confirm avatar deletion")
+  await waitForText(document.body, "Zalo confirmed the change.")
+  expect(mocks.nativeAccountMutate).toHaveBeenCalledExactlyOnceWith("w", "a", {
+    operation: { kind: "deleteOwnAvatar", photoId: "99", page: 2 },
+    commandId: expect.any(String),
+    confirmed: true,
+  })
+})
+
+it("only shows verified account settings and writes the pinned quick-message setting key", async () => {
+  mocks.nativeAccountRead.mockImplementation(
+    (_workspace, _account, input: { operation: { kind: string } }) => {
+      const { kind } = input.operation
+      return Promise.resolve({
+        data: {
+          kind,
+          outcome: "confirmed",
+          writeEnabled: true,
+          ...(kind === "readOwnProfile"
+            ? { ownProfile: { uid: "123", name: "Zalo Sofia" } }
+            : {
+                ownSettings: { quick_message_status: 0, unexpectedSetting: 27 },
+              }),
+        },
+      })
+    },
+  )
+  mocks.nativeAccountMutate.mockImplementation(
+    (_workspace, _account, input: { commandId: string }) =>
+      Promise.resolve({
+        data: {
+          commandId: input.commandId,
+          operation: "updateOwnSetting",
+          status: "confirmed",
+          result: { kind: "updateOwnSetting", outcome: "confirmed" },
+        },
+      }),
+  )
+  renderProfileTools()
+  await click(messages.zaloAccount.configure)
+  await click("Zalo profile and settings")
+  await waitForText(document.body, "Zalo Sofia")
+  await click("Account settings")
+  await waitForText(document.body, "Quick messages")
+  const label = Array.from(document.querySelectorAll("label")).find(
+    (item) => item.textContent === "Quick messages",
+  )
+  const select = label?.control
+  expect(select).toBeInstanceOf(HTMLSelectElement)
+  if (!(select instanceof HTMLSelectElement)) {
+    throw new Error("Quick-message preference is not editable")
+  }
+  expect(Array.from(select.options, (item) => item.value)).toEqual(["0", "1"])
+  expect(document.body.textContent).not.toContain("unexpectedSetting")
+  expect(document.body.textContent).toContain(
+    "Changing the Zalo language or active status is currently unavailable.",
+  )
+  await act(async () => {
+    select.value = "1"
+    select.dispatchEvent(new Event("change", { bubbles: true }))
+    await Promise.resolve()
+  })
+  expect(mocks.nativeAccountMutate).not.toHaveBeenCalled()
+  await click("Apply Quick messages")
+  expect(mocks.nativeAccountMutate).toHaveBeenCalledExactlyOnceWith("w", "a", {
+    operation: {
+      kind: "updateOwnSetting",
+      setting: { key: "quickMessageStatus", value: 1 },
+    },
+    commandId: expect.any(String),
+  })
+  await waitForText(document.body, "Zalo confirmed the change.")
 })

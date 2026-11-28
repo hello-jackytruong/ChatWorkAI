@@ -1,11 +1,18 @@
+import { createHash } from "node:crypto"
 import type {
   ZaloAccountMessageActivity,
   ZaloAccountNativeOperation,
+  ZaloAccountNativeThread,
+  ZaloAccountNativeToolOperation,
 } from "@chatbotx.io/sdk"
 import {
+  serializeZaloAccountLabelDocument,
   type ZaloAccountAuth,
   type ZaloAccountContactOperation,
   type ZaloAccountDirectMessage,
+  type ZaloAccountGroupAdministrationRead,
+  type ZaloAccountGroupEvent,
+  type ZaloAccountGroupManagementOperation,
   type ZaloAccountGroupMembersQuery,
   type ZaloAccountHistoryPageRequest,
   type ZaloAccountLabel,
@@ -19,6 +26,7 @@ import {
   type ZaloAccountStickerCatalogQuery,
   zaloAccountAuthorizationEventSchema,
   zaloAccountLifecycleEventSchema,
+  zaloAccountOwnGroupMembership,
 } from "@chatbotx.io/sdk"
 import {
   messageBacklog,
@@ -91,7 +99,24 @@ const cookieContent = (auth: ZaloAccountAuth) =>
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
   )
 
+type PendingGroupMembership = {
+  event: Exclude<ZaloAccountGroupEvent, { kind: "refresh" }>
+  generation: number
+  lease: AccountLease
+  attempts: number
+  inFlight: boolean
+}
+const maxGroupMembershipPublishAttempts = 3
+
 export class ZaloAccountRuntime {
+  private readonly pendingGroupMembership = new Map<
+    string,
+    PendingGroupMembership
+  >()
+  private readonly groupSendsInPreparation = new Set<{
+    groupId: string
+    membershipChanged: boolean
+  }>()
   private pendingMessages = 0
   private pendingMessageBytes = 0
   private messageSaturated = false
@@ -405,9 +430,30 @@ export class ZaloAccountRuntime {
     message: ZaloAccountOutboundMessage,
     beforeDispatch?: () => Promise<void>,
   ): Promise<RuntimeSendResult> {
-    const { api, admit } = this.prepareSend(beforeDispatch)
-    const result = await api.sendGroup(groupId, message, admit)
-    return { status: "sent", ...result }
+    const preparation = { groupId, membershipChanged: false }
+    const assertMembershipSettled = () => {
+      if (
+        preparation.membershipChanged ||
+        this.pendingGroupMembership.has(groupId)
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account group membership changed before sending",
+        )
+      }
+    }
+    assertMembershipSettled()
+    const { api, admit } = this.prepareSend(async () => {
+      assertMembershipSettled()
+      await beforeDispatch?.()
+      assertMembershipSettled()
+    })
+    this.groupSendsInPreparation.add(preparation)
+    try {
+      const result = await api.sendGroup(groupId, message, admit)
+      return { status: "sent", ...result }
+    } finally {
+      this.groupSendsInPreparation.delete(preparation)
+    }
   }
 
   async getStickerResources(stickerIds: string[]) {
@@ -494,6 +540,107 @@ export class ZaloAccountRuntime {
     return await this.api.getGroupMembers(groupId, query)
   }
 
+  async readGroupAdministration(
+    groupId: string,
+    query: ZaloAccountGroupAdministrationRead,
+    scope: { workspaceId: string; accountId: string },
+  ) {
+    if (
+      !(
+        this.active &&
+        this.api?.readGroupAdministration &&
+        this.state === "connected" &&
+        !this.closeObserved &&
+        Date.now() < this.leaseExpiresAt
+      )
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo group administration is unavailable",
+      )
+    }
+    return await this.api.readGroupAdministration(groupId, query, scope)
+  }
+
+  async groupManagement(
+    providerGroupId: string | undefined,
+    operation: ZaloAccountGroupManagementOperation,
+    authorizeDispatch: () => Promise<void>,
+  ) {
+    if (
+      !(
+        this.active &&
+        this.api?.groupManagement &&
+        this.state === "connected" &&
+        !this.closeObserved &&
+        Date.now() < this.leaseExpiresAt
+      )
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo group management is unavailable",
+      )
+    }
+    return await this.api.groupManagement(
+      providerGroupId,
+      operation,
+      this.guardNativeDispatch(
+        authorizeDispatch,
+        "Zalo group management runtime changed",
+      ),
+    )
+  }
+
+  async nativeTool(
+    thread: ZaloAccountNativeThread | undefined,
+    operation: ZaloAccountNativeToolOperation,
+    authorizeDispatch: () => Promise<void>,
+  ) {
+    if (
+      !(
+        this.active &&
+        this.api?.nativeTool &&
+        this.state === "connected" &&
+        !this.closeObserved &&
+        Date.now() < this.leaseExpiresAt
+      )
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Native Zalo setting is unavailable",
+      )
+    }
+    return await this.api.nativeTool(
+      thread,
+      operation,
+      this.guardNativeDispatch(
+        authorizeDispatch,
+        "Native Zalo setting runtime changed",
+      ),
+    )
+  }
+
+  private guardNativeDispatch(
+    authorizeDispatch: () => Promise<void>,
+    errorMessage: string,
+  ) {
+    const { api, generation, socketAttempt } = this
+    const assertCurrent = () => {
+      if (
+        !this.isCurrent(generation) ||
+        this.api !== api ||
+        this.socketAttempt !== socketAttempt ||
+        this.state !== "connected" ||
+        this.closeObserved ||
+        Date.now() >= this.leaseExpiresAt
+      ) {
+        throw new ZaloAccountPreDispatchError(errorMessage)
+      }
+    }
+    return async () => {
+      assertCurrent()
+      await authorizeDispatch()
+      assertCurrent()
+    }
+  }
+
   async fetchHistoryPage(input: {
     workspaceId: string
     inboxId: string
@@ -544,7 +691,7 @@ export class ZaloAccountRuntime {
     }
     const snapshot = await this.api.getLabels()
     if (this.labelSnapshot && snapshot.version < this.labelSnapshot.version) {
-      return this.labelSnapshot
+      return { ...this.labelSnapshot, complete: false }
     }
     this.labelSnapshot = snapshot
     return snapshot
@@ -552,6 +699,7 @@ export class ZaloAccountRuntime {
 
   async updateLabels(input: {
     expectedVersion: number
+    expectedHash?: string
     labelData: ZaloAccountLabel[]
   }): Promise<ZaloAccountLabelSnapshot> {
     if (
@@ -564,10 +712,23 @@ export class ZaloAccountRuntime {
     ) {
       throw new Error("Zalo Account runtime is not connected")
     }
-    const current = await this.getLabels()
-    if (current.version !== input.expectedVersion) {
+    const current = await this.api.getLabels()
+    if (
+      current.version !== input.expectedVersion ||
+      (this.labelSnapshot && current.version < this.labelSnapshot.version) ||
+      (input.expectedHash &&
+        (!current.complete ||
+          createHash("sha256")
+            .update(serializeZaloAccountLabelDocument(current.labelData))
+            .digest("hex") !== input.expectedHash))
+    ) {
       throw new ZaloAccountPreDispatchError(
         "Zalo Account label version conflict",
+        {
+          code: "label_version_conflict",
+          phase: "validation",
+          safeAction: "retry_read",
+        },
       )
     }
     const updated = await this.api.updateLabels({
@@ -668,6 +829,7 @@ export class ZaloAccountRuntime {
     }
     if (renewed && this.isCurrentLease(lease)) {
       this.leaseExpiresAt = requestedAt + this.options.leaseTtlMs
+      this.retryPendingGroupMembership()
     }
     if (!renewed && this.isCurrentLease(lease)) {
       try {
@@ -1049,6 +1211,56 @@ export class ZaloAccountRuntime {
             generation,
           )
         })
+      },
+      onGroupEvent: (event) => {
+        const publish = this.options.eventSink.publishGroupEvent
+        const lease = this.lease
+        if (
+          !(publish && lease) ||
+          this.api !== api ||
+          this.options.runtime.kind !== "account" ||
+          !this.isCurrent(generation) ||
+          this.closeObserved
+        ) {
+          return
+        }
+        const publishCurrent = async () => {
+          if (this.lease && this.isCurrent(generation)) {
+            await publish.call(this.options.eventSink, event, {
+              ...this.eventContext(),
+              epoch: this.options.epoch,
+              fenceToken: this.lease.fenceToken,
+            })
+          }
+        }
+        if (event.kind === "refresh" || !zaloAccountOwnGroupMembership(event)) {
+          this.enqueueMessage(generation, event, publishCurrent)
+          return
+        }
+        const previous = this.pendingGroupMembership.get(event.providerGroupId)
+        if (
+          previous &&
+          (previous.event.identity === event.identity ||
+            event.timestampMs <= previous.event.timestampMs ||
+            BigInt(event.providerVersion ?? "0") <
+              BigInt(previous.event.providerVersion ?? "0"))
+        ) {
+          return
+        }
+        const pending = {
+          event,
+          generation,
+          lease,
+          attempts: 0,
+          inFlight: false,
+        }
+        this.pendingGroupMembership.set(event.providerGroupId, pending)
+        for (const preparation of this.groupSendsInPreparation) {
+          if (preparation.groupId === event.providerGroupId) {
+            preparation.membershipChanged = true
+          }
+        }
+        this.enqueueGroupMembership(pending)
       },
       onClosed: (reason, code) => this.scheduleClose(reason, generation, code),
       onDirectMessage: (message) => {
@@ -1667,6 +1879,63 @@ export class ZaloAccountRuntime {
         }
       })
       .finally(() => onComplete?.())
+  }
+
+  private retryPendingGroupMembership(): void {
+    if (this.state !== "connected" || this.closeObserved) {
+      return
+    }
+    for (const pending of this.pendingGroupMembership.values()) {
+      if (
+        !pending.inFlight &&
+        this.isCurrentLease(pending.lease) &&
+        pending.attempts < maxGroupMembershipPublishAttempts
+      ) {
+        this.enqueueGroupMembership(pending, true)
+        break
+      }
+    }
+  }
+
+  private enqueueGroupMembership(
+    pending: PendingGroupMembership,
+    retry = false,
+  ): void {
+    const publish = this.options.eventSink.publishGroupEvent
+    if (!publish) {
+      return
+    }
+    const { event, generation, lease } = pending
+    const groupId = event.providerGroupId
+    pending.inFlight = true
+    this.enqueueEvent(
+      retry ? this.generation : generation,
+      async () => {
+        if (
+          !this.isCurrentLease(lease) ||
+          Date.now() >= this.leaseExpiresAt ||
+          (retry &&
+            (this.state !== "connected" ||
+              this.closeObserved ||
+              this.pendingGroupMembership.get(groupId) !== pending))
+        ) {
+          return
+        }
+        pending.attempts += 1
+        await publish.call(this.options.eventSink, event, {
+          ...this.eventContext(),
+          epoch: this.options.epoch,
+          fenceToken: lease.fenceToken,
+        })
+        if (this.pendingGroupMembership.get(groupId) === pending) {
+          this.pendingGroupMembership.delete(groupId)
+        }
+      },
+      false,
+      () => {
+        pending.inFlight = false
+      },
+    )
   }
 
   private clearWatchdog(): void {

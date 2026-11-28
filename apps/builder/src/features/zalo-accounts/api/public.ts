@@ -30,11 +30,17 @@ import {
 } from "../schema/resource"
 import { zaloForwardInput } from "../schema/send-attempt"
 import { zaloAccountContactOperations } from "./contact-operations"
+import { zaloAccountGroupAdministrationOperations } from "./group-administration"
+import { zaloAccountGroupManagementOperations } from "./group-management"
 import { zaloAccountGroupMemberOperations } from "./group-members"
 import { zaloAccountHistorySyncOperations } from "./history-sync"
 import { zaloAccountMediaOperations } from "./media"
 import { zaloAccountMessageActivityOperations } from "./message-activity"
 import { zaloAccountMessageOperations } from "./message-operations"
+import { zaloAccountNativeProfileOperations } from "./native-account-profile"
+import { zaloAccountNativeConversationOperations } from "./native-conversation-settings"
+import { zaloAccountNativeLabelOperations } from "./native-labels"
+import { zaloAccountNativeReplyProcedures } from "./native-replies"
 import { zaloAccountOperations } from "./operations"
 import { zaloAccountProfileOperations } from "./profile"
 import { zaloAccountTimelineOperations } from "./timeline"
@@ -65,8 +71,14 @@ const writeErrors = {
 
 export const zaloAccountsPublicRouter = {
   ...zaloAccountContactOperations,
+  ...zaloAccountGroupAdministrationOperations,
+  ...zaloAccountGroupManagementOperations,
   ...zaloAccountGroupMemberOperations,
   ...zaloAccountHistorySyncOperations,
+  ...zaloAccountNativeLabelOperations,
+  ...zaloAccountNativeConversationOperations,
+  ...zaloAccountNativeProfileOperations,
+  ...zaloAccountNativeReplyProcedures,
   ...zaloAccountOperations,
   ...zaloAccountProfileOperations,
   ...zaloAccountTimelineOperations,
@@ -187,7 +199,7 @@ export const zaloAccountsPublicRouter = {
               id: input.id,
             }),
           ])
-        )[0] as Awaited<ReturnType<typeof zaloAccountGroupService.get>>,
+        )[0] as z.infer<typeof zaloAccountGroupResource>,
     ),
 
   syncGroups: workspaceTokenAuthAPI

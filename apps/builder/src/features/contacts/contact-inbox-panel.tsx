@@ -29,6 +29,7 @@ import UpdateContactSequenceField, {
 } from "../contact-sequences/update-contact-sequence-field"
 import { useThreadControl } from "../conversations/hooks/use-thread-control"
 import type { TagResource } from "../tags/schema/resource"
+import { ZaloDirectTagOrigins } from "../zalo-accounts/components/zalo-tag-origins"
 import { ContactAdReferralsList } from "./components/contact-ad-referrals-list"
 import { ContactAppointmentsList } from "./components/contact-appointments-list"
 import { ContactThreadControlSection } from "./components/contact-thread-control-section"
@@ -258,18 +259,30 @@ export const ContactInboxPanel = ({
       {
         keyName: t("fields.tags.label"),
         content: (
-          <UpdateContactTagField
-            contact={contactData}
-            onSuccess={(updatedTags: TagResource[]) => {
-              setContactData((previousContact) =>
-                previousContact
-                  ? { ...previousContact, tags: updatedTags }
-                  : null,
-              )
-            }}
-            tags={contactData.tags}
-            workspaceId={workspaceId}
-          />
+          <>
+            <UpdateContactTagField
+              contact={contactData}
+              onSuccess={(updatedTags: TagResource[]) => {
+                setContactData((previousContact) =>
+                  previousContact
+                    ? { ...previousContact, tags: updatedTags }
+                    : null,
+                )
+              }}
+              tags={contactData.tags}
+              workspaceId={workspaceId}
+            />
+            {zaloContactInboxId &&
+              activeConversationId &&
+              contactData.tags.length > 0 && (
+                <ZaloDirectTagOrigins
+                  contactInboxId={zaloContactInboxId}
+                  conversationId={activeConversationId}
+                  tags={contactData.tags}
+                  workspaceId={workspaceId}
+                />
+              )}
+          </>
         ),
       },
       {

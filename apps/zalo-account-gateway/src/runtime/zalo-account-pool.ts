@@ -1,11 +1,15 @@
 import type {
   ZaloAccountContactOperation,
+  ZaloAccountGroupAdministrationRead,
+  ZaloAccountGroupManagementOperation,
   ZaloAccountGroupMembersQuery,
   ZaloAccountHistoryPageRequest,
   ZaloAccountLabel,
   ZaloAccountLabelSnapshot,
   ZaloAccountMessageActivity,
   ZaloAccountNativeOperation,
+  ZaloAccountNativeThread,
+  ZaloAccountNativeToolOperation,
   ZaloAccountOutboundMessage,
   ZaloAccountProfileRequest,
   ZaloAccountRuntimeRef,
@@ -40,6 +44,14 @@ type PoolOptions = RuntimeOwnershipHooks & {
   leaseTtlMs: number
   ownerId: string
   secretPort: AccountSecretPort
+  admitGroupAdministrationRead?: (input: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    providerGroupId: string
+    accountPolicyEpoch: number
+    groupPolicyEpoch: number
+  }) => Promise<void>
   onGroupSendResult?: (
     input: {
       workspaceId: string
@@ -56,6 +68,7 @@ type PoolOptions = RuntimeOwnershipHooks & {
     commandId: string
     operationToken?: string
     expectedVersion: number
+    expectedHash?: string
   }) => Promise<void>
   admitGroupSend?: (input: {
     workspaceId: string
@@ -419,6 +432,83 @@ export class ZaloAccountPool {
     })
   }
 
+  async readGroupAdministration(
+    command: RuntimeCommand & {
+      groupId: string
+      accountPolicyEpoch: number
+      groupPolicyEpoch: number
+      groupRead: ZaloAccountGroupAdministrationRead
+    },
+  ) {
+    return await this.withAccountRuntime(command, async (runtime) => {
+      const admit = this.options.admitGroupAdministrationRead
+      if (!(admit && command.inboxId)) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo group administration is unavailable",
+        )
+      }
+      const scope = {
+        workspaceId: command.workspaceId,
+        accountId: command.runtime.id,
+      }
+      const policy = {
+        ...scope,
+        inboxId: command.inboxId,
+        providerGroupId: command.groupId,
+        accountPolicyEpoch: command.accountPolicyEpoch,
+        groupPolicyEpoch: command.groupPolicyEpoch,
+      }
+      await admit(policy)
+      if (
+        command.deadlineAt !== undefined &&
+        command.deadlineAt <= Date.now()
+      ) {
+        throw new ZaloAccountPreDispatchError(
+          "Zalo Account command deadline expired",
+        )
+      }
+      const result = await runtime.readGroupAdministration(
+        command.groupId,
+        command.groupRead,
+        scope,
+      )
+      await admit(policy)
+      return result
+    })
+  }
+
+  async groupManagement(
+    command: RuntimeCommand & {
+      providerGroupId?: string
+      operation: ZaloAccountGroupManagementOperation
+      authorizeDispatch: () => Promise<void>
+    },
+  ) {
+    return await this.withAccountRuntime(command, (runtime) =>
+      runtime.groupManagement(
+        command.providerGroupId,
+        command.operation,
+        command.authorizeDispatch,
+      ),
+    )
+  }
+
+  async nativeTool(
+    command: RuntimeCommand & {
+      thread?: ZaloAccountNativeThread
+      operation: ZaloAccountNativeToolOperation
+      authorizeDispatch: () => Promise<void>
+    },
+  ) {
+    return await this.withAccountRuntime(command, (runtime) =>
+      runtime.nativeTool(
+        command.thread,
+        command.operation,
+        command.authorizeDispatch,
+      ),
+    )
+  }
+
   async fetchHistoryPage(
     command: RuntimeCommand & {
       history: ZaloAccountHistoryPageRequest
@@ -554,6 +644,7 @@ export class ZaloAccountPool {
     command: RuntimeCommand & {
       operationToken?: string
       expectedVersion: number
+      expectedHash?: string
       labelData: ZaloAccountLabel[]
     },
   ): Promise<ZaloAccountLabelSnapshot> {
@@ -565,9 +656,11 @@ export class ZaloAccountPool {
         commandId: command.commandId ?? "",
         operationToken: command.operationToken,
         expectedVersion: command.expectedVersion,
+        expectedHash: command.expectedHash,
       })
       return await runtime.updateLabels({
         expectedVersion: command.expectedVersion,
+        expectedHash: command.expectedHash,
         labelData: command.labelData,
       })
     })

@@ -1,7 +1,10 @@
 import type { EncryptedData } from "@chatbotx.io/encryption"
 import type {
+  ZaloAccountGroupManagementResult,
+  ZaloAccountNativeToolResult,
   ZaloAccountRuntimeDiagnostics,
   ZaloAccountRuntimeOrder,
+  zaloAccountGroupOverviewSchema,
 } from "@chatbotx.io/sdk"
 import { sql } from "drizzle-orm"
 import {
@@ -15,6 +18,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core"
+import type { z } from "zod"
 import {
   type ZaloAccountGroupAutomationMode,
   zaloAccountGroupAutomationModes,
@@ -40,6 +44,9 @@ export type ZaloAccountLabelState = {
   paused?: boolean
   commandId?: string
   lastSyncedAt?: string
+  lastSuccessAt?: string
+  mappingConflict?: boolean
+  mutationKind?: "assignment" | "definition"
   reason?: string
   pendingHash?: string
 }
@@ -82,6 +89,62 @@ export type ZaloAccountHistoryRun = {
   error?: string
 }
 
+export type ZaloAccountManagementAttempt = {
+  family?: "group"
+  commandId: string
+  groupId: string | null
+  providerGroupId: string | null
+  accountPolicyEpoch: number
+  groupPolicyEpoch: number | null
+  requestHash: string
+  operation: ZaloAccountGroupManagementResult["kind"]
+  actor: { type: "member" | "token"; id: string }
+  status:
+    | ZaloAccountGroupManagementResult["outcome"]
+    | "dispatched"
+    | "provider_pending"
+  createdAt: string
+  dispatchedAt?: string
+  dispatchFence?: string
+  completedAt?: string
+  result?: Pick<
+    ZaloAccountGroupManagementResult,
+    | "kind"
+    | "outcome"
+    | "reason"
+    | "providerGroupId"
+    | "memberOutcomes"
+    | "linkEnabled"
+  >
+}
+
+export type ZaloAccountNativeToolAttemptFamily =
+  | "settings"
+  | "accountProfile"
+  | "nativeReplies"
+export type ZaloAccountNativeToolAttemptTarget = {
+  conversationId: string
+  contactInboxId: string
+  threadType: "user" | "group"
+  threadId: string
+}
+export type ZaloAccountNativeToolAttempt = Omit<
+  ZaloAccountManagementAttempt,
+  "family" | "operation" | "status" | "result"
+> & {
+  family: ZaloAccountNativeToolAttemptFamily
+  target?: ZaloAccountNativeToolAttemptTarget
+  operation: ZaloAccountNativeToolResult["kind"]
+  status: ZaloAccountNativeToolResult["outcome"] | "pending" | "dispatched"
+  result?: Pick<
+    ZaloAccountNativeToolResult,
+    "kind" | "outcome" | "conversation" | "version" | "itemId"
+  >
+}
+export type ZaloAccountDurableManagementAttempt =
+  | ZaloAccountManagementAttempt
+  | ZaloAccountNativeToolAttempt
+
 /** Durable identity and encrypted device authorization for one personal Zalo account. */
 export const integrationZaloAccountModel = pgTable(
   "IntegrationZaloAccount",
@@ -104,7 +167,7 @@ export const integrationZaloAccountModel = pgTable(
     avatarUrl: text(),
     encryptedAuth: jsonb().$type<EncryptedData>().notNull(),
     sessionVerifiedAt: timestamp(timestampConfig).notNull(),
-    groupMessagingEnabled: boolean().default(false).notNull(),
+    groupMessagingEnabled: boolean().default(true).notNull(),
     groupPolicyEpoch: integer().default(0).notNull(),
     operations: jsonb().$type<{
       groups?: {
@@ -127,6 +190,10 @@ export const integrationZaloAccountModel = pgTable(
       runtime?: ZaloAccountRuntimeOrder
       diagnostics?: ZaloAccountDiagnosticState
       history?: ZaloAccountHistoryRun
+      groupManagementAttempts?: Record<
+        string,
+        ZaloAccountDurableManagementAttempt
+      >
     }>(),
   },
   (table) => [
@@ -169,8 +236,11 @@ export const integrationZaloAccountGroupModel = pgTable(
     avatarUrl: text(),
     memberCount: integer().notNull(),
     providerVersion: text(),
-    sendEnabled: boolean().default(false).notNull(),
-    receiveEnabled: boolean().default(false).notNull(),
+    nativeDetails: jsonb().$type<
+      z.infer<typeof zaloAccountGroupOverviewSchema> & { observedAt: string }
+    >(),
+    sendEnabled: boolean().default(true).notNull(),
+    receiveEnabled: boolean().default(true).notNull(),
     automationMode: zaloAccountGroupAutomationMode()
       .default("disabled")
       .notNull(),
@@ -187,6 +257,10 @@ export const integrationZaloAccountGroupModel = pgTable(
     lastSyncRunId: text().notNull(),
     lastSyncedAt: timestamp(timestampConfig).notNull(),
     inaccessibleAt: timestamp(timestampConfig),
+    nativeMembershipVersion: text(),
+    nativeMembershipAt: timestamp(timestampConfig),
+    nativeMembershipObservedAt: timestamp(timestampConfig),
+    nativeMetadataAt: timestamp(timestampConfig),
   },
   (table) => [
     index("IntegrationZaloAccountGroup_workspaceId_idx").on(table.workspaceId),

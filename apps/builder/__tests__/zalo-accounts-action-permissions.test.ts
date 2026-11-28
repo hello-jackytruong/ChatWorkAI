@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   inspect: vi.fn(),
   status: vi.fn(),
   groups: vi.fn(),
+  projectProfiles: vi.fn(),
 }))
 vi.mock("@/lib/auth/require-workspace-permission", () => ({
   requireWorkspacePermission: mocks.permission,
@@ -42,6 +43,12 @@ vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
     getOutcomeByMessage: mocks.inspect,
   },
 }))
+vi.mock("@chatbotx.io/business/zalo-account-media", () => ({
+  zaloAccountMediaReadService: { projectProfiles: mocks.projectProfiles },
+}))
+const { withZaloGroupResources } = await import(
+  "../src/features/zalo-accounts/lib/to-resource"
+)
 const { syncZaloAccountGroupsAction } = await import(
   "../src/features/zalo-accounts/actions/sync-groups.action"
 )
@@ -89,6 +96,57 @@ it("denies status to a member without superAdmin even with a workspace account I
   ).rejects.toThrow("forbidden")
   expect(mocks.status).not.toHaveBeenCalled()
   expect(mocks.groups).not.toHaveBeenCalled()
+})
+
+it("keeps provider administration details out of legacy group summaries", async () => {
+  const at = new Date()
+  const row = {
+    id: "1",
+    workspaceId: "2",
+    accountId: "3",
+    providerGroupId: "4",
+    name: "Group",
+    avatarUrl: null,
+    memberCount: 2,
+    providerVersion: null,
+    sendEnabled: false,
+    receiveEnabled: false,
+    automationMode: "disabled" as const,
+    contactInboxId: null,
+    conversationId: null,
+    accessible: true,
+    lastSyncRunId: "5",
+    lastSyncedAt: at,
+    inaccessibleAt: null,
+    createdAt: at,
+    updatedAt: at,
+    nativeDetails: { role: "owner", ownerUid: "6" },
+    nativeMetadataAt: at,
+  }
+  mocks.permission.mockResolvedValue(undefined)
+  mocks.sync.mockResolvedValue([row])
+  mocks.policy.mockResolvedValue(row)
+  mocks.projectProfiles.mockResolvedValue(new Map())
+  const args = {
+    bindArgsParsedInputs: ["2", "3"],
+    parsedInput: { groupId: "1", sendEnabled: true },
+  }
+  const [listed] = await withZaloGroupResources("2", [row])
+  const synced = await (
+    syncZaloAccountGroupsAction as unknown as (
+      input: unknown,
+    ) => Promise<unknown[]>
+  )(args)
+  const updated = await (
+    updateZaloAccountGroupPolicyAction as unknown as (
+      input: unknown,
+    ) => Promise<unknown>
+  )(args)
+  for (const summary of [listed, ...synced, updated]) {
+    expect(summary).toMatchObject({ id: "1", name: "Group" })
+    expect(summary).not.toHaveProperty("nativeDetails")
+    expect(summary).not.toHaveProperty("nativeMetadataAt")
+  }
 })
 
 const safeStatus = {

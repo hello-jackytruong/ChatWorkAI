@@ -10,6 +10,11 @@ import type {
   ZaloAccountFriendSync,
   ZaloAccountGroup,
   ZaloAccountGroupActivity,
+  ZaloAccountGroupAdministrationRead,
+  ZaloAccountGroupAdministrationResult,
+  ZaloAccountGroupEvent,
+  ZaloAccountGroupManagementOperation,
+  ZaloAccountGroupManagementResult,
   ZaloAccountGroupMembersQuery,
   ZaloAccountGroupMembersResult,
   ZaloAccountGroupMessage,
@@ -21,6 +26,9 @@ import type {
   ZaloAccountLifecycleEvent,
   ZaloAccountMessageActivity,
   ZaloAccountNativeOperation,
+  ZaloAccountNativeThread,
+  ZaloAccountNativeToolOperation,
+  ZaloAccountNativeToolResult,
   ZaloAccountOutboundMessage,
   ZaloAccountProfile,
   ZaloAccountProfileRequest,
@@ -61,6 +69,10 @@ export type AccountLeasePort = {
 }
 
 export type RuntimeEventSink = {
+  publishGroupEvent?: (
+    event: ZaloAccountGroupEvent,
+    context: RuntimeEventContext & { epoch: number; fenceToken: string },
+  ) => Promise<void>
   publishThreadEvent?: (
     event: ZaloAccountThreadEvent,
     context: RuntimeEventContext & { epoch: number; fenceToken: string },
@@ -121,6 +133,7 @@ export type ZcaListenerHandlers = {
   onEvent?: () => void
   onThreadEvent?: (event: ZaloAccountThreadEvent) => void
   onFriendEvent?: (event: ZaloAccountFriendEvent) => void
+  onGroupEvent?: (event: ZaloAccountGroupEvent) => void
   onConnected?: () => void
   onDisconnected?: (code: number, reason: string) => void
   onError?: (category: "network" | "timeout" | "unknown") => void
@@ -154,6 +167,21 @@ export type ZcaApiPort = {
     groupId: string,
     query: ZaloAccountGroupMembersQuery,
   ) => Promise<ZaloAccountGroupMembersResult>
+  readGroupAdministration?: (
+    groupId: string,
+    query: ZaloAccountGroupAdministrationRead,
+    scope: { workspaceId: string; accountId: string },
+  ) => Promise<ZaloAccountGroupAdministrationResult>
+  groupManagement?: (
+    providerGroupId: string | undefined,
+    operation: ZaloAccountGroupManagementOperation,
+    authorizeDispatch: () => Promise<void>,
+  ) => Promise<ZaloAccountGroupManagementResult>
+  nativeTool?: (
+    thread: ZaloAccountNativeThread | undefined,
+    operation: ZaloAccountNativeToolOperation,
+    authorizeDispatch: () => Promise<void>,
+  ) => Promise<ZaloAccountNativeToolResult>
   readProfiles?: (
     query: ZaloAccountProfileRequest,
   ) => Promise<ZaloAccountProfile[]>

@@ -4,10 +4,19 @@ const mocks = vi.hoisted(() => ({
   resolveTarget: vi.fn(),
   isVisible: vi.fn(),
   listActors: vi.fn(),
+  aliases: vi.fn(),
+  summarize: vi.fn(),
+  account: vi.fn(),
+  group: vi.fn(),
 }))
 
 vi.mock("@chatbotx.io/database/repositories", () => ({
-  zaloAccountMessageStateRepository: { listActors: mocks.listActors },
+  zaloAccountMessageStateRepository: {
+    listActors: mocks.listActors,
+    summarize: mocks.summarize,
+  },
+  zaloAccountSendAttemptRepository: { listReactionAliases: mocks.aliases },
+  integrationZaloAccountGroupRepository: { find: mocks.group },
 }))
 
 vi.mock("../src/zalo-account/message-recall.service", () => ({
@@ -20,7 +29,9 @@ vi.mock("../src/zalo-account/message-recall.service", () => ({
 vi.mock("../src/zalo-account/group.service", () => ({
   zaloAccountGroupService: {},
 }))
-vi.mock("../src/zalo-account/service", () => ({ zaloAccountService: {} }))
+vi.mock("../src/zalo-account/service", () => ({
+  zaloAccountService: { findById: mocks.account },
+}))
 vi.mock("../src/zalo-account/transport.service", () => ({
   zaloAccountCommandTransportService: {},
 }))
@@ -51,6 +62,12 @@ beforeEach(() => {
     target,
   })
   mocks.isVisible.mockResolvedValue(true)
+  mocks.aliases.mockResolvedValue([])
+  mocks.account.mockResolvedValue({ inboxId: "inbox" })
+  mocks.group.mockResolvedValue({
+    contactInboxId: "contact-inbox",
+    providerGroupId: "group",
+  })
   mocks.listActors.mockResolvedValue({
     receipts: [
       { actorId: "seen-member", deliveredAt: createdAt, seenAt: createdAt },
@@ -94,4 +111,44 @@ it("does not query other threads when the saved message is out of scope", async 
   mocks.resolveTarget.mockRejectedValueOnce(new Error("Not found"))
   await expect(service.getDetails(pointer)).rejects.toThrow("Not found")
   expect(mocks.listActors).not.toHaveBeenCalled()
+})
+
+it("includes exact aliases of the same scoped message for reaction details only", async () => {
+  mocks.aliases.mockResolvedValueOnce([
+    { providerMessageIds: [target.providerMessageId, "alias"] },
+  ])
+  await service.getDetails(pointer)
+  expect(mocks.aliases).toHaveBeenCalledExactlyOnceWith({
+    workspaceId: target.workspaceId,
+    accountId: target.accountId,
+    threadType: target.threadType,
+    threadId: target.threadId,
+    providerMessageIds: [target.providerMessageId],
+  })
+  expect(mocks.listActors).toHaveBeenCalledExactlyOnceWith({
+    ...target,
+    reactionAliasIds: ["alias"],
+  })
+})
+
+it("folds only confirmed, unambiguous send aliases into a visible bubble's reaction summary", async () => {
+  mocks.aliases.mockResolvedValueOnce([
+    { providerMessageIds: ["provider-message", "alias", "contested"] },
+    { providerMessageIds: ["other-message", "other-alias", "contested"] },
+  ])
+  await service.get({
+    workspaceId: target.workspaceId,
+    accountId: target.accountId,
+    groupId: "local-group",
+    providerMessageIds: ["provider-message", "other-message"],
+  })
+  expect(mocks.summarize).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      providerMessageIds: ["provider-message", "other-message"],
+      reactionAliases: {
+        alias: "provider-message",
+        "other-alias": "other-message",
+      },
+    }),
+  )
 })

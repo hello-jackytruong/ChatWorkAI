@@ -12,9 +12,9 @@ type Provider = Pick<
   "getGroupInfo" | "getOwnId"
 >
 
-const MAX_GROUP_MEMBERS_SCANNED = 5000
+export const MAX_GROUP_MEMBERS_SCANNED = 5000
 
-const readGroup = async (api: Provider, groupId: string) => {
+export const readGroup = async (api: Provider, groupId: string) => {
   try {
     const result = await api.getGroupInfo(groupId)
     const group = Object.hasOwn(result.gridInfoMap, groupId)

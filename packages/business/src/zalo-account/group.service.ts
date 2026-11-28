@@ -112,6 +112,7 @@ export const zaloAccountGroupService = {
       account.groupPolicyEpoch !== input.accountPolicyEpoch ||
       !group?.accessible ||
       !group.sendEnabled ||
+      group.nativeDetails?.capabilities?.sendMessages === false ||
       group.policyEpoch !== input.groupPolicyEpoch
     ) {
       throw new ZaloAccountPreDispatchError("Zalo Account group policy changed")
@@ -230,6 +231,7 @@ export const zaloAccountGroupService = {
     inboxId: string
     providerGroupId: string
     allowSendOnly?: boolean
+    inboundRuntime?: { epoch: number; fenceToken: string }
   }) {
     const account = await zaloAccountService.findById({
       workspaceId: input.workspaceId,
@@ -238,7 +240,7 @@ export const zaloAccountGroupService = {
     if (!account?.groupMessagingEnabled || account.inboxId !== input.inboxId) {
       return null
     }
-    const group = await integrationZaloAccountGroupRepository.findByProviderId({
+    let group = await integrationZaloAccountGroupRepository.findByProviderId({
       workspaceId: input.workspaceId,
       accountId: input.accountId,
       providerGroupId: input.providerGroupId,
@@ -246,17 +248,81 @@ export const zaloAccountGroupService = {
     if (
       !(
         group?.accessible &&
-        (group.receiveEnabled || (input.allowSendOnly && group.sendEnabled)) &&
-        group.contactInboxId &&
-        group.conversationId
+        (group.receiveEnabled || (input.allowSendOnly && group.sendEnabled))
       )
     ) {
+      return null
+    }
+    const { inboundRuntime } = input
+    if (
+      inboundRuntime &&
+      group.receiveEnabled &&
+      !(group.contactInboxId && group.conversationId)
+    ) {
+      const id = group.id
+      group =
+        (await integrationZaloAccountRepository.withRuntimeAccount(
+          {
+            workspaceId: input.workspaceId,
+            id: account.id,
+            inboxId: account.inboxId,
+          },
+          async (tx, current) => {
+            const runtime = current.operations?.runtime
+            if (
+              !current.groupMessagingEnabled ||
+              current.groupPolicyEpoch !== account.groupPolicyEpoch ||
+              runtime?.state !== "connected" ||
+              runtime.epoch !== inboundRuntime.epoch ||
+              runtime.fenceToken !== inboundRuntime.fenceToken
+            ) {
+              return null
+            }
+            return await integrationZaloAccountGroupRepository.updateInboxPolicy(
+              {
+                workspaceId: input.workspaceId,
+                accountId: input.accountId,
+                inboxId: input.inboxId,
+                id,
+                ensureInbox: "receive",
+              },
+              tx,
+            )
+          },
+        )) || undefined
+    }
+    if (!(group?.contactInboxId && group.conversationId)) {
       return null
     }
     return {
       accountPolicyEpoch: account.groupPolicyEpoch,
       groupPolicyEpoch: group.policyEpoch,
     }
+  },
+  async ensureSendInbox(input: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    id: string
+  }) {
+    const groupId = input.id
+    const result = await integrationZaloAccountRepository.withRuntimeAccount(
+      {
+        workspaceId: input.workspaceId,
+        id: input.accountId,
+        inboxId: input.inboxId,
+      },
+      async (tx, account) => {
+        if (!account.groupMessagingEnabled) {
+          return null
+        }
+        return await integrationZaloAccountGroupRepository.updateInboxPolicy(
+          { ...input, id: groupId, ensureInbox: "send" },
+          tx,
+        )
+      },
+    )
+    return result || null
   },
   async updateInboxPolicy(input: {
     workspaceId: string
@@ -385,11 +451,12 @@ export const zaloAccountGroupService = {
   }): Promise<IntegrationZaloAccountGroupModel[]> {
     const account = await requireAccount(input)
     const runId = createId()
+    const syncStartedAt = new Date()
     await integrationZaloAccountRepository.beginGroupSync({
       workspaceId: input.workspaceId,
       id: input.accountId,
       runId,
-      startedAt: new Date().toISOString(),
+      startedAt: syncStartedAt.toISOString(),
     })
     let snapshot: Awaited<
       ReturnType<typeof zaloAccountCommandTransportService.syncGroupsAndWait>
@@ -445,6 +512,7 @@ export const zaloAccountGroupService = {
               memberCount: group.memberCount,
               providerVersion: group.providerVersion ?? null,
               syncRunId: runId,
+              syncStartedAt,
               syncedAt,
             },
             tx,
@@ -466,6 +534,10 @@ export const zaloAccountGroupService = {
               workspaceId: input.workspaceId,
               accountId: input.accountId,
               syncRunId: runId,
+              syncStartedAt,
+              observedProviderGroupIds: groups.map(
+                (group) => group.providerGroupId,
+              ),
               syncedAt,
             },
             tx,

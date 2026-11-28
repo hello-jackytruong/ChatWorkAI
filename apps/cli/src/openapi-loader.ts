@@ -192,6 +192,46 @@ function extractPathParamNames(pathTemplate: string): string[] {
  * unambiguous verb here. Keyed by `METHOD path`.
  */
 const COMMAND_NAME_OVERRIDES: Readonly<Record<string, string>> = {
+  "GET /v1/zalo-accounts/{accountId}/native-replies":
+    "zalo-accounts:native-replies:read",
+  "PATCH /v1/zalo-accounts/{accountId}/native-replies":
+    "zalo-accounts:native-replies:update",
+  "GET /v1/zalo-accounts/{accountId}/native-replies/attempts/{commandId}":
+    "zalo-accounts:native-replies:status",
+  "GET /v1/zalo-accounts/{accountId}/native-profile":
+    "zalo-accounts:profile:read",
+  "PATCH /v1/zalo-accounts/{accountId}/native-profile":
+    "zalo-accounts:profile:update",
+  "GET /v1/zalo-accounts/{accountId}/native-profile/attempts/{commandId}":
+    "zalo-accounts:profile:status",
+  "GET /v1/zalo-accounts/{accountId}/conversations/{conversationId}/native-settings":
+    "zalo-accounts:conversation-settings:get",
+  "PATCH /v1/zalo-accounts/{accountId}/conversations/{conversationId}/native-settings":
+    "zalo-accounts:conversation-settings:update",
+  "GET /v1/zalo-accounts/{accountId}/conversations/{conversationId}/native-settings/attempts/{commandId}":
+    "zalo-accounts:conversation-settings:status",
+  "GET /v1/zalo-accounts/{accountId}/labels":
+    "zalo-accounts:labels:list-native",
+  "PATCH /v1/zalo-accounts/{accountId}/labels/{labelId}/definition":
+    "zalo-accounts:labels:edit-native",
+  "POST /v1/zalo-accounts/{accountId}/labels/queue-sync":
+    "zalo-accounts:labels:queue-sync",
+  "GET /v1/zalo-accounts/{accountId}/group-management/capability":
+    "zalo-accounts:groups:capability",
+  "GET /v1/zalo-accounts/{accountId}/group-management":
+    "zalo-accounts:groups:read-management",
+  "POST /v1/zalo-accounts/{accountId}/group-management":
+    "zalo-accounts:groups:apply-operation",
+  "POST /v1/zalo-accounts/{accountId}/group-management/inspect-link":
+    "zalo-accounts:groups:inspect-link",
+  "GET /v1/zalo-accounts/{accountId}/group-management/attempts/{commandId}":
+    "zalo-accounts:groups:operation-status",
+  "GET /v1/zalo-accounts/{accountId}/groups/{groupId}/administration":
+    "zalo-accounts:groups:overview",
+  "GET /v1/zalo-accounts/{accountId}/groups/{groupId}/administration/members":
+    "zalo-accounts:groups:roster",
+  "GET /v1/zalo-accounts/{accountId}/groups/{groupId}/administration/related-groups":
+    "zalo-accounts:groups:related",
   "POST /v1/zalo-accounts/{accountId}/contacts/lookup":
     "zalo-accounts:contacts:lookup",
   "GET /v1/zalo-accounts/{accountId}/contacts/relationships":

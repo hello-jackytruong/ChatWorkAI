@@ -13,6 +13,7 @@ import {
   ArchiveXIcon,
   EllipsisVerticalIcon,
   MailIcon,
+  Settings2Icon,
   StarIcon,
   StarOffIcon,
   TrashIcon,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { useAction } from "next-safe-action/hooks"
+import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { useWorkspaceId } from "@/hooks/routing"
 import { useChatStore } from "../chat/store/chat-store-provider"
@@ -27,6 +29,7 @@ import { blockContactAction } from "../contacts/actions/block-contact.action"
 import { unblockContactAction } from "../contacts/actions/unblock-contact.action"
 import DeleteContactDialog from "../contacts/components/remove-contact-dialog"
 import { ZaloAccountDeleteChatDialog } from "../zalo-accounts/components/zalo-account-delete-chat-dialog"
+import { ZaloNativeConversationSettings } from "../zalo-accounts/components/zalo-native-conversation-settings"
 import { getZaloGroupConversation } from "../zalo-accounts/lib/group-content"
 import { archiveConversationAction } from "./actions/archive-conversation.action"
 import { followConversationAction } from "./actions/follow-conversation.action"
@@ -42,7 +45,22 @@ type ConversationActionProps = {
 export function ConversationAction({ conversation }: ConversationActionProps) {
   const t = useTranslations()
   const workspaceId = useWorkspaceId()
-  const isGroup = !!getZaloGroupConversation(conversation)
+  const groupAudience = getZaloGroupConversation(conversation)
+  const isGroup = !!groupAudience
+  const selectedInbox = conversation.contactInboxes[0]
+  const zaloInboxId =
+    selectedInbox?.channel === "zaloAccount" ? selectedInbox.id : undefined
+  const settingsAccountId = groupAudience?.accountId ?? null
+  const settingsKey = zaloInboxId
+    ? `${workspaceId}:${settingsAccountId}:${conversation.id}:${zaloInboxId}`
+    : undefined
+  const [openSettingsKey, setOpenSettingsKey] = useState<string>()
+  const [previousSettingsKey, setPreviousSettingsKey] = useState(settingsKey)
+  if (previousSettingsKey !== settingsKey) {
+    setPreviousSettingsKey(settingsKey)
+    setOpenSettingsKey(undefined)
+  }
+  const menuTrigger = useRef<HTMLButtonElement>(null)
 
   const {
     deleteConversation,
@@ -172,7 +190,11 @@ export function ConversationAction({ conversation }: ConversationActionProps) {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost">
+          <Button
+            aria-label={t("actions.moreOptions")}
+            ref={menuTrigger}
+            variant="ghost"
+          >
             <EllipsisVerticalIcon />
           </Button>
         }
@@ -217,6 +239,12 @@ export function ConversationAction({ conversation }: ConversationActionProps) {
           >
             <ArchiveIcon />
             {t("actions.archive")}
+          </DropdownMenuItem>
+        )}
+        {settingsKey && (
+          <DropdownMenuItem onClick={() => setOpenSettingsKey(settingsKey)}>
+            <Settings2Icon aria-hidden />
+            {t("zaloAccount.nativeConversationSettings.title")}
           </DropdownMenuItem>
         )}
         {!isGroup &&
@@ -269,6 +297,20 @@ export function ConversationAction({ conversation }: ConversationActionProps) {
           />
         )}
       </DropdownMenuContent>
+      {settingsKey && zaloInboxId && (
+        <ZaloNativeConversationSettings
+          accountId={settingsAccountId}
+          contactInboxId={zaloInboxId}
+          conversationId={conversation.id}
+          finalFocus={menuTrigger}
+          key={settingsKey}
+          onOpenChange={(open) =>
+            setOpenSettingsKey(open ? settingsKey : undefined)
+          }
+          open={openSettingsKey === settingsKey}
+          workspaceId={workspaceId}
+        />
+      )}
     </DropdownMenu>
   )
 }

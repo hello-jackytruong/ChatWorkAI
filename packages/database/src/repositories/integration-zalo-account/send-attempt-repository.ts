@@ -531,4 +531,42 @@ export const zaloAccountSendAttemptRepository = {
       .limit(1)
     return row
   },
+  async listReactionAliases(input: {
+    workspaceId: string
+    accountId: string
+    threadType: "user" | "group"
+    threadId: string
+    providerMessageIds: string[]
+  }) {
+    if (
+      !input.providerMessageIds.length ||
+      input.providerMessageIds.length > 50
+    ) {
+      return []
+    }
+    const requested = sql.join(
+      input.providerMessageIds.map((id) => sql`${id}`),
+      sql`, `,
+    )
+    const rows = await db
+      .select({
+        providerMessageIds: zaloAccountSendAttemptModel.providerMessageIds,
+      })
+      .from(zaloAccountSendAttemptModel)
+      .where(
+        and(
+          eq(zaloAccountSendAttemptModel.workspaceId, input.workspaceId),
+          eq(zaloAccountSendAttemptModel.accountId, input.accountId),
+          eq(zaloAccountSendAttemptModel.threadType, input.threadType),
+          eq(zaloAccountSendAttemptModel.threadId, input.threadId),
+          eq(zaloAccountSendAttemptModel.status, "applied"),
+          isNotNull(zaloAccountSendAttemptModel.messageId),
+          isNotNull(zaloAccountSendAttemptModel.messageCreatedAt),
+          sql`${zaloAccountSendAttemptModel.providerMessageIds} ?| ARRAY[${requested}]::text[]`,
+        ),
+      )
+      .limit(51)
+    // More sends than requested IDs means overlap. Do not trust a cut-off alias set.
+    return rows.length > 50 ? [] : rows
+  },
 }

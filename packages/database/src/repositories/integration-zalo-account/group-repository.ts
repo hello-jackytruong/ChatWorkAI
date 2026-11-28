@@ -6,7 +6,10 @@ import {
   db,
   eq,
   inArray,
+  isNull,
+  lte,
   ne,
+  notInArray,
   or,
   sql,
 } from "../../client"
@@ -93,6 +96,7 @@ export const integrationZaloAccountGroupRepository = {
       accountId: string
       inboxId: string
       id: string
+      ensureInbox?: "receive" | "send"
       receiveEnabled?: boolean
       sendEnabled?: boolean
       automationMode?: "disabled" | "mentionOnly" | "all"
@@ -110,13 +114,20 @@ export const integrationZaloAccountGroupRepository = {
       )
       .limit(1)
       .for("update")
-    if (!group?.accessible) {
+    if (
+      !group?.accessible ||
+      (input.ensureInbox === "receive" && !group.receiveEnabled) ||
+      (input.ensureInbox === "send" && !group.sendEnabled)
+    ) {
       return null
     }
     let contactInboxId = group.contactInboxId
     let conversationId = group.conversationId
+    if (input.ensureInbox && contactInboxId && conversationId) {
+      return group
+    }
     if (
-      (input.receiveEnabled || input.sendEnabled) &&
+      (input.ensureInbox || input.receiveEnabled || input.sendEnabled) &&
       !(contactInboxId && conversationId)
     ) {
       const sourceId = `za:group:${encodeURIComponent(group.providerGroupId)}`
@@ -192,7 +203,11 @@ export const integrationZaloAccountGroupRepository = {
           : { automationMode: input.automationMode }),
         contactInboxId,
         conversationId,
-        policyEpoch: sql`${integrationZaloAccountGroupModel.policyEpoch} + 1`,
+        ...(input.ensureInbox
+          ? {}
+          : {
+              policyEpoch: sql`${integrationZaloAccountGroupModel.policyEpoch} + 1`,
+            }),
         updatedAt: new Date(),
       })
       .where(
@@ -226,6 +241,58 @@ export const integrationZaloAccountGroupRepository = {
     return row ?? null
   },
 
+  async listAccessibleByProviderIds(input: {
+    workspaceId: string
+    accountId: string
+    providerGroupIds: string[]
+  }) {
+    if (input.providerGroupIds.length === 0) {
+      return []
+    }
+    const group = integrationZaloAccountGroupModel
+    return await db
+      .select({ id: group.id, name: group.name })
+      .from(group)
+      .where(
+        and(
+          scope(input),
+          eq(group.accessible, true),
+          inArray(group.providerGroupId, input.providerGroupIds),
+        ),
+      )
+      .orderBy(asc(group.name), asc(group.id))
+  },
+
+  async storeNativeOverview(
+    input: {
+      workspaceId: string
+      accountId: string
+      id: string
+      policyEpoch: number
+      requestedAt: Date
+      overview: NonNullable<GroupRow["nativeDetails"]>
+    },
+    tx: DatabaseClient = db,
+  ) {
+    const group = integrationZaloAccountGroupModel
+    const [updated] = await tx
+      .update(group)
+      .set({ nativeDetails: input.overview })
+      .where(
+        and(
+          scope(input),
+          eq(group.id, input.id),
+          eq(group.accessible, true),
+          eq(group.policyEpoch, input.policyEpoch),
+          sql`(${group.nativeDetails} IS NULL OR ${group.nativeDetails}->>'observedAt' < ${input.overview.observedAt})`,
+          sql`(${group.nativeMetadataAt} IS NULL OR ${group.nativeMetadataAt} <= ${input.requestedAt.toISOString()})`,
+          sql`(${group.nativeMembershipObservedAt} IS NULL OR ${group.nativeMembershipObservedAt} <= ${input.requestedAt.toISOString()})`,
+        ),
+      )
+      .returning({ id: group.id })
+    return !!updated
+  },
+
   async upsert(
     input: {
       id: string
@@ -237,6 +304,7 @@ export const integrationZaloAccountGroupRepository = {
       memberCount: number
       providerVersion: string | null
       syncRunId: string
+      syncStartedAt?: Date
       syncedAt: Date
     },
     tx: DatabaseClient = db,
@@ -252,7 +320,8 @@ export const integrationZaloAccountGroupRepository = {
         avatarUrl: input.avatarUrl,
         memberCount: input.memberCount,
         providerVersion: input.providerVersion,
-        sendEnabled: false,
+        sendEnabled: true,
+        receiveEnabled: true,
         accessible: true,
         lastSyncRunId: input.syncRunId,
         lastSyncedAt: input.syncedAt,
@@ -269,14 +338,49 @@ export const integrationZaloAccountGroupRepository = {
           memberCount: input.memberCount,
           providerVersion: input.providerVersion,
           accessible: true,
+          sendEnabled: sql`CASE WHEN ${integrationZaloAccountGroupModel.accessible} THEN ${integrationZaloAccountGroupModel.sendEnabled} ELSE true END`,
+          receiveEnabled: sql`CASE WHEN ${integrationZaloAccountGroupModel.accessible} THEN ${integrationZaloAccountGroupModel.receiveEnabled} ELSE true END`,
+          policyEpoch: sql`${integrationZaloAccountGroupModel.policyEpoch} + CASE WHEN ${integrationZaloAccountGroupModel.accessible} THEN 0 ELSE 1 END`,
           lastSyncRunId: input.syncRunId,
           lastSyncedAt: input.syncedAt,
           inaccessibleAt: null,
           updatedAt: input.syncedAt,
         },
+        setWhere: input.syncStartedAt
+          ? and(
+              or(
+                isNull(
+                  integrationZaloAccountGroupModel.nativeMembershipObservedAt,
+                ),
+                lte(
+                  integrationZaloAccountGroupModel.nativeMembershipObservedAt,
+                  input.syncStartedAt,
+                ),
+              ),
+              or(
+                isNull(integrationZaloAccountGroupModel.nativeMetadataAt),
+                lte(
+                  integrationZaloAccountGroupModel.nativeMetadataAt,
+                  input.syncStartedAt,
+                ),
+              ),
+              sql`CASE WHEN ${integrationZaloAccountGroupModel.accessible} OR ${integrationZaloAccountGroupModel.nativeMembershipVersion} IS NULL THEN TRUE WHEN ${input.providerVersion}::text ~ '^\\d{1,30}$' THEN ${input.providerVersion}::numeric > ${integrationZaloAccountGroupModel.nativeMembershipVersion}::numeric ELSE FALSE END`,
+            )
+          : undefined,
       })
       .returning()
     if (!row) {
+      const existing = await this.findByProviderId(
+        {
+          workspaceId: input.workspaceId,
+          accountId: input.accountId,
+          providerGroupId: input.providerGroupId,
+        },
+        tx,
+      )
+      if (existing) {
+        return existing
+      }
       throw new Error("Unable to upsert Zalo Account group")
     }
     if (row.contactInboxId) {
@@ -329,6 +433,8 @@ export const integrationZaloAccountGroupRepository = {
       workspaceId: string
       accountId: string
       syncRunId: string
+      syncStartedAt?: Date
+      observedProviderGroupIds?: string[]
       syncedAt: Date
     },
     tx: DatabaseClient = db,
@@ -348,6 +454,24 @@ export const integrationZaloAccountGroupRepository = {
         and(
           scope(input),
           ne(integrationZaloAccountGroupModel.lastSyncRunId, input.syncRunId),
+          eq(integrationZaloAccountGroupModel.accessible, true),
+          input.syncStartedAt
+            ? or(
+                isNull(
+                  integrationZaloAccountGroupModel.nativeMembershipObservedAt,
+                ),
+                lte(
+                  integrationZaloAccountGroupModel.nativeMembershipObservedAt,
+                  input.syncStartedAt,
+                ),
+              )
+            : undefined,
+          input.observedProviderGroupIds?.length
+            ? notInArray(
+                integrationZaloAccountGroupModel.providerGroupId,
+                input.observedProviderGroupIds,
+              )
+            : undefined,
         ),
       )
   },

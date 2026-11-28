@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   repair: vi.fn(),
   byMessage: vi.fn(),
   group: vi.fn(),
+  ensureSendInbox: vi.fn(),
   context: vi.fn(),
   claim: vi.fn(),
   find: vi.fn(),
@@ -26,7 +27,10 @@ vi.mock("../src/zalo-account/service", () => ({
   zaloAccountService: { findById: mocks.account },
 }))
 vi.mock("../src/zalo-account/group.service", () => ({
-  zaloAccountGroupService: { get: mocks.group },
+  zaloAccountGroupService: {
+    get: mocks.group,
+    ensureSendInbox: mocks.ensureSendInbox,
+  },
 }))
 vi.mock("../src/zalo-account/send-attempt.service", () => ({
   getZaloAccountSendResult: (row: {
@@ -109,6 +113,33 @@ it("persists the caller identity before enqueueing one canonical Message", async
       input: expect.objectContaining({ text: "hello" }),
     }),
   )
+})
+it("provisions a synchronized group before persisting its first outbound message", async () => {
+  const group = {
+    id: "g",
+    providerGroupId: "123",
+    accessible: true,
+    sendEnabled: true,
+    policyEpoch: 2,
+  }
+  mocks.group.mockResolvedValue(group)
+  mocks.ensureSendInbox.mockResolvedValue({
+    ...group,
+    contactInboxId: "ci",
+    conversationId: "conv",
+  })
+
+  await expect(zaloAccountCanonicalSendService.send(input)).resolves.toEqual({
+    messageIds: ["provider"],
+    sentCount: 1,
+  })
+  expect(mocks.ensureSendInbox).toHaveBeenCalledExactlyOnceWith({
+    workspaceId: "w",
+    accountId: "a",
+    inboxId: "i",
+    id: "g",
+  })
+  expect(mocks.ensureSendInbox).toHaveBeenCalledBefore(mocks.outgoing)
 })
 it("rejects a disabled group before preparing an outbound row", async () => {
   mocks.group.mockResolvedValue({ accessible: true, sendEnabled: false })

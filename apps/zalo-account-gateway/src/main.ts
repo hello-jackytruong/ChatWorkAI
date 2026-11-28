@@ -2,12 +2,17 @@ import { pathToFileURL } from "node:url"
 import {
   isZaloAccountRichSendEnabled,
   takeDirectSendCapacity,
+  zaloAccountGroupReadService,
   zaloAccountGroupService,
   zaloAccountLabelService,
   zaloAccountSendAttemptService,
   zaloAccountService,
 } from "@chatbotx.io/business/zalo-account"
+import { zaloAccountGroupLifecycleService } from "@chatbotx.io/business/zalo-account/group-lifecycle"
+import { zaloAccountGroupManagementService } from "@chatbotx.io/business/zalo-account/group-management"
+import { zaloAccountNativeAccountToolsService } from "@chatbotx.io/business/zalo-account/native-account-tools"
 import { zaloAccountMessageOperationsService } from "@chatbotx.io/business/zalo-account/native-operations"
+import { zaloAccountNativeSettingsService } from "@chatbotx.io/business/zalo-account/native-settings"
 import { zaloAccountRuntimeStateService } from "@chatbotx.io/business/zalo-account/runtime-state"
 import { getChildLogger } from "@chatbotx.io/logger"
 import { createRedisConnection } from "@chatbotx.io/redis"
@@ -52,6 +57,7 @@ export const main = async (): Promise<void> => {
   const leaseStore = new RedisAccountLeaseStore(redis)
   const eventSink = env.enabled
     ? new FencedEventPublisher({
+        applyGroupMembership: zaloAccountGroupLifecycleService.applyMembership,
         messageIntegrityEnabled: env.messageIntegrityEnabled,
         appendPort: leaseStore,
         eventStreamKey: zaloAccountTransportKeys.eventStream,
@@ -71,6 +77,8 @@ export const main = async (): Promise<void> => {
     onGroupSendResult: (input) => zaloAccountSendAttemptService.confirm(input),
     admitLabelMutation: (input) => zaloAccountLabelService.admitMutation(input),
     admitGroupSend: (input) => zaloAccountGroupService.admitSend(input),
+    admitGroupAdministrationRead: (input) =>
+      zaloAccountGroupReadService.admit(input),
     resolveGroupHistoryPolicy: (input) =>
       zaloAccountGroupService.resolveReceivePolicy(input),
     clientFactory: zcaClientFactory,
@@ -89,6 +97,28 @@ export const main = async (): Promise<void> => {
           executor: new ZaloAccountCommandExecutor({
             admission: new ZaloAccountProviderAdmission(),
             nativeEnabled: env.nativeMessageOperationsEnabled,
+            groupManagement: {
+              admit: (input) => zaloAccountGroupManagementService.admit(input),
+              claimDispatch: (input) =>
+                zaloAccountGroupManagementService.claimDispatch(input),
+              settle: (input, result) =>
+                zaloAccountGroupManagementService.settle(input, result),
+            },
+            nativeTool: {
+              admit: (input) => zaloAccountNativeSettingsService.admit(input),
+              claimDispatch: (input) =>
+                zaloAccountNativeSettingsService.claimDispatch(input),
+              settle: (input, result) =>
+                zaloAccountNativeSettingsService.settle(input, result),
+            },
+            nativeAccountTool: {
+              admit: (input) =>
+                zaloAccountNativeAccountToolsService.admit(input),
+              claimDispatch: (input) =>
+                zaloAccountNativeAccountToolsService.claimDispatch(input),
+              settle: (input, result) =>
+                zaloAccountNativeAccountToolsService.settle(input, result),
+            },
             nativeOperations: {
               claimDispatch: (command) =>
                 zaloAccountMessageOperationsService.gatewayClaim(command),

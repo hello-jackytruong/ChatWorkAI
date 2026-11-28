@@ -28,6 +28,102 @@ const timestamp = (value: unknown): number | undefined => {
   return Math.trunc(raw < 100_000_000_000 ? raw * 1000 : raw)
 }
 
+function reactionContent(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string") {
+    return record(value)
+  }
+  // Old zca-js reaction callbacks can keep the provider content JSON encoded.
+  if (value.length <= 65_536) {
+    try {
+      return record(JSON.parse(value))
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+function reactionPeer(input: {
+  ownUid?: string
+  actorId: string
+  recipient: unknown
+  sdkThreadId: string
+}): string | undefined {
+  const { ownUid, actorId, recipient, sdkThreadId } = input
+  const recipientId = id(recipient)
+  if (actorId === ownUid) {
+    // The SDK may use the connected UID as threadId when uidFrom wasn't "0".
+    if (
+      recipientId &&
+      recipientId !== ownUid &&
+      (sdkThreadId === ownUid || sdkThreadId === recipientId)
+    ) {
+      return recipientId
+    }
+    return
+  }
+  if (
+    actorId === sdkThreadId &&
+    (!ownUid || recipientId === ownUid || recipient === "0" || recipient === 0)
+  ) {
+    return actorId
+  }
+}
+
+function normalizeReaction(
+  packet: Record<string, unknown>,
+  data: Record<string, unknown>,
+  sdkThreadId: string,
+  threadType: "user" | "group",
+  ownUid: string | undefined,
+): ZaloAccountThreadEvent[] {
+  const actorId =
+    data.uidFrom === "0" || data.uidFrom === 0 ? id(ownUid) : id(data.uidFrom)
+  const timestampMs = timestamp(data.ts ?? data.mSTs)
+  if (
+    !(actorId && timestampMs) ||
+    (packet.isSelf === true && ownUid && actorId !== ownUid)
+  ) {
+    return []
+  }
+  const threadId =
+    threadType === "group"
+      ? sdkThreadId
+      : reactionPeer({ ownUid, actorId, recipient: data.idTo, sdkThreadId })
+  if (
+    !threadId ||
+    (threadType === "group" &&
+      data.idTo !== undefined &&
+      id(data.idTo) !== threadId)
+  ) {
+    return []
+  }
+  const content = reactionContent(data.content)
+  if (!Array.isArray(content.rMsg) || content.rMsg.length > 100) {
+    return []
+  }
+  const icon =
+    typeof content.rIcon === "string" ? content.rIcon.trim() : undefined
+  const remove = icon === "" || Number(content.rType) < 0
+  if (!(remove || icon)) {
+    return []
+  }
+  return content.rMsg.flatMap((target) => {
+    const parsed = zaloAccountThreadEventSchema.safeParse({
+      type: "reaction",
+      threadId,
+      threadType,
+      timestampMs,
+      timestampSource: "provider",
+      providerMessageId: id(record(target).gMsgID),
+      actorId,
+      reactionKey: icon ?? "",
+      operation: remove ? "remove" : "add",
+    })
+    return parsed.success ? [parsed.data] : []
+  })
+}
+
 export function normalizeProviderThreadEvent(
   kind: "delivered" | "seen" | "typing" | "reaction" | "undo",
   input: unknown,
@@ -41,6 +137,9 @@ export function normalizeProviderThreadEvent(
   }
   const threadType =
     packet.isGroup === true || packet.type === 1 ? "group" : "user"
+  if (kind === "reaction") {
+    return normalizeReaction(packet, data, threadId, threadType, ownUid)
+  }
   const events: unknown[] = []
   const providerTimestamp = timestamp(data.ts ?? data.mSTs)
   const base = {
@@ -65,29 +164,6 @@ export function normalizeProviderThreadEvent(
       type: "undo",
       providerMessageId: id(record(data.content).globalMsgId),
     })
-  } else if (kind === "reaction") {
-    const actorId = id(data.uidFrom)
-    if (
-      !(providerTimestamp && actorId) ||
-      (threadType === "user" && actorId !== threadId && actorId !== ownUid)
-    ) {
-      return []
-    }
-    const content = record(data.content)
-    if (!Array.isArray(content.rMsg) || content.rMsg.length > 100) {
-      return []
-    }
-    for (const target of content.rMsg) {
-      const reactionKey = typeof content.rIcon === "string" ? content.rIcon : ""
-      events.push({
-        ...base,
-        type: "reaction",
-        providerMessageId: id(record(target).gMsgID),
-        actorId,
-        reactionKey,
-        operation: !reactionKey || Number(content.rType) < 0 ? "remove" : "add",
-      })
-    }
   } else {
     const members = (value: unknown) =>
       Array.isArray(value)

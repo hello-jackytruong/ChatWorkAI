@@ -37,20 +37,23 @@ the existing `zalo` channel, which uses the official Zalo OA API.
 
 ## Setup
 
-The gateway is disabled by default. Configure the shared `REDIS_URL`, then set:
+The gateway is enabled by default and uses the shared Redis connection.
+History and reconnect catch-up, label reconciliation, message integrity, media
+archival, rich sending, contact management and native message operations are
+also available by default. Existing explicit rollout overrides still apply.
+Bind address, port and lease settings can be overridden.
 
 ```dotenv
-ZALO_ACCOUNT_GATEWAY_ENABLED=true
 ZALO_ACCOUNT_GATEWAY_HOST=0.0.0.0
 ZALO_ACCOUNT_GATEWAY_PORT=3211
 ZALO_ACCOUNT_LEASE_TTL_MS=30000
 ZALO_ACCOUNT_LEASE_RENEW_MS=10000
-ZALO_ACCOUNT_GATEWAY_OWNER_ID=zalo-gateway-01
 ```
 
-`ZALO_ACCOUNT_GATEWAY_OWNER_ID` is required when enabled and must be stable and
-unique for each concurrently running replica. The renewal interval must stay
-below half the lease TTL. Start the app with its workspace command:
+The gateway creates a unique owner ID for each running process. Set
+`ZALO_ACCOUNT_GATEWAY_OWNER_ID` only when the deployment supplies a stable
+replica ID, with a distinct value per concurrent replica. The renewal interval
+must stay below half the lease TTL. Start the app with its workspace command:
 
 ```bash
 pnpm --filter zalo-account-gateway start
@@ -136,7 +139,7 @@ source. Neither creates new R2/S3 archive objects. Previously stored content
 stays available subject to existing access and retention rules. Videos, photos,
 files and eligible audio continue through normal archival.
 
-Typed outbound messages are opt-in by account. Set `ZALO_ACCOUNT_RICH_SEND_ACCOUNT_IDS` to a comma-separated list of internal account IDs in the builder, worker and Zalo Account gateway. Existing text and single-attachment inputs remain available. For the public DM and group send commands, pass one typed `content` object or a `forward` source pointer with the source conversation ID, message ID and creation timestamp. For media forwarding the source attachment must already be available in the archive.
+Typed outbound messages are available by default. Deployments can restrict access with `ZALO_ACCOUNT_RICH_SEND_ACCOUNT_IDS` set to a comma-separated list of internal account IDs in Builder, Worker and Gateway, or pause it with `false`. Existing text and single-attachment inputs remain available. For the public DM and group send commands, pass one typed `content` object or a `forward` source pointer with the source conversation ID, message ID and creation timestamp. For media forwarding the source attachment must already be available in the archive.
 
 The API exposes `delivery=partial` when only part of a multi-item send is confirmed. `remainingUnknown` indicates a later attempt may have reached the provider. `delivery=accepted_without_id` records an acknowledgment without a provider message ID. Inspect the existing send attempt for either outcome before issuing another command.
 
@@ -168,32 +171,30 @@ redirects, byte limits and media types. It removes temporary local files
 after the SDK call. Inbox attachments are projected through the storage
 policy. The send API rejects unsupported content such as polls.
 
-## Controlled group Inbox
+## Group Inbox
 
-`IntegrationZaloAccountGroup` owns provider metadata and policy. Enabling receive
-**or send** creates one internal `Contact(kind=channelGroup)`, `ContactInbox`
-and Conversation under the reserved `za:group:` source namespace. Disabling
-retains history. A send-only group has an outbound timeline but does not persist
-incoming messages. Members remain sender metadata; they do not become Contacts.
+Verified groups can send and receive by default. The first supported incoming
+message or explicit send creates one internal `Contact(kind=channelGroup)`,
+`ContactInbox` and Conversation under the reserved `za:group:` namespace.
+The existing queue refreshes the group list after a verified socket opens or
+the connected account joins a group. Subsequent group activity shares the same
+bounded refresh path. A group sync
+marks an unseen group inaccessible only when the snapshot is complete.
+Members remain sender metadata.
 
 The internal anchor is excluded from customer CRUD/export, contact quota/MAC,
 broadcasts, sequences, pipelines and customer scoring. Group persistence uses
 its own facade and durable provider identity, with bounded recovery across
-database/shard/queue failures. The Inbox renders actual sender, validated mention
-spans, quotes and supported text/image/file attachments. Own echoes reconcile
-confirmed provider IDs. Group metadata events still schedule coalesced refreshes.
+database, shard and queue failures. The Inbox renders the actual sender,
+validated mentions, quotes and supported text/image/file attachments.
 
-The account kill switch and every group's receive/send flags default off;
-automation defaults `disabled`. Turn on the account switch and select individual
-groups. Automation can be `mentionOnly` or `all`, with a closed allowlist of
-reply sends and tag changes. Only the supported send/tag/Wait flow subset can
-execute for a group. Original policy epochs travel through retries and delayed
-work; disabling then re-enabling cannot authorize old queued jobs. Provider
-admission checks current policy and account/group limits immediately before send.
-Direct traffic continues when the group switch is off.
-
-Sync does not tombstone missing groups unless the provider snapshot is proven
-complete. Partial, stale and failed scans retain existing metadata/policies.
+The account settings expose group automation with three modes. New groups use
+`disabled`. Choose `mentionOnly` to act on mentions of the connected account
+or `all` for every eligible message. Existing configured automation is
+preserved. Only the supported reply, tag and Wait flow subset can execute for
+a group. Operational endpoints can still suspend Inbox group traffic. Policy
+epochs fence earlier queued work, and provider admission checks the current
+membership, permissions and rate limits before sending.
 
 Public operations:
 
@@ -207,6 +208,41 @@ Public operations:
 
 The send endpoint accepts exactly one of text or one supported attachment and
 requires a caller-provided stable `commandId`.
+
+### Group administration reads
+
+In account settings, group details open on demand. The panel separates the
+connected account's Zalo role and provider restrictions from its ChatbotX Inbox
+policy. The roster returns at most 50 entries per page and enriches that page in
+one provider batch. A cursor belongs to one workspace, account, group and roster
+version. A partial result can have no continuation cursor when Zalo hides or
+omits members. The shared-groups view is explicit and requires provider support
+for the current account and a verified friend in the selected roster.
+
+Use `GET /v1/zalo-accounts/{accountId}/groups/{groupId}/administration`,
+`/administration/members` and `/administration/related-groups` with the `channels`
+scope. The CLI commands are `zalo-accounts:groups:overview`,
+`zalo-accounts:groups:roster` and `zalo-accounts:groups:related`. The Inbox
+mention operation retains its conversation and send policy checks.
+
+### Native group management
+
+The management panel opens provider lists on demand and uses current Zalo role
+evidence before a write. Set `ZALO_ACCOUNT_GROUP_MANAGEMENT_ACCOUNT_IDS` only
+to restrict supported writes to an account list or pause them with `false`. Keep the
+same time-prefixed UUID v4 (`<unix-ms>:<uuid>`) when inspecting a command after
+an interrupted request. The attempt records only scoped actor/operation and
+sanitized outcome evidence. A provider approval request can be pending after
+the CRM attempt has completed. Link inspections send the invitation in the body.
+
+Zalo generates a link when creating a group. Use the current link state in group
+settings to check it. Whole-document settings writes and upgrades to community
+remain unavailable pending verification with an isolated Zalo account.
+
+The `channels` API is under `/v1/zalo-accounts/{accountId}/group-management`.
+Read with `GET`, submit a write with `POST`, inspect a link with
+`POST /inspect-link`, and inspect a retained result with `GET
+/attempts/{commandId}`. `GET /capability` reports whether native writes are enabled.
 
 ## Canonical sends and message lifecycle
 
@@ -249,16 +285,14 @@ For groups, the current group send policy also applies. Marking a CRM
 conversation read is a local operation. Reaction sends, reaction history
 requests and outbound receipts are disabled by default.
 
-Native recall/delete dispatch is default-off until controlled live provider
-proof. Local hide retains originals. Generic delete remains rejected for
-this channel.
+Native recall and provider deletion are available by default. Local hide retains originals. Generic channel deletion continues to use the existing Zalo-specific rules.
 
 ### Message integrity and bounded recovery
 
 The normalized message reader accepts legacy payloads and optional
 `schemaVersion: 1` evidence. Deploy compatible SDK, worker and Inbox readers
-before setting gateway `ZALO_ACCOUNT_MESSAGE_INTEGRITY_ENABLED=true` (default
-`false`). With the producer gate off, new message fields are omitted. A message
+before deploying the gateway, which emits integrity evidence by default. Set
+`ZALO_ACCOUNT_MESSAGE_INTEGRITY_ENABLED=false` to pause the new producer fields. A message
 with valid identity but unsupported content is retained as a localized
 placeholder, without synthetic customer text, attachments or automation. Invalid
 identity is diagnosed without retaining the raw provider body. Minute diagnostics
@@ -308,8 +342,7 @@ remaining database/live-provider gates are tracked in the
 
 ## Provider history and reconnect catch-up
 
-Enable `ZALO_ACCOUNT_HISTORY_SYNC_ENABLED` after verifying the pinned provider
-contract with a staging account. An account-wide run imports available direct
+History sync is available by default. An account-wide run imports available direct
 messages for existing Inbox conversations. A conversation run can import direct
 messages or a permitted group's history window. History uses the provider's
 original timestamps, preserves recalls, and emits no new-message notifications,
@@ -327,11 +360,12 @@ the current checkpoint for retry.
 
 The latest run is retained on the account and is readable only in its exact
 account or conversation scope. Starting another run can replace the retained
-checkpoint. With `ZALO_ACCOUNT_HISTORY_AUTO_SYNC_ENABLED`, the existing low
-priority worker imports one direct-history page after a verified socket open.
+checkpoint. The existing low-priority worker imports one direct-history page
+after a verified socket opens.
 Reconnects within five minutes coalesce. An automatic run preserves an existing
-resumable manual checkpoint. Disable the automatic flag to pause catch-up, or
-disable the history flag to pause provider requests while retaining progress.
+resumable manual checkpoint. Use `ZALO_ACCOUNT_HISTORY_AUTO_SYNC_ENABLED=false`
+to pause catch-up or `ZALO_ACCOUNT_HISTORY_SYNC_ENABLED=false` to pause provider
+history requests while retaining progress.
 
 For account history, use `GET` or `POST /v1/zalo-accounts/{accountId}/history-sync`
 and `POST /v1/zalo-accounts/{accountId}/history-sync/{runId}/resume` with the
@@ -341,6 +375,65 @@ scope and the matching `contactInboxId`. Use a stable `commandId` for start and
 each resume. In the CLI these are `zalo-accounts:history-sync:status`,
 `:start`, and `:resume`, and the corresponding commands use
 `zalo-accounts:conversation-history-sync` for a single conversation.
+
+## Native conversation settings
+
+Open **Settings on Zalo** on a selected Zalo Account conversation to read its
+provider pin, mute, archive, unread, auto-delete and hidden state. The panel
+distinguishes unknown values if Zalo sends incomplete data. Native settings
+leave ChatbotX unread counters, archive state and retention independent. Mute
+uses seconds. Auto-delete uses milliseconds and accepts 0, 1, 7 or 14 days.
+
+Use `GET` or `PATCH /v1/zalo-accounts/{accountId}/conversations/{conversationId}/native-settings`
+with the `inbox` scope and selected `contactInboxId`. Read a command result with
+`GET /attempts/{commandId}` under the same path.
+`ZALO_ACCOUNT_CONVERSATION_SETTINGS_ACCOUNT_IDS` can restrict supported writes
+to specified accounts or pause them with `false`.
+Hidden-conversation PINs are removed at the gateway, and PIN update/reset stay
+unavailable pending controlled provider verification.
+
+## Account profile and avatar management
+
+The account configuration opens the native profile on demand. Profile QR,
+business package and avatar history are separate reads. Profile operations derive
+the account's own UID from the active provider session. Editing an existing
+profile preserves the complete current provider identity and business category.
+Avatar reuse or deletion checks the selected photo against its current account
+album page. Confirmed new account avatars are eligible for background archival.
+
+Use `GET` and `PATCH /v1/zalo-accounts/{accountId}/native-profile` with the
+`channels` scope. Use `GET /attempts/{commandId}` under the same path to inspect
+an edit. Use `ZALO_ACCOUNT_PROFILE_OPERATIONS_ACCOUNT_IDS` only to restrict
+supported writes. The provider's language and
+activity calls remain unavailable pending verified device-side effects. A
+per-account proxy requires a separate deployment decision and transport proof.
+
+## Native quick messages and auto-replies
+
+Native tool results between the gateway and Builder are encrypted for the exact
+workspace, account, Inbox, command and operation.
+
+The account configuration loads one reply tab at a time. Quick messages support
+text and a single attached image. An edit keeps existing media until the operator
+explicitly removes or replaces it. When media storage is enabled, the archive
+tracks images by account, quick-message ID and media revision. The preview can
+use the original provider URL immediately and prefers the signed R2/S3 copy
+after capture. If the image is unavailable, the title and keyword are still usable.
+Apply the additive media owner enum migration through the approved deployment
+workflow before using the archive.
+
+Auto-replies show the Business account's provider-reported status, audience,
+time fields and recurrence. The settings warn that native replies can run
+alongside ChatbotX Flow or AI replies. Auto-reply creation and editing require
+device-side verification of the schedule and recurrence semantics.
+
+Use `GET` and `PATCH /v1/zalo-accounts/{accountId}/native-replies` with the
+`channels` scope. Read with `kind=readQuickMessages` or `kind=readAutoReplies`
+and use the returned offset and snapshot version for pagination. Explicitly
+confirm removals and inspect uncertain writes by their original command ID at
+`GET /attempts/{commandId}` under the same path. Use
+`ZALO_ACCOUNT_NATIVE_REPLIES_ACCOUNT_IDS` only to restrict supported writes.
+ChatbotX saved replies, Flow and AI settings are separate.
 
 ## Friend sync and safe status
 
@@ -364,10 +457,10 @@ twice. Imports emit no customer-created/activity automation and consume no MAC.
 
 ### Contact lookup, relationships, and presence
 
-Set `ZALO_ACCOUNT_CONTACT_OPERATIONS_ACCOUNT_IDS` to the internal account IDs
-approved for this feature. The allowlist is empty by default. The settings panel
-requires workspace administration permission, and public operations require the
-`channels` token scope. Phone and username searches are deliberate and bounded.
+Contact operations are available for authorized account managers by default.
+Deployments can restrict access to specific internal account IDs through
+`ZALO_ACCOUNT_CONTACT_OPERATIONS_ACCOUNT_IDS` or set it to `false` to suspend
+access. Public operations require the `channels` token scope. Phone and username searches are deliberate and bounded.
 Select a returned contact with its five-minute, account-scoped selection token.
 Opening a direct conversation uses that account's existing Inbox contact or
 quietly creates one for the selected verified UID. A new contact updates the
@@ -383,8 +476,8 @@ are unknown, and hidden and unknown entries omit the last-online timestamp.
 Keep the same `commandId` when recovering a missed response from a relationship
 write. The claim is retained for 24 hours. If a result is `unknown`, inspect the
 current provider state or relationship list before choosing a new action. Redis
-must be available to claim a write. Disable the account's allowlist entry to stop
-new lookups, presence, and relationship operations for that account.
+must be available to claim a write. With an explicit allowlist, remove the account ID to stop new lookups, presence
+and relationship operations. Use `false` to suspend these operations globally.
 
 Public paths are under `/v1/zalo-accounts/{accountId}/contacts`. Use `POST /lookup`,
 `GET /relationships`, `POST /open-conversation`, `POST /friend-request-status`,
@@ -434,6 +527,11 @@ and explicitly provisioned group anchors in the owning Inbox. It never creates
 member Contacts. Group tagging uses a quiet service and does not emit customer
 activity, lead events or MAC.
 
+The worker queues label reconciliation after verifying the current connection
+and socket. Reconnect and scheduled reconciliation share one account job per
+five-minute window. Setting `ZALO_ACCOUNT_LABEL_RECONNECT_SYNC_ENABLED=false`
+pauses only reconnect-triggered reconciliation.
+
 Attach/detach performs a serialized read-modify-write of the whole provider
 document, preserves unrelated labels/conversations, and retries once only for
 a verified version conflict. Empty/stale snapshots are non-destructive. A
@@ -447,6 +545,9 @@ generic ChatbotX tag attach/detach operations drive mapped provider updates.
 Manual sync is available at:
 
 - `POST /v1/zalo-accounts/{accountId}/labels/sync`
+- `POST /v1/zalo-accounts/{accountId}/labels/queue-sync`
+- `GET /v1/zalo-accounts/{accountId}/labels`
+- `PATCH /v1/zalo-accounts/{accountId}/labels/{labelId}/definition`
 - `GET /v1/zalo-accounts/{accountId}/groups/{groupId}/tags`
 - `PATCH /v1/zalo-accounts/{accountId}/groups/{groupId}/tags`
 
@@ -454,6 +555,14 @@ Whole-document writes are fenced by an operation token/version/hash. Unknown
 writes remain inspect-only until reconciliation; unconfirmed detach mappings
 are retained. Missing or incomplete snapshots do not erase assignments. The
 settings UI reports conflict/unknown/partial states rather than implying success.
+
+The native label panel displays the provider's order, color and matching CRM
+tag. A successful sync time reflects completion of reconciliation, including
+all local batches. The label panel queues a sync once per account and shows its
+progress. Editing existing definitions is available by default. Restrict the
+accounts with `ZALO_ACCOUNT_LABEL_EDIT_ACCOUNT_IDS` in the Builder and gateway.
+Creation and deletion require provider evidence for ID allocation and assignment
+semantics.
 
 ## Database rollout
 
@@ -464,6 +573,9 @@ workflow does not apply migrations:
 - `packages/database/drizzle/20261120060156_zalo-account-groups/`
 - `packages/database/drizzle/20261121024313_zalo-account-group-inbox/`
 - `packages/database/drizzle/20261121055141_zalo-account-message-operations/`
+- `packages/database/drizzle/20261128114017_add_zalo_account_group_administration/`
+- `packages/database/drizzle/20261128123854_add_zalo_account_quick_message_media/`
+- `packages/database/drizzle/20261128124923_enable_zalo_account_group_messaging_defaults/`
 
 Inspect and apply them in order only after explicit approval. Until the required
 schema exists in a target environment, its database-backed tests and live channel
@@ -478,10 +590,9 @@ identity tombstones/recovery index and the reserved-source constraint. FKs have
 leading indexes and purge drains the new children before account/workspace rows.
 
 Apply the additive migrations **before deploying this code**: normal Contact
-and account selects now read the new columns. Keep group flags off during rollout.
-Enable only a bounded staging account
-after redacted live fixtures verify the pinned provider contract; static tests
-do not authorize production enablement.
+and account selects read the new columns. The defaults migration enables group
+traffic for existing accounts and accessible groups and advances the changed
+policy epochs. Automation stays disabled by default.
 
 ## Retained originals and recall tracking
 
@@ -537,20 +648,18 @@ pins the selected boundary so newer incoming messages do not widen the operation
 Read-only tokens cannot mutate; expired-owner deletion exceptions do not grant
 read-only tokens write access. Scheduled workspace deletion still blocks mutation.
 
-`ZALO_ACCOUNT_NATIVE_MESSAGE_OPERATIONS_ENABLED=false` is the default in builder
-and gateway. Keep it false: production gateway does not yet install a verified
-provider-status proof classifier. Even an enabled gate cannot treat an unproven
-SDK response as confirmed success. Before enabling a disposable pilot, collect
-sanitized DM/group proof for the pinned SDK's status, own-message/time-window
-rules, onlyMe flag, history boundary, echoes and timeout behavior, then implement
-the verified classifier. Unit fixtures are not that evidence.
+Native message operations use exact targets and confirmation rules. A numeric
+SDK response without verified provider evidence remains `unknown`, even when
+the operation was dispatched. Use
+`ZALO_ACCOUNT_NATIVE_MESSAGE_OPERATIONS_ENABLED=false` to pause dispatch while
+keeping the retained history and ledger.
 
 The additive migration
 `packages/database/drizzle/20261123081746_add_zalo_account_recall_tracking/migration.sql`
 creates only two main-DB metadata tables; it changes no Message/shard schema and
 copies no bodies/blobs. It has been generated, not applied. Obtain separate
 approval before applying it. Deploy schema, safe readers/lifecycle/recovery, then
-UI; keep native off during rollout. Existing group recovery hosts recall repair
+UI in that order. Existing group recovery hosts recall repair
 with caps (25 intents, 2 ranges/50 candidates per lookup) and a deadline; no new
 queue, scheduler or full-history backfill was added. Stable Zalo placeholders select a registered primary covering their reserved timestamp, so delayed creation remains routable after subsequent shard rotations; non-Zalo stable creation retains its existing write route. Out-of-range historical rows
 that cannot be safely updated remain pending rather than falsely acknowledged.

@@ -99,6 +99,17 @@ vi.mock("@/lib/public-api/member-scope", () => ({
   assertConversationAccessForCaller: checkConversation,
   conversationScopeForCaller: conversationScope,
 }))
+const nativeSettings = vi.hoisted(() => ({
+  read: vi.fn(),
+  mutate: vi.fn(),
+  attempt: vi.fn(),
+}))
+vi.mock("@chatbotx.io/business/zalo-account/native-settings", () => ({
+  zaloAccountNativeSettingsService: nativeSettings,
+}))
+const { zaloAccountNativeConversationOperations } = await import(
+  "../src/features/zalo-accounts/api/native-conversation-settings"
+)
 const { zaloAccountOperations } = await import(
   "../src/features/zalo-accounts/api/operations"
 )
@@ -111,6 +122,68 @@ const inspect = () =>
   call(zaloAccountOperations.getMessageSendAttempt, input, {
     context: { headers: new Headers({ Authorization: `Bearer ${TOKEN}` }) },
   })
+
+describe("native Zalo conversation settings scope", () => {
+  const input = { accountId: "1", conversationId: "2", contactInboxId: "3" }
+  const caller = {
+    context: { headers: new Headers({ Authorization: `Bearer ${TOKEN}` }) },
+  }
+
+  test("denies channels-only scope before looking up the selected thread", async () => {
+    findWorkspaceByTokenHash.mockResolvedValue(
+      authResult(["channels"], "read_only"),
+    )
+    await expect(
+      call(
+        zaloAccountNativeConversationOperations.getNativeConversationSettings,
+        input,
+        caller,
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" })
+    expect(checkConversation).not.toHaveBeenCalled()
+    expect(nativeSettings.read).not.toHaveBeenCalled()
+  })
+
+  test("passes the authorized exact ContactInbox and read-only command", async () => {
+    findWorkspaceByTokenHash.mockResolvedValue(
+      authResult(["inbox"], "read_only"),
+    )
+    checkConversation.mockResolvedValue({ id: input.conversationId })
+    nativeSettings.read.mockResolvedValue({
+      settings: { archived: false },
+      complete: false,
+      writeEnabled: false,
+    })
+    await expect(
+      call(
+        zaloAccountNativeConversationOperations.getNativeConversationSettings,
+        input,
+        caller,
+      ),
+    ).resolves.toMatchObject({ settings: { archived: false } })
+    expect(checkConversation).toHaveBeenCalledWith(
+      expect.anything(),
+      input.conversationId,
+    )
+    expect(nativeSettings.read).toHaveBeenCalledExactlyOnceWith({
+      ...input,
+      workspaceId: "ws-1",
+      operation: { kind: "readConversationSettings" },
+    })
+    await expect(
+      call(
+        zaloAccountNativeConversationOperations.setNativeConversationSetting,
+        {
+          ...input,
+          commandId: "1795140000000:8e250019-f49e-4d18-99fb-5d7ff7b7f047",
+          operation: { kind: "setUnread", enabled: true },
+        },
+        caller,
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" })
+    expect(nativeSettings.mutate).not.toHaveBeenCalled()
+  })
+})
 describe("Zalo canonical Message inspection authorization", () => {
   test("allows channels read_only GET and delegates ownership with token workspace", async () => {
     findWorkspaceByTokenHash.mockResolvedValue(

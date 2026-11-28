@@ -17,6 +17,11 @@ const notesMock = vi.fn().mockResolvedValue({ data: [] })
 const couponsMock = vi.fn().mockResolvedValue([])
 const appointmentsMock = vi.fn().mockResolvedValue([])
 const sequencesMock = vi.fn().mockResolvedValue({ data: [] })
+const tagOriginsMock = vi.fn()
+vi.mock("@/features/zalo-accounts/actions/tag-origins.action", () => ({
+  listZaloDirectTagOriginsAction: (...args: unknown[]) =>
+    tagOriginsMock(...args),
+}))
 vi.mock("@/lib/orpc/query", () => ({
   orpc: {
     contactsAPIs: {
@@ -263,6 +268,7 @@ describe("ContactInboxPanel", () => {
     couponsMock.mockClear()
     appointmentsMock.mockClear()
     sequencesMock.mockClear()
+    tagOriginsMock.mockReset()
     latestAccordionOnValueChange = undefined
     threadControlView.current = null
     seededContact = undefined
@@ -300,6 +306,44 @@ describe("ContactInboxPanel", () => {
     expect(
       container.querySelector('[data-testid="contact-detail"]')?.textContent,
     ).toBe("Seeded Jane")
+  })
+
+  test("only loads Zalo tag origins when the tags panel is visible for the selected Zalo account inbox", async () => {
+    const tags = [
+      { id: "tag-1", name: "Customer support" },
+      { id: "tag-2", name: "Shared CRM tag" },
+    ]
+    seededContact = { ...makeContact("contact-1", "Jane"), tags }
+    tagOriginsMock.mockResolvedValue({ data: ["tag-1"] })
+    for (const channel of ["zalo", "messenger", "zaloAccount"] as const) {
+      act(() => latestAccordionOnValueChange?.([]))
+      latestConversations = [
+        {
+          ...firstConversation,
+          contactInboxes: [{ id: `ci-${channel}`, channel }],
+        },
+      ]
+      render()
+      expect(tagOriginsMock).not.toHaveBeenCalled()
+      act(() => latestAccordionOnValueChange?.(["fields.tags.label"]))
+      if (channel !== "zaloAccount") {
+        expect(tagOriginsMock).not.toHaveBeenCalled()
+        expect(container.textContent).not.toContain(
+          "zaloAccount.nativeLabels.nativeTag",
+        )
+      }
+    }
+    await vi.waitFor(async () => {
+      await act(async () => undefined)
+      expect(tagOriginsMock).toHaveBeenCalledExactlyOnceWith("ws-1", {
+        conversationId: "conv-1",
+        contactInboxId: "ci-zaloAccount",
+      })
+      expect(container.textContent).toContain(
+        "zaloAccount.nativeLabels.nativeTag",
+      )
+      expect(container.textContent).toContain("zaloAccount.nativeLabels.crmTag")
+    })
   })
 
   test("fetches exactly once when the seeded contact is for another contact", async () => {

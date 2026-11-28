@@ -105,6 +105,7 @@ const makeHarness = (
     initialDeadlineAt?: number
     leaseTtlMs?: number
     hold?: RuntimeOwnershipHooks["hold"]
+    publishGroupEvent?: RuntimeEventSink["publishGroupEvent"]
   } = {},
 ) => {
   const events: unknown[] = []
@@ -118,6 +119,7 @@ const makeHarness = (
     release: vi.fn(async () => true),
   }
   const sink: RuntimeEventSink = {
+    publishGroupEvent: options.publishGroupEvent,
     publishAuthorization: vi.fn((event) => {
       events.push(event)
       return Promise.resolve()
@@ -166,6 +168,207 @@ const makeHarness = (
 describe("ZaloAccountRuntime", () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
+
+  it.each([
+    "groupManagement",
+    "nativeTool",
+  ] as const)("does not start %s when its connected socket closes while claiming", async (kind) => {
+    const { client, runtime } = makeHarness({ account: true })
+    await runtime.reconnect(auth, auth.zaloUid)
+    const api = client.reconnectApis[0]
+    const providerWrite = vi.fn()
+    const groupManagement: ZcaApiPort["groupManagement"] = async (
+      _groupId,
+      operation,
+      authorizeDispatch,
+    ) => {
+      await authorizeDispatch()
+      providerWrite()
+      return { kind: operation.kind, outcome: "confirmed" }
+    }
+    const nativeTool: ZcaApiPort["nativeTool"] = async (
+      _thread,
+      operation,
+      authorizeDispatch,
+    ) => {
+      await authorizeDispatch()
+      providerWrite()
+      return { kind: operation.kind, outcome: "confirmed" }
+    }
+    Object.assign(api, { groupManagement, nativeTool })
+    const claiming = Promise.withResolvers<void>()
+    const entered = vi.fn(() => claiming.promise)
+    const writing =
+      kind === "groupManagement"
+        ? runtime.groupManagement(
+            "42",
+            { kind: "changeGroupName", name: "Updated" },
+            entered,
+          )
+        : runtime.nativeTool(
+            { threadType: "user", threadId: "42" },
+            { kind: "setUnread", enabled: true },
+            entered,
+          )
+    await vi.waitFor(() => expect(entered).toHaveBeenCalledOnce())
+    api.close()
+    const rejected = expect(writing).rejects.toThrow("runtime changed")
+    claiming.resolve()
+    await rejected
+    expect(providerWrite).not.toHaveBeenCalled()
+    await runtime.stop()
+  })
+
+  it("rejects a prepared group send when membership changes during admission", async () => {
+    const publishGroupEvent = vi.fn(async () => undefined)
+    const { client, runtime } = makeHarness({
+      account: true,
+      publishGroupEvent,
+    })
+    await runtime.reconnect(auth, auth.zaloUid)
+    const api = client.reconnectApis[0]
+    const dispatch = vi.fn()
+    const sendGroup: ZcaApiPort["sendGroup"] = async (
+      _groupId,
+      _message,
+      admit,
+    ) => {
+      await admit?.()
+      dispatch()
+      return { messageIds: ["m"], sentCount: 1 }
+    }
+    Object.assign(api, { sendGroup })
+    const admission = Promise.withResolvers<void>()
+    const entered = vi.fn()
+    const prepared = runtime.sendGroup(
+      "42",
+      { recipientId: "42", text: "before loss", attachments: [] },
+      () => {
+        entered()
+        return admission.promise
+      },
+    )
+    await vi.waitFor(() => expect(entered).toHaveBeenCalledOnce())
+    api.handlers?.onGroupEvent?.({
+      providerGroupId: "42",
+      kind: "removed",
+      identity: "a".repeat(64),
+      timestampMs: Date.now(),
+      providerVersion: "2",
+      targetIncludesAccount: true,
+    })
+    await vi.waitFor(() => expect(publishGroupEvent).toHaveBeenCalledOnce())
+    const rejected = expect(prepared).rejects.toThrow("membership changed")
+    admission.resolve()
+    await rejected
+    expect(dispatch).not.toHaveBeenCalled()
+    await expect(
+      runtime.sendGroup("43", {
+        recipientId: "43",
+        text: "other group",
+        attachments: [],
+      }),
+    ).resolves.toMatchObject({ sentCount: 1 })
+    await runtime.stop()
+  })
+
+  it.each([
+    ["recovers", 2],
+    ["reconnects", 2],
+    ["exhausts", 3],
+    ["loses ownership", 1],
+  ] as const)("retries pending membership publication when it %s", async (scenario, attempts) => {
+    const publishGroupEvent = vi.fn<
+      NonNullable<RuntimeEventSink["publishGroupEvent"]>
+    >(async () => undefined)
+    publishGroupEvent.mockRejectedValueOnce(new Error("publish failed"))
+    if (scenario === "exhausts") {
+      publishGroupEvent.mockRejectedValue(new Error("publish failed"))
+    }
+    const { client, runtime } = makeHarness({
+      account: true,
+      publishGroupEvent,
+      renewResult: scenario !== "loses ownership",
+    })
+    await runtime.reconnect(auth, auth.zaloUid)
+    const api = client.reconnectApis[0]
+    const event = {
+      providerGroupId: "42",
+      kind:
+        scenario === "recovers" || scenario === "reconnects"
+          ? "joined"
+          : "removed",
+      identity: "b".repeat(64),
+      timestampMs: Date.now(),
+      providerVersion: "3",
+      targetIncludesAccount: true,
+    } as const
+    api.handlers?.onGroupEvent?.(event)
+    await vi.advanceTimersByTimeAsync(0)
+    const sendGroup = () =>
+      runtime.sendGroup("42", {
+        recipientId: "42",
+        text: "membership gate",
+        attachments: [],
+      })
+    await expect(sendGroup()).rejects.toThrow("membership changed")
+    expect(publishGroupEvent).toHaveBeenCalledOnce()
+    if (scenario === "reconnects") {
+      api.close()
+    }
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(publishGroupEvent).toHaveBeenCalledTimes(attempts)
+    for (const call of publishGroupEvent.mock.calls) {
+      expect(call).toEqual(publishGroupEvent.mock.calls[0])
+    }
+    if (scenario === "recovers" || scenario === "reconnects") {
+      await expect(sendGroup()).resolves.toMatchObject({ sentCount: 1 })
+    } else {
+      await expect(sendGroup()).rejects.toThrow("membership changed")
+    }
+    await runtime.stop()
+  })
+
+  it("retries only the current group membership publication after newer evidence arrives", async () => {
+    const publishGroupEvent = vi.fn<
+      NonNullable<RuntimeEventSink["publishGroupEvent"]>
+    >(async () => undefined)
+    publishGroupEvent
+      .mockRejectedValueOnce(new Error("old removal failed"))
+      .mockRejectedValueOnce(new Error("new join failed"))
+    const { client, runtime } = makeHarness({
+      account: true,
+      publishGroupEvent,
+    })
+    await runtime.reconnect(auth, auth.zaloUid)
+    const api = client.reconnectApis[0]
+    const removed = {
+      providerGroupId: "42",
+      kind: "removed",
+      identity: "c".repeat(64),
+      timestampMs: Date.now(),
+      providerVersion: "4",
+      targetIncludesAccount: true,
+    } as const
+    const joined = {
+      ...removed,
+      kind: "joined",
+      identity: "d".repeat(64),
+      providerVersion: "5",
+      timestampMs: removed.timestampMs + 1,
+    } as const
+    api.handlers?.onGroupEvent?.(removed)
+    await vi.advanceTimersByTimeAsync(0)
+    api.handlers?.onGroupEvent?.(joined)
+    api.handlers?.onGroupEvent?.(removed)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(publishGroupEvent.mock.calls.map(([event]) => event)).toEqual([
+      removed,
+      joined,
+      joined,
+    ])
+    await runtime.stop()
+  })
 
   it.each([
     "append",
@@ -737,6 +940,27 @@ describe("ZaloAccountRuntime", () => {
       runtime.updateLabels({ expectedVersion: 4, labelData: [] }),
     ).rejects.toThrow("label version conflict")
     expect(api.updateLabels).not.toHaveBeenCalled()
+  })
+
+  it("refuses a label write if the current provider document has the same version and another hash", async () => {
+    const { client, runtime } = makeHarness()
+    await runtime.reconnect(auth, "uid-1")
+    const api = client.reconnectApis[0]
+    api?.getLabels.mockResolvedValueOnce({
+      version: 10,
+      lastUpdateTime: 10,
+      labelData: [],
+    })
+
+    const edit = {
+      expectedVersion: 10,
+      expectedHash: "a".repeat(64),
+      labelData: [],
+    }
+    await expect(runtime.updateLabels(edit)).rejects.toThrow(
+      "label version conflict",
+    )
+    expect(api?.updateLabels).not.toHaveBeenCalled()
   })
 })
 
