@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Yapılandır",
     "connectionStatus": "Bağlantı durumu",
     "active": "Etkin",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Zalo geçmişini silmek için mesaj sınırı yok.",
     "deletedOnMyZalo": "Zalo hesabımdan silindi",
     "deleteChatBoundary": "Geçmiş silme sınırı",
+    "quote": {
+      "title": "Orijinal mesaj",
+      "unavailable": "Orijinal mesaj kullanılamıyor."
+    },
+    "mention": {
+      "partial": "Üye önerileri eksik olabilir."
+    },
+    "sticker": "Çıkartma",
+    "forward": {
+      "title": "Mesajı ilet",
+      "sendCopy": "Bir kopya gönder",
+      "description": "Aynı Zalo hesabından bir konuşma seçin."
+    },
+    "composer": {
+      "moreMessageTypes": "Diğer mesaj türleri",
+      "recordVoice": "Sesli mesaj kaydet",
+      "voiceUnavailable": "Kayıt yapılamıyor. Bir M4A dosyası seçin.",
+      "videoPoster": "Video kapak görseli",
+      "bankBin": "Banka kodu (BIN)",
+      "accountNumber": "Hesap numarası",
+      "underline": "Altı çizili",
+      "urgent": "Acil"
+    },
+    "richMessage": {
+      "openMap": "Haritayı aç",
+      "bankDetails": "Banka hesabı bilgileri",
+      "missedCall": "Cevapsız arama",
+      "unansweredCall": "Yanıtlanmayan arama",
+      "incomingCall": "Gelen arama",
+      "outgoingCall": "Giden arama",
+      "videoCall": "Görüntülü arama",
+      "voiceCall": "Sesli arama",
+      "processingMedia": "Medya işleniyor…",
+      "mediaUnavailable": "Medya kullanılamıyor"
+    },
     "evidence": {
+      "sentPartially": "Kısmen gönderildi",
+      "acceptedWithoutId": "Zalo mesajı kabul etti. Mesaj kimliği bekleniyor.",
       "unsupportedContent": "Desteklenmeyen Zalo mesajı",
       "invalidContent": "Zalo mesajı okunamadı",
       "unsupportedSchema": "Zalo mesaj biçimi desteklenmiyor",

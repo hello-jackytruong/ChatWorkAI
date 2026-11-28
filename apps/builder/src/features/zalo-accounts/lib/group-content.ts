@@ -1,5 +1,5 @@
 import {
-  zaloAccountGroupMessageSchema,
+  zaloAccountGroupMessageContextSchema,
   zaloAccountQuoteSchema,
 } from "@chatbotx.io/sdk"
 import { z } from "zod"
@@ -31,7 +31,7 @@ export function getZaloGroupConversation(
   return parsed.success ? parsed.data : null
 }
 export function getZaloGroupMessage(attributes: unknown) {
-  const parsed = zaloAccountGroupMessageSchema.safeParse(
+  const parsed = zaloAccountGroupMessageContextSchema.safeParse(
     record(record(attributes)?.zaloAccount)?.group,
   )
   return parsed.success ? parsed.data : null

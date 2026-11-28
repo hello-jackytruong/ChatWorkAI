@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Configure",
     "connectionStatus": "Connection status",
     "active": "Active",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "No message boundary is available for deleting Zalo history.",
     "deletedOnMyZalo": "Deleted on my Zalo",
     "deleteChatBoundary": "History deletion boundary",
+    "quote": {
+      "title": "Original message",
+      "unavailable": "The original message is unavailable."
+    },
+    "mention": {
+      "partial": "Member suggestions may be incomplete."
+    },
+    "sticker": "Sticker",
+    "forward": {
+      "title": "Forward message",
+      "sendCopy": "Send a copy",
+      "description": "Choose a conversation in the same Zalo Account."
+    },
+    "composer": {
+      "moreMessageTypes": "More message types",
+      "recordVoice": "Record a voice message",
+      "voiceUnavailable": "Recording is unavailable. Choose an M4A file instead.",
+      "videoPoster": "Video poster",
+      "bankBin": "Bank code (BIN)",
+      "accountNumber": "Account number",
+      "underline": "Underline",
+      "urgent": "Urgent"
+    },
+    "richMessage": {
+      "openMap": "Open map",
+      "bankDetails": "Bank account details",
+      "missedCall": "Missed call",
+      "unansweredCall": "Unanswered call",
+      "incomingCall": "Incoming call",
+      "outgoingCall": "Outgoing call",
+      "videoCall": "Video call",
+      "voiceCall": "Voice call",
+      "processingMedia": "Processing media…",
+      "mediaUnavailable": "Media unavailable"
+    },
     "evidence": {
+      "sentPartially": "Partially sent",
+      "acceptedWithoutId": "Accepted by Zalo. Message ID pending.",
       "unsupportedContent": "Unsupported Zalo message",
       "invalidContent": "Zalo message could not be read",
       "unsupportedSchema": "Zalo message format is not supported",

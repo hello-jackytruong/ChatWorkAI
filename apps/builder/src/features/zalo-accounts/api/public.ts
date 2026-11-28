@@ -5,7 +5,11 @@ import {
   zaloAccountService,
 } from "@chatbotx.io/business/zalo-account"
 import { zaloAccountCanonicalSendService } from "@chatbotx.io/business/zalo-account/canonical-send"
-import { zaloAccountAttachmentSchema } from "@chatbotx.io/sdk"
+import {
+  zaloAccountAttachmentSchema,
+  zaloAccountSendContentSchema,
+  zaloAccountSendDeliverySchema,
+} from "@chatbotx.io/sdk"
 import { zodBigintAsString } from "@chatbotx.io/utils"
 import { z } from "zod"
 import { mcpSpec } from "@/lib/orpc/mcp-annotations"
@@ -24,9 +28,12 @@ import {
   zaloAccountGroupResource,
   zaloAccountResource,
 } from "../schema/resource"
+import { zaloForwardInput } from "../schema/send-attempt"
+import { zaloAccountGroupMemberOperations } from "./group-members"
 import { zaloAccountMediaOperations } from "./media"
 import { zaloAccountMessageOperations } from "./message-operations"
 import { zaloAccountOperations } from "./operations"
+import { zaloAccountTimelineOperations } from "./timeline"
 
 const workspaceTokenAuthAPI = workspaceTokenAuthAPIForScope("channels")
 
@@ -53,7 +60,9 @@ const writeErrors = {
 }
 
 export const zaloAccountsPublicRouter = {
+  ...zaloAccountGroupMemberOperations,
   ...zaloAccountOperations,
+  ...zaloAccountTimelineOperations,
   ...zaloAccountMediaOperations,
   ...zaloAccountMessageOperations,
   list: workspaceTokenAuthAPI
@@ -256,7 +265,7 @@ export const zaloAccountsPublicRouter = {
       summary: "Send message to enabled personal Zalo group",
       spec: mcpSpec({ hitlPolicy: "confirm_outbound", openWorldHint: true }),
       description:
-        "Sends exactly one text or supported attachment after verifying that the group's sending policy is enabled.",
+        "Sends legacy text, a legacy image/file, or one typed content object after verifying the group's sending policy.",
       tags: ["Zalo Accounts"],
     })
     .input(
@@ -283,12 +292,24 @@ export const zaloAccountsPublicRouter = {
           attachment: zaloAccountAttachmentSchema
             .optional()
             .describe("Image or file to send; mutually exclusive with text"),
+          content: zaloAccountSendContentSchema
+            .optional()
+            .describe(
+              "Typed rich content, exclusive with legacy fields and forward",
+            ),
+          forward: zaloForwardInput
+            .optional()
+            .describe("Accessible same-account source message pointer"),
         })
         .superRefine((input, context) => {
-          if (Boolean(input.text) === Boolean(input.attachment)) {
+          if (
+            [input.text, input.attachment, input.content, input.forward].filter(
+              Boolean,
+            ).length !== 1
+          ) {
             context.addIssue({
               code: "custom",
-              message: "Provide exactly one of text or attachment",
+              message: "Provide exactly one message payload",
             })
           }
         }),
@@ -297,6 +318,8 @@ export const zaloAccountsPublicRouter = {
       z.object({
         messageIds: z.array(z.string()),
         sentCount: z.number().int().nonnegative(),
+        delivery: zaloAccountSendDeliverySchema.optional(),
+        remainingUnknown: z.boolean().optional(),
       }),
     )
     .errors(writeErrors)
@@ -309,6 +332,8 @@ export const zaloAccountsPublicRouter = {
           commandId: input.commandId,
           ...(input.text ? { text: input.text } : {}),
           ...(input.attachment ? { attachment: input.attachment } : {}),
+          ...(input.content ? { content: input.content } : {}),
+          ...(input.forward ? { forward: input.forward } : {}),
           ...(input.replyToMessageId
             ? {
                 replyToMessageId: input.replyToMessageId,

@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "إعداد",
     "connectionStatus": "حالة الاتصال",
     "active": "نشط",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "لا توجد رسالة حدية لحذف سجل Zalo.",
     "deletedOnMyZalo": "تم الحذف على حسابي في Zalo",
     "deleteChatBoundary": "حد حذف السجل",
+    "quote": {
+      "title": "الرسالة الأصلية",
+      "unavailable": "الرسالة الأصلية غير متاحة."
+    },
+    "mention": {
+      "partial": "قد تكون اقتراحات الأعضاء غير مكتملة."
+    },
+    "sticker": "ملصق",
+    "forward": {
+      "title": "إعادة توجيه الرسالة",
+      "sendCopy": "إرسال نسخة",
+      "description": "اختر محادثة في حساب Zalo نفسه."
+    },
+    "composer": {
+      "moreMessageTypes": "المزيد من أنواع الرسائل",
+      "recordVoice": "تسجيل رسالة صوتية",
+      "voiceUnavailable": "التسجيل غير متاح. اختر ملف M4A.",
+      "videoPoster": "صورة غلاف الفيديو",
+      "bankBin": "رمز البنك (BIN)",
+      "accountNumber": "رقم الحساب",
+      "underline": "تسطير",
+      "urgent": "عاجل"
+    },
+    "richMessage": {
+      "openMap": "فتح الخريطة",
+      "bankDetails": "بيانات الحساب المصرفي",
+      "missedCall": "مكالمة فائتة",
+      "unansweredCall": "مكالمة بلا رد",
+      "incomingCall": "مكالمة واردة",
+      "outgoingCall": "مكالمة صادرة",
+      "videoCall": "مكالمة فيديو",
+      "voiceCall": "مكالمة صوتية",
+      "processingMedia": "جارٍ معالجة الوسائط…",
+      "mediaUnavailable": "الوسائط غير متاحة"
+    },
     "evidence": {
+      "sentPartially": "تم الإرسال جزئيًا",
+      "acceptedWithoutId": "قبل Zalo الإرسال. معرّف الرسالة قيد الانتظار.",
       "unsupportedContent": "رسالة Zalo غير مدعومة",
       "invalidContent": "تعذرت قراءة رسالة Zalo",
       "unsupportedSchema": "تنسيق رسالة Zalo غير مدعوم",

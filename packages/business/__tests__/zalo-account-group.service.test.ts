@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   listGroups: vi.fn(),
   sendGroupAndWait: vi.fn(),
   syncGroupsAndWait: vi.fn(),
+  getGroupMembersAndWait: vi.fn(),
   updatePolicy: vi.fn(),
   updateInboxPolicy: vi.fn(),
   upsert: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock("../src/zalo-account/transport.service", () => ({
   zaloAccountCommandTransportService: {
     sendGroupAndWait: mocks.sendGroupAndWait,
     syncGroupsAndWait: mocks.syncGroupsAndWait,
+    getGroupMembersAndWait: mocks.getGroupMembersAndWait,
   },
 }))
 
@@ -70,6 +72,54 @@ const account = {
 }
 
 describe("zaloAccountGroupService", () => {
+  it("queries members only for the exact anchored group and current policy epochs", async () => {
+    mocks.findAccount.mockResolvedValue({
+      ...account,
+      groupPolicyEpoch: 2,
+      zaloUid: "self",
+    })
+    mocks.findGroup.mockResolvedValue({
+      id: "group-1",
+      providerGroupId: "native-1",
+      conversationId: "conversation-1",
+      contactInboxId: "ci-1",
+      accessible: true,
+      sendEnabled: true,
+      policyEpoch: 3,
+    })
+    mocks.getGroupMembersAndWait.mockResolvedValue({
+      members: [{ uid: "self" }, { uid: "peer-1", name: "Linh" }],
+      complete: false,
+    })
+    const input = {
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+      groupId: "group-1",
+      conversationId: "conversation-1",
+      query: "Linh",
+    }
+    await expect(zaloAccountGroupService.listMembers(input)).resolves.toEqual({
+      members: [{ uid: "peer-1", name: "Linh" }],
+      complete: false,
+    })
+    expect(mocks.getGroupMembersAndWait).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inboxId: "inbox-1",
+        groupId: "native-1",
+        accountPolicyEpoch: 2,
+        groupPolicyEpoch: 3,
+        groupMemberQuery: { query: "Linh", limit: 20 },
+      }),
+    )
+    await expect(
+      zaloAccountGroupService.listMembers({
+        ...input,
+        conversationId: "other",
+      }),
+    ).rejects.toThrow()
+    expect(mocks.getGroupMembersAndWait).toHaveBeenCalledOnce()
+  })
+
   it("fences repeated sync calls independently even when the caller reuses its command ID", async () => {
     mocks.syncGroupsAndWait.mockResolvedValue({ groups: [], complete: true })
     const input = {

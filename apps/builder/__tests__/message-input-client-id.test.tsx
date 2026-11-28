@@ -59,6 +59,15 @@ const action = vi.hoisted(() => {
 })
 
 // Keep Zalo server actions outside these client-only regression fixtures.
+vi.mock("@/features/messages/actions/zalo-composer-capability.action", () => ({
+  getZaloComposerCapabilityAction: vi.fn(),
+}))
+vi.mock(
+  "@/features/zalo-accounts/actions/list-zalo-group-members.action",
+  () => ({
+    listZaloGroupMembersAction: vi.fn(),
+  }),
+)
 vi.mock("@/features/zalo-accounts/actions/group-inbox.action", () => ({
   getZaloGroupInboxAction: vi.fn(),
   getZaloGroupMessageStateAction: vi.fn(),

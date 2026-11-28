@@ -12,7 +12,9 @@ import {
   SdkException,
   type ZaloAccountOutboundMessage,
   ZaloAccountPreDispatchError,
+  type ZaloAccountSendResult,
   zaloAccountOutboundMessageSchema,
+  zaloAccountSendResultSchema,
 } from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import { sha256Hex } from "@chatbotx.io/utils/crypto"
@@ -46,11 +48,34 @@ type SendInput = {
   message: ZaloAccountOutboundMessage
   localMessage?: { id: string; createdAt: Date }
 }
+
+export function getZaloAccountSendResult(
+  attempt: Pick<
+    ZaloAccountSendAttemptModel,
+    "status" | "providerMessageIds" | "reconciliation"
+  >,
+): ZaloAccountSendResult | null {
+  if (attempt.status !== "applied") {
+    return null
+  }
+  const messageIds = attempt.providerMessageIds
+  const evidence = attempt.reconciliation
+  return {
+    messageIds,
+    sentCount: evidence?.sentCount ?? messageIds.length,
+    ...(evidence?.delivery ? { delivery: evidence.delivery } : {}),
+    ...(evidence?.remainingUnknown === undefined
+      ? {}
+      : { remainingUnknown: evidence.remainingUnknown }),
+  }
+}
+
 export const zaloAccountSendAttemptService = {
   async publishOutcome(attempt: ZaloAccountSendAttemptModel): Promise<void> {
     if (!(attempt.messageId && attempt.messageCreatedAt)) {
       return
     }
+    const result = getZaloAccountSendResult(attempt)
     await messageService.updateSendAttemptEvidence({
       workspaceId: attempt.workspaceId,
       accountId: attempt.accountId,
@@ -59,6 +84,15 @@ export const zaloAccountSendAttemptService = {
       revision: attempt.reconciliation?.revision ?? 0,
       evidence: {
         status: attempt.status,
+        ...(result?.delivery
+          ? {
+              delivery: result.delivery,
+              sentCount: result.sentCount,
+              ...(result.remainingUnknown === undefined
+                ? {}
+                : { remainingUnknown: result.remainingUnknown }),
+            }
+          : {}),
         ...(attempt.reconciliation
           ? {
               reconciliation: {
@@ -239,20 +273,24 @@ export const zaloAccountSendAttemptService = {
       )
     }
   },
-  async confirm(input: {
-    workspaceId: string
-    accountId: string
-    commandId: string
-    threadId: string
-    messageIds: string[]
-  }): Promise<void> {
+  async confirm(
+    input: {
+      workspaceId: string
+      accountId: string
+      commandId: string
+      threadId: string
+    } & Omit<ZaloAccountSendResult, "sentCount"> & {
+        sentCount?: number
+      },
+  ): Promise<void> {
     const attempt = await zaloAccountSendAttemptRepository.find(input)
-    if (
-      attempt?.threadId !== input.threadId ||
-      input.messageIds.length < 1 ||
-      input.messageIds.length > 10 ||
-      input.messageIds.some((id) => !id || id.length > 200)
-    ) {
+    const result = zaloAccountSendResultSchema.safeParse({
+      messageIds: input.messageIds,
+      sentCount: input.sentCount ?? input.messageIds.length,
+      delivery: input.delivery,
+      remainingUnknown: input.remainingUnknown,
+    })
+    if (attempt?.threadId !== input.threadId || !result.success) {
       throw new Error("Zalo send acknowledgement has no matching attempt")
     }
     const settled = await zaloAccountSendAttemptRepository.settle({
@@ -260,7 +298,10 @@ export const zaloAccountSendAttemptService = {
       accountId: input.accountId,
       commandId: input.commandId,
       status: "applied",
-      providerMessageIds: input.messageIds,
+      providerMessageIds: result.data.messageIds,
+      sentCount: result.data.sentCount,
+      delivery: result.data.delivery,
+      remainingUnknown: result.data.remainingUnknown,
     })
     if (settled?.conflict) {
       await this.publishOutcome(settled.row)
@@ -272,10 +313,8 @@ export const zaloAccountSendAttemptService = {
   },
   async send(
     input: SendInput,
-    dispatch: (
-      commandId: string,
-    ) => Promise<{ messageIds: string[]; sentCount: number }>,
-  ): Promise<{ messageIds: string[]; sentCount: number }> {
+    dispatch: (commandId: string) => Promise<ZaloAccountSendResult>,
+  ): Promise<ZaloAccountSendResult> {
     const message = zaloAccountOutboundMessageSchema.parse(input.message)
     const commandId = await this.commandId(input)
     const scope = {
@@ -306,7 +345,8 @@ export const zaloAccountSendAttemptService = {
       )
     }
     if (!claimed) {
-      if (row.status === "applied") {
+      const recorded = getZaloAccountSendResult(row)
+      if (recorded) {
         if (input.localMessage) {
           await this.publishOutcome(row).catch((error) =>
             logger.warn(
@@ -318,10 +358,7 @@ export const zaloAccountSendAttemptService = {
             ),
           )
         }
-        return {
-          messageIds: row.providerMessageIds,
-          sentCount: row.providerMessageIds.length,
-        }
+        return recorded
       }
       if (row.status === "failed") {
         if (input.localMessage) {
@@ -354,42 +391,42 @@ export const zaloAccountSendAttemptService = {
           ),
         )
       }
-      if (settled.row.status === "applied") {
-        return {
-          messageIds: settled.row.providerMessageIds,
-          sentCount: settled.row.providerMessageIds.length,
-        }
+      const confirmed = getZaloAccountSendResult(settled.row)
+      if (confirmed) {
+        return confirmed
       }
       throw unknownOutcome()
     }
     let outcome: "applied" | "failed" | "unknown" = "unknown"
+    let accepted: ZaloAccountSendResult | null = null
     try {
-      const result = await dispatch(commandId)
-      if (!result.messageIds.length) {
-        throw unknownOutcome()
-      }
+      const result = zaloAccountSendResultSchema.parse(
+        await dispatch(commandId),
+      )
       const settled = await zaloAccountSendAttemptRepository.settle({
         ...scope,
         status: "applied",
         providerMessageIds: result.messageIds,
+        sentCount: result.sentCount,
+        delivery: result.delivery,
+        remainingUnknown: result.remainingUnknown,
       })
-      outcome = "applied"
-      return {
-        messageIds: settled.row.providerMessageIds,
-        sentCount: settled.row.providerMessageIds.length,
+      accepted = getZaloAccountSendResult(settled.row)
+      if (!accepted) {
+        throw unknownOutcome()
       }
+      outcome = "applied"
+      return accepted
     } catch (error) {
       const acknowledged = await zaloAccountSendAttemptRepository.find(scope)
-      if (acknowledged?.status === "applied") {
+      accepted = acknowledged ? getZaloAccountSendResult(acknowledged) : null
+      if (accepted) {
         outcome = "applied"
-        return {
-          messageIds: acknowledged.providerMessageIds,
-          sentCount: acknowledged.providerMessageIds.length,
-        }
+        return accepted
       }
       outcome =
         error instanceof ZaloAccountPreDispatchError ? "failed" : "unknown"
-      await zaloAccountSendAttemptRepository.settle({
+      const settled = await zaloAccountSendAttemptRepository.settle({
         ...scope,
         status: outcome,
         sendError:
@@ -397,6 +434,11 @@ export const zaloAccountSendAttemptService = {
             ? { code: "send_unknown", phase: "dispatch", safeAction: "inspect" }
             : getZaloAccountErrorInfo(error),
       })
+      accepted = getZaloAccountSendResult(settled.row)
+      if (accepted) {
+        outcome = "applied"
+        return accepted
+      }
       if (outcome === "failed") {
         throw error
       }
@@ -427,6 +469,12 @@ export const zaloAccountSendAttemptService = {
             commandId,
             origin: input.origin,
             outcome,
+            ...(accepted?.delivery
+              ? {
+                  delivery: accepted.delivery,
+                  remainingUnknown: accepted.remainingUnknown,
+                }
+              : {}),
           }),
           source: `zaloAccount:${input.origin}`,
         },

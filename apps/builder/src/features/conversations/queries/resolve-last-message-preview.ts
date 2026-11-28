@@ -12,6 +12,7 @@ import {
   getThreadControlContextCard,
 } from "@/features/messages/lib/thread-control-content"
 import { zaloMessageLabel } from "@/features/messages/lib/zalo-message-label"
+import { isZaloStickerMessage } from "@/features/messages/lib/zalo-rich-message"
 import type { MessageResourceWithRelations } from "@/features/messages/schema/resource"
 
 const EMPTY_PREVIEW = " "
@@ -62,6 +63,7 @@ export function resolveLastMessagePreview(
   message: MessageResourceWithRelations | undefined,
   t: ReturnType<typeof useTranslations>,
   brand = "",
+  isZaloAccount = false,
 ): string {
   const retentionLabel = message && zaloMessageLabel(message)
   if (retentionLabel) {
@@ -71,6 +73,9 @@ export function resolveLastMessagePreview(
   // it: it reads the same placeholder the open timeline renders.
   if (message?.deletedAt) {
     return t("messages.messageDeleted")
+  }
+  if (isZaloAccount && message && isZaloStickerMessage(message)) {
+    return t("zaloAccount.sticker")
   }
 
   // A call activity message stores its English fallback in `message.text` (see

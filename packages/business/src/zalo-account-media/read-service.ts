@@ -5,8 +5,10 @@ import {
   zaloAccountMediaRepository as repository,
 } from "@chatbotx.io/database/repositories"
 import { uploader } from "@chatbotx.io/filesystem"
+import { toZaloAccountWebUrl } from "@chatbotx.io/sdk"
 import { contactInboxService } from "../contact-inbox/service"
 import { notFoundException, validationException } from "../errors"
+import { resolveZaloImagePreviewUrl } from "../media/resolve-media-url"
 import { buildZaloMessageResources } from "../media/zalo-account-capture"
 import { hiddenZaloAccountMessageIds } from "../zalo-account/message-visibility"
 import { zaloAccountService } from "../zalo-account/service"
@@ -69,6 +71,26 @@ const safe = ({ reference: r, asset: a }: MediaJoined) => ({
 })
 const sameTime = (a: Date | null, b: Date) =>
   a !== null && new Date(a).getTime() === new Date(b).getTime()
+
+const previewDomains = ["zdn.vn", "zadn.vn", "zalo.me", "zalo.vn"]
+const isInlineImage = ({ reference, asset }: MediaJoined) =>
+  reference.role === "original" &&
+  (asset.kind === "image" || asset.kind === "gif")
+
+const canUseProviderPreview = (asset: MediaJoined["asset"]) =>
+  (asset.state === "pending" || asset.state === "downloading") &&
+  Boolean(asset.encryptedSource)
+
+const storedObjectKey = (asset: MediaJoined["asset"], scope: MediaScope) => {
+  const key = asset.objectKey
+  return asset.state === "stored" &&
+    key?.startsWith(
+      `workspace/${scope.workspaceId}/zalo-account/${scope.accountId}/`,
+    ) &&
+    !key.includes("..")
+    ? key
+    : null
+}
 
 export class ZaloAccountMediaReadService {
   private async currentRows(
@@ -223,6 +245,41 @@ export class ZaloAccountMediaReadService {
       mimeType: row.asset.mimeType,
       fileName: row.asset.fileName,
     }
+  }
+  async previewImage(
+    input: MediaScope & { conversationId: string; referenceId: string },
+  ) {
+    const { rows } = await this.currentRows({ ...input, limit: 1 })
+    const row = rows[0]
+    if (!(row && isInlineImage(row)) || row.asset.deletionPhase !== "active") {
+      return null
+    }
+    const key = storedObjectKey(row.asset, input)
+    if (key) {
+      return await uploader.getPresignedDownload(key, 300)
+    }
+    if (!(row.asset.encryptedSource && canUseProviderPreview(row.asset))) {
+      return null
+    }
+    const source = await zaloAccountMediaService.readAssetSource(
+      input,
+      row.asset.encryptedSource,
+    )
+    if (source.type !== "provider_url") {
+      return null
+    }
+    const origin = toZaloAccountWebUrl(source.url, true)
+    if (
+      !origin ||
+      origin.port ||
+      !previewDomains.some(
+        (host) =>
+          origin.hostname === host || origin.hostname.endsWith(`.${host}`),
+      )
+    ) {
+      return null
+    }
+    return origin.href
   }
   async retry(
     input: ContentScope & {
@@ -515,7 +572,14 @@ export class ZaloAccountMediaReadService {
     })
     const result = new Map<
       string,
-      Array<ReturnType<typeof safe> & { url: string | null }>
+      Array<
+        ReturnType<typeof safe> & {
+          slot: string
+          url: string | null
+          frameCount?: number
+          frameDurationMs?: number
+        }
+      >
     >()
     const hidden = await hiddenZaloAccountMessageIds(
       input.workspaceId,
@@ -539,17 +603,36 @@ export class ZaloAccountMediaReadService {
       ) {
         continue
       }
-      const key = row.asset.objectKey
-      const prefix = `workspace/${input.workspaceId}/zalo-account/${row.reference.accountId}/`
-      const url =
-        row.asset.state === "stored" &&
-        row.asset.deletionPhase === "active" &&
-        key?.startsWith(prefix) &&
-        !key.includes("..")
-          ? await uploader.getPresignedDownload(key, 300)
-          : null
+      const mediaScope = {
+        workspaceId: input.workspaceId,
+        accountId: row.reference.accountId,
+      }
+      let url: string | null = null
+      if (row.asset.deletionPhase === "active") {
+        const key = storedObjectKey(row.asset, mediaScope)
+        if (key) {
+          url = await uploader.getPresignedDownload(key, 300)
+        } else if (isInlineImage(row) && canUseProviderPreview(row.asset)) {
+          url = await resolveZaloImagePreviewUrl({
+            ...mediaScope,
+            conversationId: message.conversationId,
+            referenceId: row.reference.id,
+          }).catch(() => null)
+        }
+      }
       const resources = result.get(message.id) ?? []
-      resources.push({ ...safe(row), url })
+      const stickerFrames = row.asset.providerMetadata?.frameCount
+      resources.push({
+        ...safe(row),
+        slot: row.reference.slot,
+        ...(row.asset.kind === "sticker" && stickerFrames
+          ? {
+              frameCount: stickerFrames,
+              frameDurationMs: row.asset.providerMetadata?.durationMs,
+            }
+          : {}),
+        url,
+      })
       result.set(message.id, resources)
     }
     return result

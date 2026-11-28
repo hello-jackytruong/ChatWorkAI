@@ -9,10 +9,17 @@ const mockValidateGroupAudience = vi.hoisted(() =>
   vi.fn().mockResolvedValue(true),
 )
 const mockRetainZaloAttempt = vi.hoisted(() => vi.fn().mockResolvedValue(false))
+const mockZaloParentVisible = vi.hoisted(() => vi.fn().mockResolvedValue(true))
+const mockFindWithAttachments = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(null),
+)
 vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountGroupService: { validateAudience: mockValidateGroupAudience },
   zaloAccountSendAttemptService: {
     hasUnresolvedOrAcceptedSend: mockRetainZaloAttempt,
+  },
+  zaloAccountMessageRecallService: {
+    isOrdinaryAttachmentVisible: mockZaloParentVisible,
   },
 }))
 
@@ -107,7 +114,7 @@ vi.mock("@chatbotx.io/business", () => ({
   publishWorkspaceRealtimeEvent: mockQueueWorkspaceRealtimeEvent,
   queueWorkspaceRealtimeEvent: mockQueueWorkspaceRealtimeEvent,
   messageService: {
-    findWithAttachments: vi.fn().mockResolvedValue(null),
+    findWithAttachments: mockFindWithAttachments,
     hardDelete: mockHardDelete,
     reconcileOutgoingSourceId: mockReconcileOutgoingSourceId,
     updateAttributes: vi.fn().mockResolvedValue(undefined),
@@ -317,6 +324,70 @@ describe("chat send-message handlers", () => {
     expect(mockRecordDelivered).not.toHaveBeenCalled()
     expect(mockContactUnblockIfBlocked).not.toHaveBeenCalled()
     expect(mockEmit).not.toHaveBeenCalled()
+  })
+  test("attaches a visible Zalo direct parent only within the exact thread", async () => {
+    const at = new Date("2026-11-28T07:00:00.000Z")
+    mockFindWithAttachments.mockResolvedValueOnce({
+      id: "parent",
+      contactInboxId: "ci-1",
+      sourceId: "za:account:user:peer:provider-parent",
+      text: "original",
+      createdAt: at,
+      contentAttributes: {
+        zaloAccount: {
+          providerMessageId: "provider-parent",
+          senderId: "peer",
+          msgType: "webchat",
+          timestampMs: at.getTime(),
+        },
+      },
+    })
+    await sendMessageToChannel({
+      conversation: conversation as never,
+      contactInbox: {
+        ...contactInbox,
+        channel: "zaloAccount",
+        contactKind: "person",
+        sourceId: "peer",
+      } as never,
+      message: {
+        id: "msg-1",
+        workspaceId: "ws-1",
+        conversationId: "conv-1",
+        contactInboxId: "ci-1",
+        contentType: "text",
+        messageType: "outgoing",
+        type: "message",
+        text: "reply",
+        createdAt: at,
+        parentId: "parent",
+        parentCreatedAt: at,
+        contentAttributes: { zaloAccount: { accountId: "account" } },
+      } as never,
+    })
+    expect(mockFindWithAttachments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        conversationId: "conv-1",
+      }),
+    )
+    expect(mockZaloParentVisible).toHaveBeenCalledOnce()
+    expect(mockRunChannelHandler).toHaveBeenCalledWith(
+      "message",
+      "sendMessage",
+      expect.objectContaining({
+        data: expect.objectContaining({
+          message: expect.objectContaining({
+            contentAttributes: expect.objectContaining({
+              zaloAccountQuote: expect.objectContaining({
+                providerMessageId: "provider-parent",
+                text: "original",
+              }),
+            }),
+          }),
+        }),
+      }),
+    )
   })
   test("stale group jobs never reach the provider", async () => {
     mockValidateGroupAudience.mockResolvedValueOnce(false)

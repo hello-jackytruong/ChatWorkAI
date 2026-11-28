@@ -41,7 +41,7 @@ export async function captureZaloAccountMessage(
   const stickerIds = [
     ...new Set(
       descriptors.flatMap((item) =>
-        item.kind === "sticker" && !item.url && item.providerResourceId
+        item.kind === "sticker" && item.providerResourceId
           ? [item.providerResourceId]
           : [],
       ),
@@ -60,20 +60,28 @@ export async function captureZaloAccountMessage(
         stickerIds,
       })
       .catch(() => [])
+    const sources = new Map(
+      details.map((detail) => [
+        detail.stickerId,
+        detail.resources.filter((resource) => resource.url),
+      ]),
+    )
+    const expanded = new Set<string>()
     descriptors = descriptors
       .flatMap((descriptor) => {
-        const detail =
-          descriptor.kind === "sticker" && !descriptor.url
-            ? details.find(
-                (item) => item.stickerId === descriptor.providerResourceId,
-              )
+        const stickerId = descriptor.providerResourceId
+        const variants =
+          descriptor.kind === "sticker" && stickerId
+            ? sources.get(stickerId)
             : undefined
-        return detail?.resources.length
-          ? detail.resources.map((resource) => ({
-              ...resource,
-              slot: descriptor.slot,
-            }))
-          : [descriptor]
+        if (!(stickerId && variants?.length)) {
+          return [descriptor]
+        }
+        if (expanded.has(stickerId)) {
+          return []
+        }
+        expanded.add(stickerId)
+        return variants
       })
       .slice(0, 12)
   }

@@ -11,6 +11,14 @@ export const mediaTokenClaimsSchema = z.object({
   workspaceId: z.string().min(1),
   kind: z.enum(["attachment", "avatar"]),
   refId: z.string().min(1),
+  // A Zalo preview uses a media reference ID in place of an attachment ID.
+  zaloImagePreview: z
+    .object({
+      accountId: z.string().min(1).max(200),
+      conversationId: z.string().min(1).max(200),
+    })
+    .strict()
+    .optional(),
   // Parent message createdAt (epoch ms) for attachment tokens. Lets the proxy
   // route the shard lookup directly to the time window that holds the row on a
   // sharded deployment, instead of scanning a fixed recent-history range. Signed

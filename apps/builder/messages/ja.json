@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "設定",
     "connectionStatus": "接続状態",
     "active": "稼働中",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Zalo履歴を削除するための境界メッセージがありません。",
     "deletedOnMyZalo": "自分のZaloから削除済み",
     "deleteChatBoundary": "履歴の削除範囲",
+    "quote": {
+      "title": "元のメッセージ",
+      "unavailable": "元のメッセージは利用できません。"
+    },
+    "mention": {
+      "partial": "候補にすべてのメンバーが表示されるとは限りません。"
+    },
+    "sticker": "スタンプ",
+    "forward": {
+      "title": "メッセージを転送",
+      "sendCopy": "コピーを送信",
+      "description": "同じZaloアカウントの会話を選択してください。"
+    },
+    "composer": {
+      "moreMessageTypes": "その他のメッセージ形式",
+      "recordVoice": "音声メッセージを録音",
+      "voiceUnavailable": "録音できません。代わりにM4Aファイルを選択してください。",
+      "videoPoster": "動画のカバー画像",
+      "bankBin": "銀行コード（BIN）",
+      "accountNumber": "口座番号",
+      "underline": "下線",
+      "urgent": "緊急"
+    },
+    "richMessage": {
+      "openMap": "地図を開く",
+      "bankDetails": "銀行口座情報",
+      "missedCall": "不在着信",
+      "unansweredCall": "応答なし",
+      "incomingCall": "着信",
+      "outgoingCall": "発信",
+      "videoCall": "ビデオ通話",
+      "voiceCall": "音声通話",
+      "processingMedia": "メディアを処理中…",
+      "mediaUnavailable": "メディアを利用できません"
+    },
     "evidence": {
+      "sentPartially": "一部送信済み",
+      "acceptedWithoutId": "Zaloがメッセージを受理しました。メッセージIDを待っています。",
       "unsupportedContent": "未対応のZaloメッセージ",
       "invalidContent": "Zaloメッセージを読み取れませんでした",
       "unsupportedSchema": "未対応のZaloメッセージ形式",

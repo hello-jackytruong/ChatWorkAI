@@ -36,7 +36,7 @@ import {
   useWhatsappTemplatesForInbox,
   WhatsappTemplateSendTab,
 } from "@/features/messages/components/whatsapp-template-send-tab"
-import { createMessageRequest } from "@/features/messages/schema/mutation"
+import { createMessageWithRoutingBypassRequest } from "@/features/messages/schema/mutation"
 import {
   useFlowNodesSelectOptions,
   useFlowSelectOptions,
@@ -151,7 +151,7 @@ export function SelectFlowDialog({
         conversation?.workspaceId ?? "",
         conversation?.id ?? "",
       ),
-      zodResolver(createMessageRequest),
+      zodResolver(createMessageWithRoutingBypassRequest),
       {
         actionProps: {
           onSuccess: () => {

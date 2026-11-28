@@ -234,6 +234,50 @@ describe("ZaloAccountCommandTransport", () => {
     expect(redis.eval).toHaveBeenCalledTimes(1)
   })
 
+  it("projects a partial direct acknowledgement and a group acceptance without inventing IDs", async () => {
+    const base = {
+      commandId: "rich-send",
+      workspaceId: "workspace-1",
+      accountId: "account-1",
+      inboxId: "inbox-1",
+      ttlMs: 30_000,
+      waitTimeoutMs: 100,
+      message: { recipientId: "peer-1", text: "hello", attachments: [] },
+    }
+    const partial = {
+      messageIds: ["original"],
+      sentCount: 1,
+      delivery: "partial",
+      remainingUnknown: true,
+    }
+    redis.get.mockResolvedValueOnce("owner-1:9").mockResolvedValueOnce(
+      JSON.stringify({
+        status: "applied",
+        result: { status: "sent", ...partial },
+      }),
+    )
+    await expect(transport.sendDirectAndWait(base)).resolves.toEqual(partial)
+    const accepted = {
+      messageIds: [],
+      sentCount: 1,
+      delivery: "accepted_without_id",
+    }
+    redis.get.mockResolvedValueOnce("owner-1:9").mockResolvedValueOnce(
+      JSON.stringify({
+        status: "applied",
+        result: { status: "sent", ...accepted },
+      }),
+    )
+    await expect(
+      transport.sendGroupAndWait({
+        ...base,
+        groupId: "group-1",
+        accountPolicyEpoch: 2,
+        groupPolicyEpoch: 3,
+      }),
+    ).resolves.toEqual(accepted)
+  })
+
   it("rejects a label snapshot whose version regresses below the accepted account version", async () => {
     redis.get.mockResolvedValueOnce("owner-1:9").mockResolvedValueOnce(
       JSON.stringify({
@@ -256,6 +300,52 @@ describe("ZaloAccountCommandTransport", () => {
         waitTimeoutMs: 100,
       }),
     ).rejects.toThrow("snapshot version regressed")
+  })
+
+  it("queries one bounded sticker catalog through the exact account mailbox", async () => {
+    const sticker = {
+      stickerId: "892",
+      categoryId: "0",
+      stickerType: 7,
+      frameCount: 4,
+      frameDurationMs: 125,
+      staticUrl:
+        "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=892&size=130&version=3",
+    }
+    redis.get.mockResolvedValueOnce("owner-1:9").mockResolvedValueOnce(
+      JSON.stringify({
+        status: "applied",
+        result: { status: "synced", stickerCatalog: [sticker] },
+      }),
+    )
+    const stickerCatalogQuery = {
+      kind: "search" as const,
+      query: "hello",
+      limit: 20,
+    }
+    await expect(
+      transport.getStickerCatalogAndWait({
+        commandId: "sticker-query-1",
+        workspaceId: "workspace-1",
+        accountId: "account-1",
+        inboxId: "inbox-1",
+        ttlMs: 10_000,
+        waitTimeoutMs: 100,
+        stickerCatalogQuery,
+      }),
+    ).resolves.toEqual([sticker])
+    const serialized = redis.eval.mock.calls[0]?.at(-1)
+    expect(JSON.parse(String(serialized))).toMatchObject({
+      kind: "get_sticker_catalog",
+      target: { ownerId: "owner-1", fenceToken: "9" },
+      route: {
+        kind: "account",
+        workspaceId: "workspace-1",
+        accountId: "account-1",
+        inboxId: "inbox-1",
+      },
+      stickerCatalogQuery,
+    })
   })
 })
 

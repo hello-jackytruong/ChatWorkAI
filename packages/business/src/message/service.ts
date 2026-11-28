@@ -400,11 +400,15 @@ class MessageService extends BaseService {
       where: { workspaceId: props.workspaceId, id: message.conversationId },
     })
     if (updated && conversation) {
+      const projected = await withResolvedAttachmentUrls(updated, {
+        channel: "zaloAccount",
+        workspaceId: props.workspaceId,
+      })
       await queueWorkspaceRealtimeEvent(props.workspaceId, {
         eventType: RealtimeEventType.messageContentUpdated,
         data: {
           messageId: updated.id,
-          contentAttributes: updated.contentAttributes ?? {},
+          contentAttributes: projected.contentAttributes ?? {},
         },
         route: routeForConversation(conversation),
       })

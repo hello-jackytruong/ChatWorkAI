@@ -9,8 +9,13 @@ import type {
   ZaloAccountAttachment,
   ZaloAccountGroupAudience,
   ZaloAccountPreparedSend,
+  ZaloAccountSendContent,
+  ZaloAccountSendDelivery,
 } from "@chatbotx.io/sdk"
-import { getZaloAccountErrorInfo } from "@chatbotx.io/sdk"
+import {
+  getZaloAccountErrorInfo,
+  zaloAccountSendContentSchema,
+} from "@chatbotx.io/sdk"
 import { createId } from "@chatbotx.io/utils"
 import { sha256Hex } from "@chatbotx.io/utils/crypto"
 import { conversationService } from "../conversation/service"
@@ -23,7 +28,12 @@ import { createOutgoing } from "../message/create-outgoing"
 import { assertPublicUrl } from "../net/ssrf-guard"
 import { withBlockedOwnerGuard } from "../workspace-lifecycle/with-blocked-owner-guard"
 import { zaloAccountGroupService } from "./group.service"
-import { zaloAccountSendAttemptService } from "./send-attempt.service"
+import { resolveZaloForward } from "./resolve-forward"
+import { isZaloAccountRichSendEnabled } from "./rich-send-policy"
+import {
+  getZaloAccountSendResult,
+  zaloAccountSendAttemptService,
+} from "./send-attempt.service"
 import { zaloAccountService } from "./service"
 
 type SendInput = {
@@ -35,6 +45,12 @@ type SendInput = {
   providerUid?: string
   text?: string
   attachment?: ZaloAccountAttachment
+  content?: ZaloAccountSendContent
+  forward?: {
+    conversationId: string
+    messageId: string
+    messageCreatedAt: Date
+  }
   replyToMessageId?: string
   replyToMessageCreatedAt?: Date
 }
@@ -51,15 +67,6 @@ const requireAccount = async (input: {
   }
   return account
 }
-const resultOf = (
-  row: Pick<ZaloAccountSendAttemptModel, "status" | "providerMessageIds">,
-) =>
-  row.status === "applied"
-    ? {
-        messageIds: row.providerMessageIds,
-        sentCount: row.providerMessageIds.length,
-      }
-    : null
 
 const projectOutcome = (row: ZaloAccountSendAttemptModel) => ({
   commandId: row.commandId,
@@ -67,6 +74,13 @@ const projectOutcome = (row: ZaloAccountSendAttemptModel) => ({
   messageId: row.messageId,
   messageCreatedAt: row.messageCreatedAt?.toISOString() ?? null,
   messageIds: row.providerMessageIds,
+  ...(row.reconciliation?.delivery
+    ? {
+        delivery: row.reconciliation.delivery,
+        sentCount: row.reconciliation.sentCount,
+        remainingUnknown: row.reconciliation.remainingUnknown,
+      }
+    : {}),
   ...(row.reconciliation
     ? {
         reconciliation: {
@@ -159,7 +173,12 @@ export const zaloAccountCanonicalSendService = {
   async getOutcome(
     input: Omit<
       SendInput,
-      "text" | "attachment" | "replyToMessageId" | "replyToMessageCreatedAt"
+      | "text"
+      | "attachment"
+      | "content"
+      | "forward"
+      | "replyToMessageId"
+      | "replyToMessageCreatedAt"
     >,
   ) {
     const account = await requireAccount(input)
@@ -275,57 +294,108 @@ export const zaloAccountCanonicalSendService = {
     if (!context) {
       throw notFoundException("Zalo conversation not found")
     }
+    const prepare = async (
+      attachment: ZaloAccountAttachment,
+      key: string,
+      maximum: number,
+    ): Promise<UploadedFile> =>
+      await uploadFileFromUrl(
+        attachment.url,
+        pathJoin(
+          `public/space/${row.workspaceId}/conversations/${payload.conversationId}`,
+          key,
+        ),
+        "public-read",
+        maximum,
+        async (url) => await assertPublicUrl(url, "Zalo attachment"),
+        AbortSignal.timeout(30_000),
+        async ({ mimeType }) => {
+          if (
+            attachment.mimeType &&
+            attachment.mimeType.split(";")[0] !== mimeType
+          ) {
+            throw validationException(
+              "attachment",
+              "Attachment MIME type mismatch",
+            )
+          }
+          if (
+            attachment.kind === "image" &&
+            !["image/jpeg", "image/png", "image/gif", "image/webp"].includes(
+              mimeType,
+            )
+          ) {
+            throw validationException(
+              "attachment",
+              "Unsupported Zalo image type",
+            )
+          }
+          if (["text/html", "application/xhtml+xml"].includes(mimeType)) {
+            throw validationException(
+              "attachment",
+              "Unsupported Zalo file type",
+            )
+          }
+          return await Promise.resolve({})
+        },
+      )
     const attachment = payload.attachment
+    const dispatchContent = payload.forward
+      ? await resolveZaloForward({
+          ...payload.forward,
+          accountId: row.accountId,
+          workspaceId: row.workspaceId,
+        })
+      : payload.content
     const prepareAttachment = attachment
-      ? async (): Promise<UploadedFile> =>
-          await uploadFileFromUrl(
-            attachment.url,
-            pathJoin(
-              `public/space/${row.workspaceId}/conversations/${payload.conversationId}`,
-              messageId,
-            ),
-            "public-read",
+      ? () =>
+          prepare(
+            attachment,
+            messageId,
             (attachment.kind === "image" ? 10 : 25) * 1024 * 1024,
-            async (url) => await assertPublicUrl(url, "Zalo attachment"),
-            AbortSignal.timeout(30_000),
-            async ({ mimeType }) => {
-              if (
-                attachment.mimeType &&
-                attachment.mimeType.split(";")[0] !== mimeType
-              ) {
-                throw validationException(
-                  "attachment",
-                  "Attachment MIME type mismatch",
-                )
-              }
-              if (
-                attachment.kind === "image" &&
-                ![
-                  "image/jpeg",
-                  "image/png",
-                  "image/gif",
-                  "image/webp",
-                ].includes(mimeType)
-              ) {
-                throw validationException(
-                  "attachment",
-                  "Unsupported Zalo image type",
-                )
-              }
-              if (["text/html", "application/xhtml+xml"].includes(mimeType)) {
-                throw validationException(
-                  "attachment",
-                  "Unsupported Zalo file type",
-                )
-              }
-              return await Promise.resolve({})
-            },
           )
+      : undefined
+    const media: ZaloAccountAttachment[] = []
+    if (dispatchContent?.kind === "media") {
+      media.push(...dispatchContent.attachments)
+    } else if (dispatchContent?.kind === "video") {
+      media.push(
+        { kind: "file", url: dispatchContent.url },
+        { kind: "image", url: dispatchContent.thumbnailUrl },
+      )
+    } else if (dispatchContent?.kind === "voice") {
+      media.push({ kind: "file", url: dispatchContent.url })
+    }
+    const prepareZaloAttachments = media.length
+      ? async () => {
+          const files: UploadedFile[] = []
+          let available = 40 * 1024 * 1024
+          for (const [index, item] of media.entries()) {
+            if (available <= 0) {
+              throw validationException(
+                "attachment",
+                "Zalo media exceeds the total size limit",
+              )
+            }
+            const file = await prepare(
+              item,
+              `${messageId}-${index}`,
+              Math.min(
+                available,
+                (item.kind === "image" ? 10 : 25) * 1024 * 1024,
+              ),
+            )
+            available -= file.size
+            files.push(file)
+          }
+          return files
+        }
       : undefined
     await createOutgoing({
       ...context,
       input: {
         text: payload.text,
+        ...(dispatchContent ? { zaloAccountContent: dispatchContent } : {}),
         clientId: messageId,
         replyToMessageId: payload.replyToMessageId,
         replyToMessageCreatedAt: payload.replyToMessageCreatedAt
@@ -339,19 +409,56 @@ export const zaloAccountCanonicalSendService = {
         commandId: payload.clientId,
       },
       prepareAttachment,
+      ...(prepareZaloAttachments ? { prepareZaloAttachments } : {}),
       groupAudience,
     })
   },
-  async send(
-    input: SendInput,
-  ): Promise<{ messageIds: string[]; sentCount: number }> {
-    if (Boolean(input.text) === Boolean(input.attachment)) {
+  async send(input: SendInput): Promise<{
+    messageIds: string[]
+    sentCount: number
+    delivery?: ZaloAccountSendDelivery
+    remainingUnknown?: boolean
+  }> {
+    if (
+      [input.text, input.attachment, input.content, input.forward].filter(
+        Boolean,
+      ).length !== 1
+    ) {
       throw validationException(
         "message",
         "Provide exactly one text or attachment",
       )
     }
     const account = await requireAccount(input)
+    const content = input.content
+      ? zaloAccountSendContentSchema.parse(input.content)
+      : undefined
+    if (
+      !input.groupId &&
+      content &&
+      "mentions" in content &&
+      content.mentions?.length
+    ) {
+      throw validationException(
+        "content",
+        "Mentions require a Zalo Account group",
+      )
+    }
+    if (
+      (content || input.forward) &&
+      !isZaloAccountRichSendEnabled(account.id)
+    ) {
+      throw validationException(
+        "content",
+        "Rich sending is disabled for this Zalo account",
+      )
+    }
+    if (input.forward && input.replyToMessageId) {
+      throw validationException(
+        "content",
+        "A forwarded message cannot include a reply",
+      )
+    }
     let threadId: string
     let group:
       | Awaited<ReturnType<typeof zaloAccountGroupService.get>>
@@ -417,6 +524,15 @@ export const zaloAccountCanonicalSendService = {
       clientId: input.commandId,
       text: input.text,
       attachment: input.attachment,
+      ...(content ? { content } : {}),
+      ...(input.forward
+        ? {
+            forward: {
+              ...input.forward,
+              messageCreatedAt: input.forward.messageCreatedAt.toISOString(),
+            },
+          }
+        : {}),
       replyToMessageId: input.replyToMessageId,
       replyToMessageCreatedAt: input.replyToMessageCreatedAt?.toISOString(),
     }
@@ -445,7 +561,7 @@ export const zaloAccountCanonicalSendService = {
         "zaloCommandConflict",
       )
     }
-    const completed = resultOf(row)
+    const completed = getZaloAccountSendResult(row)
     if (completed) {
       return completed
     }
@@ -464,7 +580,7 @@ export const zaloAccountCanonicalSendService = {
         commandId,
       })
       if (current) {
-        const result = resultOf(current)
+        const result = getZaloAccountSendResult(current)
         if (result) {
           return result
         }

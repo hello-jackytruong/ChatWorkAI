@@ -1668,6 +1668,10 @@ sync, canonical messaging and lifecycle aggregates. Connection lifecycle uses th
 
 ```bash
 chatbotx zalo-accounts list
+chatbotx zalo-accounts stickers list <accountId> --search <keyword>
+chatbotx zalo-accounts stickers list <accountId> --categoryId <categoryId>
+chatbotx zalo-accounts members list <accountId> <groupId> --conversationId <conversationId>
+chatbotx zalo-accounts history list <accountId> <conversationId> --contactInboxId <contactInboxId> --kind media
 chatbotx zalo-accounts media list <accountId> --conversationId <conversationId>
 chatbotx zalo-accounts media get <accountId> <referenceId> --conversationId <conversationId>
 chatbotx zalo-accounts download list <accountId> <referenceId> --conversationId <conversationId>
@@ -1694,6 +1698,12 @@ chatbotx zalo-accounts tags update <accountId> <groupId> --commandId <stable-id>
 chatbotx zalo-account-set-group-messaging <accountId> --enabled <true|false>
 chatbotx zalo-account-update-group-policy <accountId> <groupId> --receiveEnabled <true|false> --sendEnabled <true|false> --automationMode <disabled|mentionOnly|all>
 ```
+
+For enrolled accounts, the direct and group send commands also accept
+`--content <json>` for rich content or `--forward <json>` for a source
+message pointer. Use `stickers list` to get `stickerId`, `categoryId`, and
+`stickerType` for a sticker message. Inspect the send attempt for a partial
+result or an acknowledgment without a message ID. [Zalo Account messaging](../../docs/zalo-account.md#rich-content-in-the-inbox)
 
 Archived message-media reads require the `inbox` scope and current conversation
 access; `channels` alone cannot read message content. For account/group/contact

@@ -4284,6 +4284,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "GET",
+    "operationId": "zaloAccounts.listGroupMembers",
+    "path": "/v1/zalo-accounts/{accountId}/groups/{groupId}/members",
+  },
+  {
+    "method": "GET",
     "operationId": "zaloAccounts.listGroups",
     "path": "/v1/zalo-accounts/{accountId}/groups",
   },
@@ -4296,6 +4301,16 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "GET",
     "operationId": "zaloAccounts.listMedia",
     "path": "/v1/zalo-accounts/{accountId}/media",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.listStickers",
+    "path": "/v1/zalo-accounts/{accountId}/stickers",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.locateQuote",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/quote",
   },
   {
     "method": "POST",
@@ -4311,6 +4326,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "POST",
     "operationId": "zaloAccounts.retryMedia",
     "path": "/v1/zalo-accounts/{accountId}/media/{referenceId}/retry",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.searchHistory",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/history",
   },
   {
     "method": "POST",

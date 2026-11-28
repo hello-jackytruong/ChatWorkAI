@@ -6,6 +6,7 @@ type Captured = {
   method: string
   path: string
   description?: string
+  input?: { parse: (value: unknown) => unknown }
   output?: { parse: (value: unknown) => unknown }
   handler?: (arg: never) => unknown
 }
@@ -17,7 +18,10 @@ vi.mock("@/orpc", () => ({
       const record: Captured = route
       captured.push(record)
       const chain = {
-        input: () => chain,
+        input: (schema: Captured["input"]) => {
+          record.input = schema
+          return chain
+        },
         output: (schema: Captured["output"]) => {
           record.output = schema
           return chain
@@ -35,6 +39,10 @@ vi.mock("@/orpc", () => ({
 
 const mocks = vi.hoisted(() => ({
   canonicalSend: vi.fn(),
+  stickerCatalog: vi.fn(),
+  timeline: vi.fn(),
+  quote: vi.fn(),
+  conversationAccess: vi.fn(),
   outcome: vi.fn(),
   messageOutcome: vi.fn(),
   account: { findById: vi.fn(), listByWorkspace: vi.fn(), status: vi.fn() },
@@ -51,6 +59,12 @@ vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountGroupService: mocks.group,
   zaloAccountLabelService: mocks.label,
   zaloAccountService: mocks.account,
+  zaloAccountStickerCatalogService: { list: mocks.stickerCatalog },
+  zaloAccountTimelineService: { search: mocks.timeline, locate: mocks.quote },
+}))
+vi.mock("@/lib/public-api/member-scope", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/public-api/member-scope")>()),
+  assertConversationAccessForCaller: mocks.conversationAccess,
 }))
 vi.mock("@chatbotx.io/business/zalo-account/canonical-send", () => ({
   zaloAccountCanonicalSendService: {
@@ -78,6 +92,79 @@ const procedure = (method: string, path: string) => {
 
 describe("Zalo Account public API", () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it("checks conversation access before searching Zalo history", async () => {
+    const handler = procedure(
+      "GET",
+      "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/history",
+    )
+    const call = {
+      context: { workspace: { id: "100" } },
+      input: {
+        accountId: "200",
+        conversationId: "300",
+        contactInboxId: "400",
+        kind: "file",
+      },
+    } as never
+    mocks.conversationAccess.mockRejectedValueOnce(
+      new Error("Conversation not found"),
+    )
+    await expect(handler(call)).rejects.toThrow("Conversation not found")
+    expect(mocks.timeline).not.toHaveBeenCalled()
+
+    mocks.timeline.mockResolvedValueOnce({ data: [], nextCursor: null })
+    await expect(handler(call)).resolves.toEqual({ data: [], nextCursor: null })
+    expect(mocks.timeline).toHaveBeenCalledWith({
+      workspaceId: "100",
+      accountId: "200",
+      conversationId: "300",
+      contactInboxId: "400",
+      kind: "file",
+      cursor: undefined,
+    })
+  })
+
+  it("reads the Zalo sticker catalog through the scoped account service", async () => {
+    mocks.stickerCatalog.mockResolvedValueOnce([])
+    await expect(
+      procedure(
+        "GET",
+        "/v1/zalo-accounts/{accountId}/stickers",
+      )({
+        context: { workspace: { id: "1" } },
+        input: { accountId: "2", search: "hello", limit: 12 },
+      } as never),
+    ).resolves.toEqual({ stickers: [] })
+    expect(mocks.stickerCatalog).toHaveBeenCalledWith({
+      workspaceId: "1",
+      accountId: "2",
+      query: { kind: "search", query: "hello", limit: 12 },
+    })
+  })
+
+  it("accepts the same rich content for persisted direct and group sends", () => {
+    const content = { kind: "link", url: "https://example.com/article" }
+    const base = { accountId: "234", commandId: "send-link-123", content }
+    for (const [path, target] of [
+      ["/v1/zalo-accounts/{accountId}/messages", { contactInboxId: "123" }],
+      ["/v1/zalo-accounts/{accountId}/groups/{id}/messages", { id: "345" }],
+    ] as const) {
+      const route = captured.find(
+        (candidate) => candidate.method === "POST" && candidate.path === path,
+      )
+      expect(route?.input?.parse({ ...base, ...target })).toMatchObject({
+        content,
+      })
+      expect(() =>
+        route?.input?.parse({
+          ...base,
+          ...target,
+          text: "Conflicting content",
+        }),
+      ).toThrow()
+    }
+  })
 
   it("lists only safe metadata in the token workspace", async () => {
     mocks.account.listByWorkspace.mockResolvedValueOnce([

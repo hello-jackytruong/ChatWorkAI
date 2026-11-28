@@ -66,6 +66,7 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 - [ ] Có trạng thái `pending / downloading / stored / failed / expired`.
 - [ ] Có retry giới hạn, thời điểm thử gần nhất, lỗi và số lần thử.
 - [ ] Ưu tiên tải sớm để giảm nguy cơ URL Zalo hết hạn hoặc bị thu hồi.
+  - Media mới được đưa vào hàng đợi sau khi ghi DB. Inbox xem trước ảnh/GIF từ nguồn Zalo nếu URL còn dùng được, thông qua link tạm đã kiểm tra quyền và trạng thái thu hồi. Khi mở lại hội thoại, Inbox ưu tiên bản R2/S3 đã lưu. URL gốc vẫn được mã hóa trong bản ghi asset. [Đường nhận media](../packages/business/src/media/zalo-account-ingress.ts) · [Kiểm thử giao diện ảnh](../apps/builder/__tests__/message-item-attachments.test.tsx).
 - [ ] Lưu tên file gốc, MIME thực tế, size, checksum, kích thước ảnh/video và duration.
 - [ ] Giữ provider URL/ID và object key riêng; không dùng URL ký tạm thời làm định danh lưu trữ.
 - [ ] Phân vùng object theo workspace/account/conversation; không trộn dữ liệu giữa workspace.
@@ -118,20 +119,24 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P1 · 5. Tin nhắn và các loại nội dung
 
+**Pha 1 · Kiểm thử cục bộ:** DM, nhóm và own-echo có metadata hiển thị riêng cho Zalo Account. Inbox đọc video/voice và ảnh thẻ từ luồng archive riêng tư. Tài nguyên độc lập vừa tải xong cần tải lại hội thoại để thấy trạng thái mới. TTL được lưu theo payload, phần tự biến mất chưa xác minh trên Zalo thật. Các dòng gộp nhận và gửi vẫn mở đến khi kiểm chứng phần gửi.
+
+**Pha 2 · Kiểm thử cục bộ:** composer và API có payload có kiểu cho link, danh thiếp, thẻ ngân hàng, video, voice và nhiều file kèm caption. Send ledger giữ ID đã xác nhận khi gửi được một phần và ghi nhận ACK thiếu ID. Chuyển tiếp text và gửi bản sao ảnh/file đã lưu dùng tin nguồn đã qua kiểm tra quyền. Các khả năng mới giới hạn theo account. Gửi media, codec, TTL và chuyển tiếp qua provider thật vẫn chờ staging.
+
 - [x] Text, ảnh, file và metadata quote cơ bản.
 - [ ] Nhận/gửi video; player inline, poster, duration và download.
 - [ ] Nhận/gửi voice/audio; player, duration và ghi âm từ composer.
-- [ ] Nhận/hiển thị GIF đúng loại; bảo toàn animation.
-- [ ] Nhận/hiển thị link preview: tiêu đề, mô tả, thumbnail, URL gốc.
+- [x] Nhận/hiển thị GIF đúng loại; bảo toàn animation.
+- [x] Nhận/hiển thị link preview: tiêu đề, mô tả, thumbnail, URL gốc.
 - [ ] Gửi link bằng `sendLink`, tận dụng `parseLink` khi phù hợp.
 - [ ] Nhận/gửi danh thiếp bằng `sendCard`.
-- [ ] Render vị trí/bản đồ khi payload cung cấp tọa độ hoặc link hợp lệ.
+- [x] Render vị trí/bản đồ khi payload cung cấp tọa độ hoặc link hợp lệ.
 - [ ] Render bank card/QR chuyển khoản; gửi qua `sendBankCard`.
-- [ ] Render thông báo cuộc gọi: đến/đi/nhỡ, thoại/video, thời lượng nếu có.
-- [ ] Không coi render thông tin cuộc gọi là khả năng thực hiện cuộc gọi.
-- [ ] Phân loại theo cả `msgType`, `content.action` và shape nội dung.
-- [ ] Hỗ trợ các biến thể payload như `recommended`/`recommened`, JSON trong `params`.
-- [ ] Giữ rich text/styles: đậm, nghiêng, gạch chân, gạch ngang, màu, cỡ chữ, danh sách.
+- [x] Render thông báo cuộc gọi: đến/đi/nhỡ, thoại/video, thời lượng nếu có.
+- [x] Không coi render thông tin cuộc gọi là khả năng thực hiện cuộc gọi.
+- [x] Phân loại theo cả `msgType`, `content.action` và shape nội dung.
+- [x] Hỗ trợ các biến thể payload như `recommended`/`recommened`, JSON trong `params`.
+- [x] Giữ rich text/styles: đậm, nghiêng, gạch chân, gạch ngang, màu, cỡ chữ, danh sách.
 - [ ] Gửi styles/urgency bằng các trường SDK thực sự hỗ trợ.
 - [ ] Kiểm chứng TTL/tin tự biến mất trước khi đưa vào UI; lưu rõ giá trị provider.
 - [ ] Forward text/media qua `forwardMessage`, giữ thông tin nguồn nếu SDK hỗ trợ.
@@ -139,34 +144,40 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P1 · 6. Sticker đầy đủ như ZaloCRM
 
-- [ ] Nhận và lưu sticker identity/category/type.
-- [ ] Lấy metadata qua `getStickersDetail`, có batch và cache.
-- [ ] Hiển thị sticker static.
-- [ ] Hiển thị animated WebP hoặc sprite với `totalFrames`/`duration`.
-- [ ] Fallback khi animation, metadata hoặc tài nguyên hết hạn.
-- [ ] Tìm sticker qua `getStickers` và `searchSticker`.
-- [ ] Duyệt bộ sticker qua `getStickerCategoryDetail`.
-- [ ] Picker tìm kiếm, bộ sticker, gần đây và yêu thích nội bộ.
+**Pha 3 · Kiểm thử cục bộ:** nhận diện sticker có category/type, cache theo phiên, tìm và duyệt bộ, gửi qua hàng đợi Inbox, xem sticker tĩnh/động từ archive và dùng xem gần đây/yêu thích theo người dùng và tài khoản. Đã kiểm tra fallback, giảm chuyển động và cache. Còn xác nhận trên Zalo thật về payload các bộ sticker và own-echo của lệnh gửi.
+
+- [x] Nhận và lưu sticker identity/category/type.
+- [x] Lấy metadata qua `getStickersDetail`, có batch và cache.
+- [x] Hiển thị sticker static.
+- [x] Hiển thị animated WebP hoặc sprite với `totalFrames`/`duration`.
+- [x] Fallback khi animation, metadata hoặc tài nguyên hết hạn.
+- [x] Tìm sticker qua `getStickers` và `searchSticker`.
+- [x] Duyệt bộ sticker qua `getStickerCategoryDetail`.
+- [x] Picker tìm kiếm, bộ sticker, gần đây và yêu thích nội bộ.
 - [ ] Gửi qua `sendSticker`, đối chiếu own-echo chống trùng.
-- [ ] Preview sticker trong reply, danh sách hội thoại và lịch sử.
-- [ ] Giới hạn animation khi ngoài màn hình; hỗ trợ giảm chuyển động.
-- [ ] Tách cache tài nguyên công khai khỏi quyền dùng tài khoản Zalo để gọi SDK.
+- [x] Preview sticker trong reply, danh sách hội thoại và lịch sử.
+- [x] Giới hạn animation khi ngoài màn hình; hỗ trợ giảm chuyển động.
+- [x] Tách cache tài nguyên công khai khỏi quyền dùng tài khoản Zalo để gọi SDK.
 
 ## P1 · 7. Album, attachment, reply và mention
 
+**Pha 2 · Kiểm thử cục bộ:** chuẩn bị gửi nhiều ảnh/file và caption có thứ tự trong Inbox/API. Các dòng bên dưới tiếp tục theo dõi việc xác nhận batch trên Zalo thật và cách hiển thị album nhận ở pha 4.
+
+**Pha 4 · Kiểm thử cục bộ:** Inbox gom các ảnh có layout ID, giữ vị trí ảnh khi ảnh đến sai thứ tự hoặc bị thu hồi. Quote dùng provider ID kèm thời gian và mở được tin cũ trong cửa sổ chi tiết. Cho chọn thành viên để mention và kiểm tra lại quyền trước khi gửi vào nhóm. Thư viện tìm nội dung trong từng hội thoại bằng cursor. Còn xác nhận inbound album, mention bản thân và mention toàn nhóm trên Zalo thật. Hồ sơ thành viên chỉ có dữ liệu được phép từ hội thoại và roster, nên có thể thiếu avatar.
+
 - [ ] Gửi nhiều ảnh/file khi SDK cho phép.
-- [ ] Lưu metadata album: group/layout ID, vị trí và tổng số ảnh.
-- [ ] Render album thành một cụm, giữ đúng thứ tự.
-- [ ] Hỗ trợ caption và quy tắc text kèm media nhất quán giữa Inbox/API.
-- [ ] Quote preview cho ảnh/video/file/sticker/card, không hiện raw JSON.
-- [ ] Hiển thị tên/avatar người gửi tin gốc thay vì chỉ UID.
-- [ ] Nhảy đến tin gốc; có fallback nếu tin ngoài trang hoặc đã thu hồi.
-- [ ] Thống nhất cách lưu/đọc quote giữa DM và nhóm.
-- [ ] Composer chọn người để gửi mention thật.
+- [x] Lưu metadata album: group/layout ID, vị trí và tổng số ảnh.
+- [x] Render album thành một cụm, giữ đúng thứ tự.
+- [x] Hỗ trợ caption và quy tắc text kèm media nhất quán giữa Inbox/API.
+- [x] Quote preview cho ảnh/video/file/sticker/card, không hiện raw JSON.
+- [x] Hiển thị tên/avatar người gửi tin gốc thay vì chỉ UID.
+- [x] Nhảy đến tin gốc; có fallback nếu tin ngoài trang hoặc đã thu hồi.
+- [x] Thống nhất cách lưu/đọc quote giữa DM và nhóm.
+- [x] Composer chọn người để gửi mention thật.
 - [ ] Hỗ trợ mention bản thân, thành viên và toàn nhóm nếu provider/quyền cho phép.
-- [ ] Tính offset mention/styles đúng với Unicode và emoji.
-- [ ] Popup hồ sơ khi click avatar, tên người gửi hoặc mention.
-- [ ] Tìm kiếm và thư viện media/file/link trong từng hội thoại.
+- [x] Tính offset mention/styles đúng với Unicode và emoji.
+- [x] Popup hồ sơ khi click avatar, tên người gửi hoặc mention.
+- [x] Tìm kiếm và thư viện media/file/link trong từng hội thoại.
 
 ## P1 · 8. Delivered, seen, typing và reaction
 

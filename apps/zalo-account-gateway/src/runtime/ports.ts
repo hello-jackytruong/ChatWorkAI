@@ -7,6 +7,8 @@ import type {
   ZaloAccountFriendSync,
   ZaloAccountGroup,
   ZaloAccountGroupActivity,
+  ZaloAccountGroupMembersQuery,
+  ZaloAccountGroupMembersResult,
   ZaloAccountGroupMessage,
   ZaloAccountGroupSync,
   ZaloAccountLabel,
@@ -16,6 +18,9 @@ import type {
   ZaloAccountOutboundMessage,
   ZaloAccountRuntimeDiagnostics,
   ZaloAccountRuntimeRef,
+  ZaloAccountSendDelivery,
+  ZaloAccountStickerCatalogEntry,
+  ZaloAccountStickerCatalogQuery,
   ZaloAccountStickerResource,
   ZaloAccountThreadEvent,
 } from "@chatbotx.io/sdk"
@@ -132,6 +137,13 @@ export type ZcaApiPort = {
   getStickerResources?: (
     stickerIds: string[],
   ) => Promise<ZaloAccountStickerResource[]>
+  getStickerCatalog?: (
+    query: ZaloAccountStickerCatalogQuery,
+  ) => Promise<ZaloAccountStickerCatalogEntry[]>
+  getGroupMembers?: (
+    groupId: string,
+    query: ZaloAccountGroupMembersQuery,
+  ) => Promise<ZaloAccountGroupMembersResult>
   listFriends?: (cursor: number) => Promise<ZaloAccountFriendSync>
   sendTyping?: (threadId: string, threadType: "user" | "group") => Promise<void>
   getOwnId: () => Promise<string>
@@ -139,15 +151,13 @@ export type ZcaApiPort = {
   sendDirect: (
     message: ZaloAccountOutboundMessage,
     beforeDispatch?: () => Promise<void>,
-  ) => Promise<{
-    messageIds: string[]
-    sentCount: number
-  }>
+  ) => Promise<ProviderSendResult>
   listGroups: () => Promise<ZaloAccountGroup[] | ZaloAccountGroupSync>
   sendGroup: (
     groupId: string,
     message: ZaloAccountOutboundMessage,
-  ) => Promise<{ messageIds: string[]; sentCount: number }>
+    beforeDispatch?: () => Promise<void>,
+  ) => Promise<ProviderSendResult>
   getLabels: () => Promise<ZaloAccountLabelSnapshot>
   updateLabels: (input: {
     labelData: ZaloAccountLabel[]
@@ -216,8 +226,11 @@ export type RuntimeCommandResult = {
     | "stopped"
 }
 
-export type RuntimeSendResult = {
-  status: "sent"
+export type ProviderSendResult = {
   messageIds: string[]
   sentCount: number
+  delivery?: ZaloAccountSendDelivery
+  remainingUnknown?: boolean
 }
+
+export type RuntimeSendResult = ProviderSendResult & { status: "sent" }

@@ -2,6 +2,66 @@ import { describe, expect, it } from "vitest"
 import { projectZaloAccountRetainedMessage } from "../src/zalo-account/message-projection"
 
 describe("retained Zalo Account projection", () => {
+  it("keeps only the validated album position for a locally hidden item", () => {
+    const album = { layoutId: "album-2", index: 1, itemCount: 3 }
+    const message = {
+      sourceId: "za:a:group:g:p",
+      text: "private caption",
+      contentAttributes: {
+        zaloAccount: { album, providerTtl: 60_000 },
+      },
+      attachments: [{ url: "https://private.test/a" }],
+    }
+    const recall = { id: "r1", lifecycleRevision: 1, localHiddenAt: new Date() }
+    const projected = projectZaloAccountRetainedMessage(message, recall)
+    expect(projected.contentAttributes.zaloAccount).toMatchObject({ album })
+    expect(projected.contentAttributes.zaloAccount).not.toHaveProperty(
+      "providerTtl",
+    )
+    expect(projected.attachments).toEqual([])
+    expect(projected.text).toBeNull()
+    expect(
+      projectZaloAccountRetainedMessage(
+        {
+          ...message,
+          contentAttributes: {
+            zaloAccount: { album: { ...album, index: 99 } },
+          },
+        },
+        recall,
+      ).contentAttributes.zaloAccount,
+    ).not.toHaveProperty("album")
+  })
+
+  it("shows rich content until the group message is hidden locally", () => {
+    const richContent = {
+      kind: "location",
+      latitude: 10.78,
+      longitude: 106.69,
+    }
+    const message = {
+      sourceId: "za:a:group:g:p",
+      text: "Location",
+      attachments: [],
+      contentAttributes: { zaloAccount: { richContent, providerTtl: 60 } },
+    }
+    expect(projectZaloAccountRetainedMessage(message)).toBe(message)
+
+    const projected = projectZaloAccountRetainedMessage(message, {
+      id: "r1",
+      lifecycleRevision: 1,
+      localHiddenAt: new Date(),
+      originalObservedAt: new Date(),
+    })
+    expect(projected.text).toBeNull()
+    expect(projected.contentAttributes.zaloAccount).not.toHaveProperty(
+      "richContent",
+    )
+    expect(projected.contentAttributes.zaloAccount).not.toHaveProperty(
+      "providerTtl",
+    )
+  })
+
   it("removes original fields and nested provider URLs while retaining safe state", () => {
     const message = {
       id: "m1",

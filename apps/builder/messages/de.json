@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Konfigurieren",
     "connectionStatus": "Verbindungsstatus",
     "active": "Aktiv",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Es ist keine Nachrichtengrenze zum Löschen des Zalo-Verlaufs verfügbar.",
     "deletedOnMyZalo": "Auf meinem Zalo gelöscht",
     "deleteChatBoundary": "Grenze für die Verlaufslöschung",
+    "quote": {
+      "title": "Ursprüngliche Nachricht",
+      "unavailable": "Die ursprüngliche Nachricht ist nicht verfügbar."
+    },
+    "mention": {
+      "partial": "Die Mitgliedervorschläge sind möglicherweise unvollständig."
+    },
+    "sticker": "Sticker",
+    "forward": {
+      "title": "Nachricht weiterleiten",
+      "sendCopy": "Kopie senden",
+      "description": "Wähle eine Unterhaltung im selben Zalo-Konto."
+    },
+    "composer": {
+      "moreMessageTypes": "Weitere Nachrichtentypen",
+      "recordVoice": "Sprachnachricht aufnehmen",
+      "voiceUnavailable": "Aufnahme nicht verfügbar. Wähle eine M4A-Datei.",
+      "videoPoster": "Video-Vorschaubild",
+      "bankBin": "Bankcode (BIN)",
+      "accountNumber": "Kontonummer",
+      "underline": "Unterstreichen",
+      "urgent": "Dringend"
+    },
+    "richMessage": {
+      "openMap": "Karte öffnen",
+      "bankDetails": "Bankverbindung",
+      "missedCall": "Verpasster Anruf",
+      "unansweredCall": "Nicht beantworteter Anruf",
+      "incomingCall": "Eingehender Anruf",
+      "outgoingCall": "Ausgehender Anruf",
+      "videoCall": "Videoanruf",
+      "voiceCall": "Sprachanruf",
+      "processingMedia": "Medium wird verarbeitet…",
+      "mediaUnavailable": "Medium nicht verfügbar"
+    },
     "evidence": {
+      "sentPartially": "Teilweise gesendet",
+      "acceptedWithoutId": "Zalo hat die Nachricht angenommen. Die Nachrichten-ID steht aus.",
       "unsupportedContent": "Nicht unterstützte Zalo-Nachricht",
       "invalidContent": "Zalo-Nachricht konnte nicht gelesen werden",
       "unsupportedSchema": "Zalo-Nachrichtenformat wird nicht unterstützt",

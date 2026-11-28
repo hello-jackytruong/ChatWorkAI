@@ -1,4 +1,5 @@
 import { zaloAccountMessageRecallService } from "@chatbotx.io/business/zalo-account/message-recall"
+import { zaloAccountMediaReadService } from "@chatbotx.io/business/zalo-account-media"
 import { resolveFreshMediaUrl } from "@chatbotx.io/channel-registry/media-hydration"
 import { createMessageRepository } from "@chatbotx.io/database/repositories"
 import { uploader } from "@chatbotx.io/filesystem"
@@ -56,6 +57,28 @@ export const GET = async (request: NextRequest, context: RouteContext) => {
   })
   if (resolvedRequest instanceof NextResponse) {
     return resolvedRequest
+  }
+
+  const zaloPreview = resolvedRequest.zaloImagePreview
+  if (zaloPreview) {
+    const url = await zaloAccountMediaReadService
+      .previewImage({
+        workspaceId: resolvedRequest.workspaceId,
+        accountId: zaloPreview.accountId,
+        conversationId: zaloPreview.conversationId,
+        referenceId: resolvedRequest.refId,
+      })
+      .catch(() => null)
+    return NextResponse.redirect(
+      url ?? placeholderUrl(request, "unavailable.svg"),
+      {
+        status: 302,
+        headers: {
+          "Cache-Control": "private, no-store",
+          "Referrer-Policy": "no-referrer",
+        },
+      },
+    )
   }
 
   const unavailable = () =>

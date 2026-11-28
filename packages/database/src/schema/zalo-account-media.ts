@@ -87,6 +87,7 @@ export const zaloAccountMediaAssetModel = pgTable(
       width?: number
       height?: number
       durationMs?: number
+      frameCount?: number
       mimeType?: string
     }>(),
     deletionPhase: zaloAccountMediaDeletionPhase().notNull(),

@@ -146,6 +146,18 @@ export const resendOutgoing = async (props: {
   // never leaves the message claimed (no error, no job) with no way back.
   // The worker finds the comment a private reply answers by its id and
   // createdAt; `createOutgoing` kept the createdAt on the row.
+  const zaloAttributes = message.contentAttributes?.zaloAccount
+  if (
+    contactInbox.channel === "zaloAccount" &&
+    zaloAttributes &&
+    typeof zaloAttributes === "object" &&
+    "richSendKind" in zaloAttributes
+  ) {
+    throw conflictException(
+      "Review this Zalo rich message and create a new send from the composer",
+      NOT_RESENDABLE_CODE,
+    )
+  }
   let parentCreatedAt: Date | null = null
   if (message.parentId && !groupAudience) {
     parentCreatedAt = readReplyTargetCreatedAt(message.contentAttributes)

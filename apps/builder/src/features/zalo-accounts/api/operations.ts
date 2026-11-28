@@ -4,9 +4,15 @@ import {
   zaloAccountGroupTagService,
   zaloAccountMessageStateService,
   zaloAccountService,
+  zaloAccountStickerCatalogService,
 } from "@chatbotx.io/business/zalo-account"
 import { zaloAccountCanonicalSendService } from "@chatbotx.io/business/zalo-account/canonical-send"
-import { zaloAccountAttachmentSchema } from "@chatbotx.io/sdk"
+import {
+  zaloAccountAttachmentSchema,
+  zaloAccountSendContentSchema,
+  zaloAccountSendDeliverySchema,
+  zaloAccountStickerCatalogEntrySchema,
+} from "@chatbotx.io/sdk"
 import { zodBigintAsString } from "@chatbotx.io/utils"
 import { z } from "zod"
 import { mcpSpec } from "@/lib/orpc/mcp-annotations"
@@ -21,6 +27,7 @@ import {
   zaloAccountStatusResource,
 } from "../schema/resource"
 import {
+  zaloForwardInput,
   zaloMessageSendAttemptInput,
   zaloSendAttemptResource,
 } from "../schema/send-attempt"
@@ -79,9 +86,67 @@ const policyFields = {
 const sent = z.object({
   messageIds: z.array(z.string()),
   sentCount: z.number().int().nonnegative(),
+  delivery: zaloAccountSendDeliverySchema.optional(),
+  remainingUnknown: z.boolean().optional(),
 })
 
 export const zaloAccountOperations = {
+  listStickers: api
+    .route({
+      method: "GET",
+      path: "/v1/zalo-accounts/{accountId}/stickers",
+      summary: "List Zalo stickers",
+      description:
+        "Provide either a search term or a categoryId from a previous search. Each result contains the identity fields for sending a sticker.",
+      tags: ["Zalo Accounts"],
+    })
+    .input(
+      scope
+        .extend({
+          search: z
+            .string()
+            .trim()
+            .min(1)
+            .max(80)
+            .optional()
+            .describe("Sticker search keyword, exclusive with categoryId"),
+          categoryId: z
+            .string()
+            .regex(/^\d{1,15}$/)
+            .optional()
+            .describe("Pack ID returned in an earlier result"),
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(20)
+            .default(20)
+            .describe("Maximum stickers to return per request"),
+        })
+        .refine(
+          ({ search, categoryId }) => Boolean(search) !== Boolean(categoryId),
+          {
+            message: "Provide a search term or categoryId",
+          },
+        ),
+    )
+    .output(
+      z.object({ stickers: z.array(zaloAccountStickerCatalogEntrySchema) }),
+    )
+    .errors(readErrors)
+    .handler(async ({ context, input }) => ({
+      stickers: await zaloAccountStickerCatalogService.list({
+        workspaceId: context.workspace.id,
+        accountId: input.accountId,
+        query: input.search
+          ? { kind: "search", query: input.search, limit: input.limit }
+          : {
+              kind: "category",
+              categoryId: input.categoryId ?? "",
+              limit: input.limit,
+            },
+      }),
+    })),
   getMessageSendAttempt: api
     .route({
       method: "GET",
@@ -293,7 +358,7 @@ export const zaloAccountOperations = {
       path: "/v1/zalo-accounts/{accountId}/messages",
       summary: "Send persisted personal Zalo direct message",
       description:
-        "Select one known ContactInbox or provider UID. Supports one text or image/file and a same-thread reply. Creates the Inbox Message before chat-worker dispatch. A timeout remains pending or unknown; use getSendAttempt to inspect its outcome.",
+        "Select one known ContactInbox or provider UID. Provide legacy text, a legacy image/file, or one typed content object. Creates the Inbox Message before dispatch. Inspect getSendAttempt after a timeout.",
       tags: ["Zalo Accounts"],
       spec: mcpSpec({ hitlPolicy: "confirm_outbound", openWorldHint: true }),
     })
@@ -315,6 +380,14 @@ export const zaloAccountOperations = {
             .describe(
               "One image up to 10 MB or file up to 25 MB; mutually exclusive with text",
             ),
+          content: zaloAccountSendContentSchema
+            .optional()
+            .describe(
+              "Typed rich content, exclusive with legacy fields and forward",
+            ),
+          forward: zaloForwardInput
+            .optional()
+            .describe("Accessible same-account source message pointer"),
           replyToMessageId: zodBigintAsString()
             .optional()
             .describe("Same-thread Message ID returned by messages.list"),
@@ -327,9 +400,11 @@ export const zaloAccountOperations = {
         })
         .refine(
           (input) =>
-            Boolean(input.text) !== Boolean(input.attachment) &&
+            [input.text, input.attachment, input.content, input.forward].filter(
+              Boolean,
+            ).length === 1 &&
             Boolean(input.contactInboxId) !== Boolean(input.providerUid),
-          "Select one direct target and one text or attachment",
+          "Select one direct target and one message payload",
         ),
     )
     .output(sent)

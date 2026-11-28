@@ -174,6 +174,13 @@ export const receiveMessage: MessageHandlers<ZaloAccountAuthValue>["receiveMessa
             msgType: payload.msgType,
             timestampMs: payload.timestampMs,
             quote: payload.quote,
+            ...(payload.album ? { album: payload.album } : {}),
+            ...(payload.richContent
+              ? { richContent: payload.richContent }
+              : {}),
+            ...(payload.providerTtl === undefined
+              ? {}
+              : { providerTtl: payload.providerTtl }),
             ...(payload.mediaResources?.length
               ? { mediaResources: payload.mediaResources }
               : {}),
@@ -194,7 +201,9 @@ export const receiveMessage: MessageHandlers<ZaloAccountAuthValue>["receiveMessa
 export const sendMessage: MessageHandlers<ZaloAccountAuthValue>["sendMessage"] =
   async ({ ctx, data }) => {
     const route = accountContext(ctx.integrationDetail)
-    const attachments = (data.message.attachments ?? []).map((attachment) => {
+    const attachments = (
+      data.zaloAccountContent ? [] : (data.message.attachments ?? [])
+    ).map((attachment) => {
       if (attachment.fileType !== "image" && attachment.fileType !== "file") {
         throw new Error(
           `Unsupported Zalo Account attachment type: ${attachment.fileType}`,
@@ -213,6 +222,7 @@ export const sendMessage: MessageHandlers<ZaloAccountAuthValue>["sendMessage"] =
     const quote = parsedQuote.success ? parsedQuote.data : undefined
     const preparedCommandId =
       data.message.contentAttributes?.zaloAccountCommandId
+    const legacyText = data.message.text ? { text: data.message.text } : {}
     return await sendRoutedMessage(
       route,
       data.contact.sourceId,
@@ -221,7 +231,9 @@ export const sendMessage: MessageHandlers<ZaloAccountAuthValue>["sendMessage"] =
         : (data.message.clientId ?? data.message.id),
       {
         recipientId: data.contact.sourceId,
-        ...(data.message.text ? { text: data.message.text } : {}),
+        ...(data.zaloAccountContent
+          ? { content: data.zaloAccountContent }
+          : legacyText),
         attachments,
         ...(quote ? { quote } : {}),
       },

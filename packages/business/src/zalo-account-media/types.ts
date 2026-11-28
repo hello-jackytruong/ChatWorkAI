@@ -27,6 +27,7 @@ export type RegisterMediaResource = {
   width?: number
   height?: number
   durationMs?: number
+  frameCount?: number
   fileName?: string
 }
 export type MediaLease = MediaScope & { assetId: string; leaseToken: string }

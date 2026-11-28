@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   inboxes: vi.fn(),
   account: vi.fn(),
   sign: vi.fn(),
+  temporaryPreview: vi.fn(),
+  source: vi.fn(),
   retry: vi.fn(),
   page: vi.fn(),
   register: vi.fn(),
@@ -54,7 +56,11 @@ vi.mock("../src/zalo-account-media/service", () => ({
   zaloAccountMediaService: {
     retry: mocks.retry,
     registerResources: mocks.register,
+    readAssetSource: mocks.source,
   },
+}))
+vi.mock("../src/media/resolve-media-url", () => ({
+  resolveZaloImagePreviewUrl: mocks.temporaryPreview,
 }))
 const secretsPattern = /objectKey|encryptedSource|workspace\/w/
 const input = {
@@ -113,6 +119,13 @@ beforeEach(() => {
     { id: "ci", channel: "zaloAccount", inboxId: "i" },
   ])
   mocks.sign.mockResolvedValue("https://signed.example.test/a")
+  mocks.temporaryPreview.mockResolvedValue(
+    "https://app.example.test/media/attachment/signed-preview",
+  )
+  mocks.source.mockResolvedValue({
+    type: "provider_url",
+    url: "https://photo.zdn.vn/photo.jpeg?provider-token=short-lived",
+  })
 })
 it("returns safe status and signs only after proving current message/account binding even flagoff", async () => {
   process.env.ZALO_ACCOUNT_MEDIA_STORAGE_ENABLED = "false"
@@ -185,6 +198,61 @@ it("requires exact requested reference and refuses signing an unfinished asset",
   ])
   await expect(service.download(input)).rejects.toThrow()
   expect(mocks.sign).not.toHaveBeenCalled()
+})
+
+it("uses a short-lived preview while an image archives, then prefers R2 and keeps the source", async () => {
+  const pending = {
+    ...row,
+    accountInboxId: "i",
+    reference: { ...row.reference, attachmentId: "attachment" },
+    asset: { ...row.asset, state: "downloading", objectKey: null },
+  }
+  mocks.list.mockResolvedValue([pending])
+  const project = () =>
+    service.projectMessages({
+      workspaceId: input.workspaceId,
+      messages: [
+        {
+          id: "m",
+          createdAt: time,
+          conversationId: "c",
+          contactInboxId: "ci",
+        } as never,
+      ],
+      inboxByContactInboxId: new Map([
+        ["ci", { channel: "zaloAccount", inboxId: "i" }],
+      ]),
+    })
+  expect((await project()).get("m")?.[0]?.url).toContain("/media/attachment/")
+  expect(mocks.source).not.toHaveBeenCalled()
+  expect(await service.previewImage(input)).toBe(
+    "https://photo.zdn.vn/photo.jpeg?provider-token=short-lived",
+  )
+  mocks.source.mockClear()
+  mocks.list.mockResolvedValue([{ ...pending, asset: row.asset }])
+  expect((await project()).get("m")?.[0]?.url).toBe(
+    "https://signed.example.test/a",
+  )
+  expect(await service.previewImage(input)).toBe(
+    "https://signed.example.test/a",
+  )
+  expect(mocks.source).not.toHaveBeenCalled()
+  expect(row.asset.encryptedSource).toEqual({ secret: "secret" })
+})
+
+it("refuses a non-Zalo redirect and never decrypts a hidden image", async () => {
+  mocks.list.mockResolvedValue([
+    { ...row, asset: { ...row.asset, state: "pending", objectKey: null } },
+  ])
+  mocks.source.mockResolvedValue({
+    type: "provider_url",
+    url: "https://photo.zadn.vn.example.test/a.png",
+  })
+  expect(await service.previewImage(input)).toBeNull()
+  mocks.source.mockClear()
+  mocks.parents.mockResolvedValue([])
+  expect(await service.previewImage(input)).toBeNull()
+  expect(mocks.source).not.toHaveBeenCalled()
 })
 
 it("bounds backfill to persisted rows and supports dry-run without registration", async () => {

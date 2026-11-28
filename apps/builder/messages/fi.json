@@ -1,5 +1,22 @@
 {
   "zaloAccount": {
+    "timeline": {
+      "back": "Back to results",
+      "title": "Conversation library",
+      "description": "Browse media, files, links and messages in this Zalo conversation.",
+      "media": "Media",
+      "file": "Files",
+      "link": "Links",
+      "text": "Messages",
+      "search": "Search messages or file names",
+      "loading": "Loading history…",
+      "error": "Could not load history.",
+      "empty": "No matches in this page.",
+      "unavailable": "File unavailable",
+      "openMessage": "Open message",
+      "older": "Load older messages",
+      "retry": "Retry"
+    },
     "configure": "Määritä",
     "connectionStatus": "Yhteyden tila",
     "active": "Aktiivinen",
@@ -113,7 +130,44 @@
     "deleteChatNoBoundary": "Zalon historian poistamiseen ei ole viestirajaa.",
     "deletedOnMyZalo": "Poistettu omasta Zalosta",
     "deleteChatBoundary": "Historian poiston raja",
+    "quote": {
+      "title": "Alkuperäinen viesti",
+      "unavailable": "Alkuperäinen viesti ei ole saatavilla."
+    },
+    "mention": {
+      "partial": "Jäsenehdotukset voivat olla puutteellisia."
+    },
+    "sticker": "Tarra",
+    "forward": {
+      "title": "Välitä viesti",
+      "sendCopy": "Lähetä kopio",
+      "description": "Valitse keskustelu samalta Zalo-tililtä."
+    },
+    "composer": {
+      "moreMessageTypes": "Lisää viestityyppejä",
+      "recordVoice": "Tallenna ääniviesti",
+      "voiceUnavailable": "Tallennus ei ole käytettävissä. Valitse M4A-tiedosto.",
+      "videoPoster": "Videon kansikuva",
+      "bankBin": "Pankkikoodi (BIN)",
+      "accountNumber": "Tilinumero",
+      "underline": "Alleviivaa",
+      "urgent": "Kiireellinen"
+    },
+    "richMessage": {
+      "openMap": "Avaa kartta",
+      "bankDetails": "Pankkitilin tiedot",
+      "missedCall": "Vastaamaton puhelu",
+      "unansweredCall": "Puheluun ei vastattu",
+      "incomingCall": "Saapuva puhelu",
+      "outgoingCall": "Lähtevä puhelu",
+      "videoCall": "Videopuhelu",
+      "voiceCall": "Äänipuhelu",
+      "processingMedia": "Käsitellään mediaa…",
+      "mediaUnavailable": "Media ei ole saatavilla"
+    },
     "evidence": {
+      "sentPartially": "Lähetetty osittain",
+      "acceptedWithoutId": "Zalo hyväksyi viestin. Viestin tunnistetta odotetaan.",
       "unsupportedContent": "Zalo-viestiä ei tueta",
       "invalidContent": "Zalo-viestiä ei voitu lukea",
       "unsupportedSchema": "Zalo-viestimuotoa ei tueta",

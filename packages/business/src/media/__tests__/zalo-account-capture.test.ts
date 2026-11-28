@@ -133,6 +133,41 @@ describe("Zalo archival capture", () => {
     expect(resources).toHaveLength(1)
     expect(resources[0]?.source).toBeUndefined()
   })
+  it("keeps static and animated sticker assets distinct with bounded sprite metadata", () => {
+    const resources = buildZaloMessageResources({
+      ...context,
+      descriptors: [
+        {
+          kind: "sticker",
+          role: "original",
+          slot: "static",
+          providerResourceId: "892",
+          providerVersion: "3",
+          url: "https://zalo-api.zadn.vn/static",
+        },
+        {
+          kind: "sticker",
+          role: "original",
+          slot: "webp",
+          providerResourceId: "892",
+          providerVersion: "3",
+          url: "https://zalo-api.zadn.vn/webp",
+        },
+        {
+          kind: "sticker",
+          role: "sprite",
+          slot: "sprite",
+          providerResourceId: "892",
+          providerVersion: "3",
+          url: "https://zalo-api.zadn.vn/sprite",
+          frameCount: 4,
+          durationMs: 120,
+        },
+      ],
+    })
+    expect(new Set(resources.map((item) => item.sourceRevision)).size).toBe(3)
+    expect(resources[2]).toMatchObject({ frameCount: 4, durationMs: 120 })
+  })
   it("bounds per-message registration and strips source URLs without mutating input", () => {
     const descriptors = Array.from({ length: 30 }, (_, n) => ({
       kind: "image",

@@ -32,7 +32,10 @@ import type {
   ThreadControlWebhookResult,
   ThreadOwnerResult,
 } from "./shared"
-import type { ZaloAccountGroupAudience } from "./zalo-account"
+import type {
+  ZaloAccountDispatchContent,
+  ZaloAccountGroupAudience,
+} from "./zalo-account"
 
 // ---------------------------------------------------------------------------
 // Constants & internal helpers
@@ -129,6 +132,7 @@ export type MessageHandlers<
         contact: OutgoingContact
         message: OutgoingMessage
         groupAudience?: ZaloAccountGroupAudience
+        zaloAccountContent?: ZaloAccountDispatchContent
         quickReplies?: MessageButtonTemplate[]
         metadata?: MetadataPayload
         sendFrom?: SendFrom

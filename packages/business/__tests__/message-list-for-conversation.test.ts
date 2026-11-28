@@ -595,3 +595,80 @@ test("keeps authorized legacy Zalo storage reads when capture is disabled and th
   )
   expect(result.attachments[0]?.url).toBe("https://signed.test/legacy")
 })
+
+test("projects only archived, standalone Zalo resource URLs and preserves card metadata", async () => {
+  const richContent = {
+    kind: "link",
+    url: "https://original.example.test/article",
+  }
+  const result = await withResolvedAttachmentUrls(
+    {
+      id: "m",
+      createdAt: new Date(),
+      contactInboxId: "ci-z",
+      contentAttributes: {
+        zaloAccount: {
+          richContent,
+          group: {
+            mentions: [],
+            attachments: [
+              { kind: "image", url: "https://provider.test/private-token" },
+            ],
+            mediaResources: [
+              {
+                kind: "image",
+                role: "card_image",
+                slot: "link_preview",
+                url: "https://provider.test/private-token",
+              },
+            ],
+          },
+        },
+      },
+      attachments: [],
+    } as never,
+    {
+      channel: "zaloAccount",
+      workspaceId: "ws-1",
+      retainedProjectionApplied: true,
+      mediaProjection: new Map([
+        [
+          "m",
+          [
+            {
+              referenceId: "preview",
+              attachmentId: null,
+              kind: "image",
+              role: "card_image",
+              slot: "link_preview",
+              state: "stored",
+              url: "https://signed.test/preview",
+            },
+            {
+              referenceId: "legacy",
+              attachmentId: "at",
+              kind: "image",
+              role: "original",
+              state: "stored",
+              url: "https://signed.test/attached",
+            },
+          ] as never,
+        ],
+      ]),
+    },
+  )
+  expect(result.contentAttributes?.zaloAccount).toMatchObject({
+    richContent,
+    group: { mentions: [] },
+    mediaResources: [
+      {
+        referenceId: "preview",
+        url: "https://signed.test/preview",
+        slot: "link_preview",
+      },
+      { referenceId: "legacy" },
+    ],
+  })
+  expect(JSON.stringify(result)).not.toContain("private-token")
+  expect(JSON.stringify(result)).not.toContain("signed.test/attached")
+})

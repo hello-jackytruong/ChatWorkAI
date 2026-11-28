@@ -27,6 +27,14 @@ type PresignedAttachmentUrls = {
   fallbackUrl: string | null
 }
 
+const standaloneClipKinds = new Set(["audio", "video", "gif"])
+const richCardSlots = new Set(["link_preview", "contact_avatar", "qr_image"])
+
+const asAttributes = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+
 async function presignAttachments<T extends { id: string; originPath: string }>(
   attachments: T[],
   context: {
@@ -140,7 +148,19 @@ export async function withResolvedAttachmentUrls(
       Boolean(message.deletedAt),
   })
   const attributes = message.contentAttributes
-  const zaloAttributes = attributes?.zaloAccount
+  const zaloAttributes = asAttributes(attributes?.zaloAccount)
+  const groupAttributes = zaloAttributes.group
+  const {
+    attachments: _groupAttachments,
+    mediaResources: _groupResources,
+    ...safeGroupAttributes
+  } = asAttributes(groupAttributes)
+  const includesStandaloneClip = resources.some(
+    (resource) =>
+      !resource.attachmentId &&
+      resource.role === "original" &&
+      standaloneClipKinds.has(resource.kind),
+  )
   return {
     ...message,
     ...(context.channel === "zaloAccount" && message.sendError
@@ -161,10 +181,25 @@ export async function withResolvedAttachmentUrls(
           contentAttributes: {
             ...attributes,
             zaloAccount: {
-              ...(typeof zaloAttributes === "object" && zaloAttributes !== null
-                ? zaloAttributes
-                : {}),
-              mediaResources: resources.map(({ url, ...metadata }) => metadata),
+              ...zaloAttributes,
+              ...(groupAttributes ? { group: safeGroupAttributes } : {}),
+              mediaResources: resources.map(({ url, ...metadata }) => {
+                const showUrl =
+                  !metadata.attachmentId &&
+                  ((metadata.kind === "gif" &&
+                    metadata.role === "original" &&
+                    ["pending", "downloading"].includes(metadata.state)) ||
+                    (metadata.state === "stored" &&
+                      (richCardSlots.has(metadata.slot) ||
+                        (metadata.kind === "sticker" &&
+                          (metadata.role === "original" ||
+                            metadata.role === "sprite")) ||
+                        (includesStandaloneClip &&
+                          (standaloneClipKinds.has(metadata.kind) ||
+                            metadata.role === "poster" ||
+                            metadata.role === "thumbnail")))))
+                return showUrl && url ? { ...metadata, url } : metadata
+              }),
             },
           },
         }

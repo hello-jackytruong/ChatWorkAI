@@ -12,6 +12,7 @@ const stateSchema = zaloSendAttemptResource.pick({
   status: true,
   reconciliation: true,
   errorInfo: true,
+  delivery: true,
 })
 export function getZaloMessageEvidence(attributes: unknown) {
   const account = record(record(attributes)?.zaloAccount)
@@ -71,6 +72,8 @@ export function ZaloMessageEvidence({
   let label:
     | "needsReview"
     | "appliedPending"
+    | "sentPartially"
+    | "acceptedWithoutId"
     | (typeof statusKeys)[keyof typeof statusKeys]
     | null = attempt ? statusKeys[attempt.status] : null
   if (!attempt && message?.sendError) {
@@ -80,6 +83,11 @@ export function ZaloMessageEvidence({
     label = "needsReview"
   } else if (attempt?.status === "applied" && state === "pending") {
     label = "appliedPending"
+  }
+  if (attempt?.delivery === "partial") {
+    label = "sentPartially"
+  } else if (attempt?.delivery === "accepted_without_id") {
+    label = "acceptedWithoutId"
   }
   return (
     <div className="flex flex-col gap-1 text-muted-foreground text-xs">

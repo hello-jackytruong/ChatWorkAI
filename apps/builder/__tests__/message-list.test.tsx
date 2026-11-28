@@ -114,6 +114,10 @@ vi.mock("@/features/messages/components/resend-message-button", () => ({
 vi.mock("@/features/messages/components/message-item", () => ({
   MessageItem: () => null,
 }))
+vi.mock("@/features/messages/actions/zalo-timeline.action", () => ({
+  lookupZaloQuoteAction: vi.fn(),
+  searchZaloTimelineAction: vi.fn(),
+}))
 
 vi.mock("@/features/messages/lib/private-reply", () => ({
   canPrivateReplyToComment: () => false,
