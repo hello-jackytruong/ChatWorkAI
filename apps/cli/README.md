@@ -1683,7 +1683,28 @@ chatbotx zalo-accounts status list <accountId>
 chatbotx zalo-accounts groups list <accountId>
 chatbotx zalo-accounts group get <accountId> <id>
 chatbotx zalo-accounts groups sync <accountId> --commandId <stable-id>
+chatbotx zalo-accounts groups overview <accountId> <groupId>
+chatbotx zalo-accounts groups roster <accountId> <groupId> --limit 50
+chatbotx zalo-accounts groups related <accountId> <groupId> --uid <memberUid>
+chatbotx zalo-accounts groups capability <accountId>
+chatbotx zalo-accounts groups read-management <accountId> --groupId <groupId> --kind getPendingGroupMembers
+chatbotx zalo-accounts groups inspect-link <accountId> --link <invitation-url>
+chatbotx zalo-accounts groups apply-operation <accountId> --groupId <groupId> --operation '{"kind":"changeGroupName","name":"Support"}' --commandId <unix-ms:uuid-v4>
+chatbotx zalo-accounts groups operation-status <accountId> <commandId> --groupId <groupId>
+chatbotx zalo-accounts conversation-settings get <accountId> <conversationId> --contactInboxId <contactInboxId>
+chatbotx zalo-accounts conversation-settings update <accountId> <conversationId> --contactInboxId <contactInboxId> --operation '{"kind":"setMute","durationSeconds":3600}' --commandId <unix-ms:uuid-v4>
+chatbotx zalo-accounts conversation-settings status <accountId> <conversationId> <commandId> --contactInboxId <contactInboxId>
+chatbotx zalo-accounts profile read <accountId> --kind readOwnProfile
+chatbotx zalo-accounts profile update <accountId> --operation '{"kind":"updateOwnBio","bio":"Available"}' --commandId <unix-ms:uuid-v4>
+chatbotx zalo-accounts profile status <accountId> <commandId>
+chatbotx zalo-accounts native-replies read <accountId> --kind readQuickMessages
+chatbotx zalo-accounts native-replies read <accountId> --kind readAutoReplies
+chatbotx zalo-accounts native-replies update <accountId> --operation '{"kind":"addQuickMessage","expectedVersion":"<version>","keyword":"hours","title":"We open at 9"}' --commandId <unix-ms:uuid-v4>
+chatbotx zalo-accounts native-replies status <accountId> <commandId>
 chatbotx zalo-accounts labels sync <accountId> --commandId <stable-id>
+chatbotx zalo-accounts labels list-native <accountId>
+chatbotx zalo-accounts labels queue-sync <accountId>
+chatbotx zalo-accounts labels edit-native <accountId> <labelId> --commandId <stable-id> --patch '{"color":"#2288cc"}'
 chatbotx zalo-accounts friends sync <accountId> --commandId <page-id> --cursor <nextCursor>
 chatbotx zalo-accounts policy update <accountId> <id> --sendEnabled <true|false>
 chatbotx zalo-accounts message send <accountId> <id> --commandId <stable-id> --text <text>

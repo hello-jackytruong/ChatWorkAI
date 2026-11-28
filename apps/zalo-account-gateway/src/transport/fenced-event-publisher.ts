@@ -6,11 +6,13 @@ import {
   type ZaloAccountDirectStatus,
   type ZaloAccountDirectUndo,
   type ZaloAccountGroupActivity,
+  type ZaloAccountGroupEvent,
   type ZaloAccountGroupMessage,
   type ZaloAccountLifecycleEvent,
   type ZaloAccountThreadEvent,
   type ZaloAccountTransportEvent,
   type ZaloAccountTransportRoute,
+  zaloAccountOwnGroupMembership,
   zaloAccountSecretEventAad,
   zaloAccountTransportEventSchema,
 } from "@chatbotx.io/sdk"
@@ -37,12 +39,21 @@ type FencedAppendPort = {
 
 type PublisherOptions = {
   messageIntegrityEnabled?: boolean
+  applyGroupMembership?: (input: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    fenceToken: string
+    epoch: number
+    event: ZaloAccountGroupEvent
+  }) => Promise<unknown>
   resolveGroupReceivePolicy?: (input: {
     workspaceId: string
     accountId: string
     inboxId: string
     providerGroupId: string
     allowSendOnly?: boolean
+    inboundRuntime?: { epoch: number; fenceToken: string }
   }) => Promise<{ accountPolicyEpoch: number; groupPolicyEpoch: number } | null>
   appendPort: FencedAppendPort
   eventStreamKey: string
@@ -231,6 +242,23 @@ export class FencedEventPublisher implements RuntimeEventSink {
     await this.publishAccountEnvelope("group_activity", activity, context)
   }
 
+  async publishGroupEvent(
+    event: ZaloAccountGroupEvent,
+    context: RuntimeEventContext & { epoch: number; fenceToken: string },
+  ): Promise<void> {
+    await this.publishAccountEnvelope("group_event", event, context)
+    if (context.inboxId && zaloAccountOwnGroupMembership(event)) {
+      await this.options.applyGroupMembership?.({
+        workspaceId: context.workspaceId,
+        accountId: this.accountIdFromContext(context),
+        inboxId: context.inboxId,
+        epoch: context.epoch,
+        fenceToken: context.fenceToken,
+        event,
+      })
+    }
+  }
+
   async publishGroupMessage(
     inputMessage: ZaloAccountGroupMessage,
     context: RuntimeEventContext & { epoch: number; fenceToken: string },
@@ -260,6 +288,7 @@ export class FencedEventPublisher implements RuntimeEventSink {
     const policy = await this.options.resolveGroupReceivePolicy?.({
       ...route,
       providerGroupId: message.threadId,
+      inboundRuntime: { epoch: context.epoch, fenceToken: context.fenceToken },
     })
     if (!policy) {
       return
@@ -461,11 +490,12 @@ export class FencedEventPublisher implements RuntimeEventSink {
   }
 
   private async publishAccountEnvelope(
-    kind: "direct_status" | "direct_undo" | "group_activity",
+    kind: "direct_status" | "direct_undo" | "group_activity" | "group_event",
     payload:
       | ZaloAccountDirectStatus
       | ZaloAccountDirectUndo
-      | ZaloAccountGroupActivity,
+      | ZaloAccountGroupActivity
+      | ZaloAccountGroupEvent,
     context: RuntimeEventContext & { epoch: number; fenceToken: string },
   ): Promise<void> {
     if (!context.inboxId) {

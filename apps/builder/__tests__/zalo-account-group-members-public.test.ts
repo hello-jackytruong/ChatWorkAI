@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   findWorkspaceByTokenHash: vi.fn(),
   checkConversation: vi.fn(),
   listMembers: vi.fn(),
+  overview: vi.fn(),
+  roster: vi.fn(),
 }))
 
 vi.mock("@chatbotx.io/business", () => ({
@@ -24,6 +26,10 @@ vi.mock("@chatbotx.io/business", () => ({
 }))
 vi.mock("@chatbotx.io/business/zalo-account", () => ({
   zaloAccountGroupService: { listMembers: mocks.listMembers },
+  zaloAccountGroupReadService: {
+    overview: mocks.overview,
+    members: mocks.roster,
+  },
 }))
 vi.mock("@/lib/public-api/member-scope", () => ({
   assertConversationAccessForCaller: mocks.checkConversation,
@@ -38,6 +44,7 @@ vi.mock("@/lib/rate-limit/guest-rate-limit", () => ({
 vi.mock("@/env", () => ({ isCloud: () => true }))
 vi.mock("@/middlewares/auth", () => ({ authMiddleware: vi.fn() }))
 
+import { zaloAccountGroupAdministrationOperations } from "../src/features/zalo-accounts/api/group-administration"
 import { zaloAccountGroupMemberOperations } from "../src/features/zalo-accounts/api/group-members"
 
 const input = { accountId: "1", groupId: "2", conversationId: "3" }
@@ -78,4 +85,52 @@ it("requires Inbox scope before accessing the selected group", async () => {
   await expect(invoke()).rejects.toMatchObject({ code: "FORBIDDEN" })
   expect(mocks.checkConversation).not.toHaveBeenCalled()
   expect(mocks.listMembers).not.toHaveBeenCalled()
+})
+
+it("reads a scoped administration roster without an Inbox conversation", async () => {
+  mocks.findWorkspaceByTokenHash.mockResolvedValue(token(["channels"]))
+  const roster = { members: [], complete: false, visibility: "restricted" }
+  mocks.roster.mockResolvedValue(roster)
+  await expect(
+    call(
+      zaloAccountGroupAdministrationOperations.listGroupAdministrationMembers,
+      {
+        accountId: "1",
+        groupId: "2",
+        cursor: "cursor",
+        limit: 15,
+      },
+      {
+        context: {
+          headers: new Headers({ Authorization: "Bearer cbx_ws_fixture" }),
+        },
+      },
+    ),
+  ).resolves.toEqual(roster)
+  expect(mocks.roster).toHaveBeenCalledExactlyOnceWith({
+    workspaceId: "w",
+    accountId: "1",
+    groupId: "2",
+    cursor: "cursor",
+    limit: 15,
+  })
+  expect(mocks.checkConversation).not.toHaveBeenCalled()
+})
+
+it("denies an Inbox-only token before reading management metadata", async () => {
+  await expect(
+    call(
+      zaloAccountGroupAdministrationOperations.getGroupAdministration,
+      {
+        accountId: "1",
+        groupId: "2",
+      },
+      {
+        context: {
+          headers: new Headers({ Authorization: "Bearer cbx_ws_fixture" }),
+        },
+      },
+    ),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" })
+  expect(mocks.overview).not.toHaveBeenCalled()
 })

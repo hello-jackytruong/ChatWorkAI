@@ -259,7 +259,7 @@ export const zaloAccountOperations = {
       path: "/connections/zalo-account/{accountId}/group-messaging",
       summary: "Set account group messaging kill switch",
       description:
-        "Defaults off. Disabling fences all queued group work while direct chats continue. Re-enabling does not replay stale jobs.",
+        "Group messaging defaults on. This operational override fences queued group work when disabled and preserves direct chats. Re-enabling does not replay stale jobs.",
       tags: ["Zalo Accounts"],
       spec: (current) => ({
         ...mcpSpec({ hitlPolicy: "confirm_diff" })(current),
@@ -271,7 +271,7 @@ export const zaloAccountOperations = {
         enabled: z
           .boolean()
           .describe(
-            "Allow selected groups to receive/send; false fences all queued group work",
+            "Override default group messaging or fence queued group work for this account",
           ),
       }),
     )
@@ -293,7 +293,7 @@ export const zaloAccountOperations = {
       path: "/connections/zalo-account/{accountId}/groups/{groupId}/policy",
       summary: "Update receive, send, and automation for one Zalo group",
       description:
-        "Receive and send independently provision the group's Inbox anchor. Automation defaults disabled; mentionOnly requires an explicit mention of the connected account. Inaccessible groups cannot be enabled.",
+        "Automation defaults disabled. Use mentionOnly for explicit account mentions or all for every eligible message. The existing receive and send fields are operational overrides. Inaccessible groups cannot be enabled.",
       tags: ["Zalo Accounts"],
       spec: (current) => ({
         ...mcpSpec({ hitlPolicy: "confirm_diff" })(current),

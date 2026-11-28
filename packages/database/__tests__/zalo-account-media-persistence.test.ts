@@ -279,6 +279,31 @@ describe("media repository bounded lifecycle", () => {
     mocks.deleteResult = [{ id: "33" }]
     expect(await repo.drainConfirmed({ workspaceId: "11" }, tx())).toBe(1)
   })
+  it("locks only the released quick-message revision so a replacement remains referenced", async () => {
+    const sourceRevision = "a".repeat(64)
+    expect(
+      await repo.releaseOwners(
+        {
+          ...scope,
+          ownerKind: "quickMessage",
+          ownerIds: ["2"],
+          sourceRevision,
+        },
+        tx(),
+      ),
+    ).toBe(0)
+    const query = dialect.sqlToQuery(mocks.predicates.mock.calls[0][0])
+    expect(query.sql).toContain('"sourceRevision" = $5')
+    expect(query.params).toEqual([
+      "11",
+      "22",
+      "quickMessage",
+      "2",
+      sourceRevision,
+    ])
+    expect(mocks.predicates).toHaveBeenCalledOnce()
+  })
+
   it("preserves a canonical outgoing original and combines echo aliases", async () => {
     mocks.selected.push([
       { ...baseRef, messageId: "canonical", aliases: ["local"] },

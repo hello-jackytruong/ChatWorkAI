@@ -46,6 +46,9 @@ import type {
 import { ZaloAccountConnect } from "./zalo-account-connect"
 import { ZaloAccountContacts } from "./zalo-account-contacts"
 import { ZaloAccountGroups } from "./zalo-account-groups"
+import { ZaloAccountNativeLabels } from "./zalo-account-native-labels"
+import { ZaloAccountNativeProfile } from "./zalo-account-native-profile"
+import { ZaloAccountNativeReplies } from "./zalo-account-native-replies"
 import {
   ZaloAccountRuntimeDetails,
   ZaloAccountStatus,
@@ -268,11 +271,23 @@ function ZaloAccountRow({
             </div>
             {open && (
               <>
+                <ZaloAccountNativeProfile
+                  accountId={account.id}
+                  workspaceId={workspaceId}
+                />
                 <ZaloHistorySyncControls
                   accountId={account.id}
                   workspaceId={workspaceId}
                 />
                 <ZaloAccountContacts
+                  accountId={account.id}
+                  workspaceId={workspaceId}
+                />
+                <ZaloAccountNativeLabels
+                  accountId={account.id}
+                  workspaceId={workspaceId}
+                />
+                <ZaloAccountNativeReplies
                   accountId={account.id}
                   workspaceId={workspaceId}
                 />

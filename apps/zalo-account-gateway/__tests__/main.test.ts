@@ -15,11 +15,25 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock("../src/env", () => ({ resolveGatewayEnv: () => mocks.env }))
 vi.mock("@chatbotx.io/business/zalo-account", () => ({
+  isZaloAccountRichSendEnabled: vi.fn(),
   takeDirectSendCapacity: vi.fn(),
+  zaloAccountGroupReadService: {},
   zaloAccountGroupService: {},
   zaloAccountLabelService: {},
   zaloAccountSendAttemptService: {},
   zaloAccountService: { listActiveRuntimeAccounts: mocks.list },
+}))
+vi.mock("@chatbotx.io/business/zalo-account/group-lifecycle", () => ({
+  zaloAccountGroupLifecycleService: {},
+}))
+vi.mock("@chatbotx.io/business/zalo-account/group-management", () => ({
+  zaloAccountGroupManagementService: {},
+}))
+vi.mock("@chatbotx.io/business/zalo-account/native-account-tools", () => ({
+  zaloAccountNativeAccountToolsService: {},
+}))
+vi.mock("@chatbotx.io/business/zalo-account/native-settings", () => ({
+  zaloAccountNativeSettingsService: {},
 }))
 vi.mock("@chatbotx.io/business/zalo-account/native-operations", () => ({
   zaloAccountMessageOperationsService: {},

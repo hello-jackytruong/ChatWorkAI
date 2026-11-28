@@ -6,6 +6,18 @@ import {
   zaloAccountFriendEventSchema,
 } from "./zalo-account-contacts"
 import {
+  zaloAccountGroupAdministrationReadSchema,
+  zaloAccountGroupAdministrationResultSchema,
+  zaloAccountGroupSettingsSchema,
+} from "./zalo-account-group-administration"
+import {
+  isZaloAccountGroupManagementRead,
+  isZaloAccountGroupManagementScoped,
+  zaloAccountGroupManagementCommandIdSchema,
+  zaloAccountGroupManagementOperationSchema,
+  zaloAccountGroupManagementResultSchema,
+} from "./zalo-account-group-management"
+import {
   zaloAccountInlineGifSchema,
   zaloAccountMediaResourcesSchema,
   zaloAccountStickerCatalogEntrySchema,
@@ -14,6 +26,13 @@ import {
   zaloAccountStickerResourceSchema,
   zaloAccountStickerSendIdentitySchema,
 } from "./zalo-account-media"
+import {
+  isZaloAccountNativeToolRead,
+  type ZaloAccountNativeToolOperation,
+  zaloAccountNativeThreadSchema,
+  zaloAccountNativeToolFamily,
+  zaloAccountNativeToolOperationSchema,
+} from "./zalo-account-native-tools"
 import {
   zaloAccountProfileRequestSchema,
   zaloAccountProfileSchema,
@@ -319,6 +338,7 @@ export const zaloAccountErrorInfoSchema = z
       "preparation_failed",
       "provider_failed",
       "pre_dispatch_failed",
+      "label_version_conflict",
       "send_unknown",
       "reconciliation_conflict",
       "receive_invalid",
@@ -382,6 +402,8 @@ export function getZaloAccountErrorMessage(info: ZaloAccountErrorInfo): string {
       "Zalo Account attachment preparation failed before sending.",
     provider_failed: "Zalo Account could not complete this request.",
     pre_dispatch_failed: "Zalo Account request was rejected before sending.",
+    label_version_conflict:
+      "Zalo Account label version conflict. Refresh before updating the label.",
     send_unknown:
       "Zalo Account send outcome is unknown. Inspect before sending again.",
     reconciliation_conflict:
@@ -1107,6 +1129,66 @@ export type ZaloAccountGroupActivity = z.infer<
   typeof zaloAccountGroupActivitySchema
 >
 
+const groupEventThread = { providerGroupId: z.string().regex(/^\d{1,200}$/) }
+export const zaloAccountGroupEventSchema = z.union([
+  z.object({ ...groupEventThread, kind: z.literal("refresh") }).strict(),
+  z
+    .object({
+      ...groupEventThread,
+      kind: z.enum([
+        "joined",
+        "left",
+        "removed",
+        "blocked",
+        "adminAdded",
+        "adminRemoved",
+        "updated",
+        "avatarUpdated",
+        "settingsUpdated",
+        "linkUpdated",
+        "topicUpdated",
+      ]),
+      identity: z.string().regex(/^[a-f0-9]{64}$/),
+      timestampMs: providerTimestampMsSchema.positive(),
+      providerVersion: z
+        .string()
+        .regex(/^\d{1,30}$/)
+        .optional(),
+      targetIncludesAccount: z.boolean().optional(),
+      name: z.string().min(1).max(255).optional(),
+      settings: zaloAccountGroupSettingsSchema.optional(),
+      avatarUrl: z
+        .url({ protocol: /^https$/ })
+        .max(2000)
+        .refine((value) => {
+          const url = new URL(value)
+          return !(url.username || url.password || url.port)
+        })
+        .optional(),
+    })
+    .strict(),
+])
+export type ZaloAccountGroupEvent = z.infer<typeof zaloAccountGroupEventSchema>
+export function zaloAccountOwnGroupMembership(event: ZaloAccountGroupEvent) {
+  if (
+    event.kind === "refresh" ||
+    !event.providerVersion ||
+    !event.targetIncludesAccount
+  ) {
+    return
+  }
+  switch (event.kind) {
+    case "joined":
+      return "joined"
+    case "left":
+    case "removed":
+    case "blocked":
+      return "lost"
+    default:
+      return
+  }
+}
+
 const threadEventShape = {
   threadId: z.string().min(1).max(200),
   threadType: z.enum(["user", "group"]),
@@ -1171,6 +1253,17 @@ export const zaloAccountLabelSchema = z
   .strict()
 
 export type ZaloAccountLabel = z.infer<typeof zaloAccountLabelSchema>
+
+export function serializeZaloAccountLabelDocument(labels: ZaloAccountLabel[]) {
+  return JSON.stringify(
+    labels
+      .map((label) => ({
+        ...label,
+        conversations: [...label.conversations].sort(),
+      }))
+      .sort((a, b) => a.id - b.id),
+  )
+}
 
 export const zaloAccountLabelSnapshotSchema = z
   .object({
@@ -1484,6 +1577,94 @@ export const zaloAccountCommandEnvelopeSchema = z.discriminatedUnion("kind", [
     groupPolicyEpoch: z.number().int().nonnegative(),
     groupMemberQuery: zaloAccountGroupMembersQuerySchema,
   }),
+  z.strictObject({
+    ...commandBaseShape,
+    kind: z.literal("read_group_administration"),
+    route: z.strictObject({
+      kind: z.literal("account"),
+      workspaceId: z.string().min(1),
+      accountId: z.string().min(1),
+      inboxId: z.string().min(1),
+    }),
+    target: commandTargetSchema,
+    groupId: z.string().min(1).max(200),
+    accountPolicyEpoch: z.number().int().nonnegative(),
+    groupPolicyEpoch: z.number().int().nonnegative(),
+    groupRead: zaloAccountGroupAdministrationReadSchema,
+  }),
+  z
+    .strictObject({
+      ...commandBaseShape,
+      kind: z.literal("native_tool"),
+      route: z.strictObject({
+        kind: z.literal("account"),
+        workspaceId: z.string().min(1),
+        accountId: z.string().min(1),
+        inboxId: z.string().min(1),
+      }),
+      target: commandTargetSchema,
+      conversationId: z.string().min(1).max(200).optional(),
+      contactInboxId: z.string().min(1).max(200).optional(),
+      thread: zaloAccountNativeThreadSchema.optional(),
+      accountPolicyEpoch: z.number().int().nonnegative(),
+      groupPolicyEpoch: z.number().int().nonnegative().optional(),
+      nativeTool: zaloAccountNativeToolOperationSchema,
+      attemptCommandId: zaloAccountGroupManagementCommandIdSchema.optional(),
+    })
+    .refine((command) => {
+      const hasConversation =
+        zaloAccountNativeToolFamily(command.nativeTool) === "settings"
+      const scope = hasConversation
+        ? command.thread !== undefined &&
+          command.conversationId !== undefined &&
+          command.contactInboxId !== undefined &&
+          (command.thread.threadType === "group") ===
+            (command.groupPolicyEpoch !== undefined)
+        : command.thread === undefined &&
+          command.conversationId === undefined &&
+          command.contactInboxId === undefined &&
+          command.groupPolicyEpoch === undefined
+      return (
+        scope &&
+        isZaloAccountNativeToolRead(command.nativeTool) ===
+          (command.attemptCommandId === undefined)
+      )
+    }),
+  z
+    .strictObject({
+      ...commandBaseShape,
+      kind: z.literal("group_management"),
+      route: z.strictObject({
+        kind: z.literal("account"),
+        workspaceId: z.string().min(1),
+        accountId: z.string().min(1),
+        inboxId: z.string().min(1),
+      }),
+      target: commandTargetSchema,
+      groupId: z.string().min(1).max(200).optional(),
+      providerGroupId: z.string().min(1).max(200).optional(),
+      accountPolicyEpoch: z.number().int().nonnegative(),
+      groupPolicyEpoch: z.number().int().nonnegative().optional(),
+      groupManagement: zaloAccountGroupManagementOperationSchema,
+      attemptCommandId: zaloAccountGroupManagementCommandIdSchema.optional(),
+    })
+    .refine((command) => {
+      const hasGroupScope =
+        command.groupId !== undefined &&
+        command.providerGroupId !== undefined &&
+        command.groupPolicyEpoch !== undefined
+      const noGroupScope =
+        command.groupId === undefined &&
+        command.providerGroupId === undefined &&
+        command.groupPolicyEpoch === undefined
+      return (
+        (isZaloAccountGroupManagementScoped(command.groupManagement)
+          ? hasGroupScope
+          : noGroupScope) &&
+        isZaloAccountGroupManagementRead(command.groupManagement) ===
+          (command.attemptCommandId === undefined)
+      )
+    }),
   z
     .object({
       ...commandBaseShape,
@@ -1641,6 +1822,10 @@ export const zaloAccountCommandEnvelopeSchema = z.discriminatedUnion("kind", [
       ),
       target: commandTargetSchema,
       expectedVersion: z.number().int().nonnegative(),
+      expectedHash: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       labelData: z.array(zaloAccountLabelSchema).max(1000),
     })
     .strict(),
@@ -1648,6 +1833,34 @@ export const zaloAccountCommandEnvelopeSchema = z.discriminatedUnion("kind", [
 export type ZaloAccountCommandEnvelope = z.infer<
   typeof zaloAccountCommandEnvelopeSchema
 >
+
+const encryptedTransportPayloadSchema = z
+  .object({
+    v: z.literal(1),
+    kid: z.string().min(1).optional(),
+    iv: z.string().length(24),
+    text: z.string().min(1),
+    tag: z.string().length(32),
+    aad: z.string().min(1),
+  })
+  .strict()
+
+export function zaloAccountNativeToolResultAad(input: {
+  workspaceId: string
+  accountId: string
+  inboxId: string
+  commandId: string
+  operationKind: ZaloAccountNativeToolOperation["kind"]
+}) {
+  return JSON.stringify([
+    "zalo-native-tool-result-v1",
+    input.workspaceId,
+    input.accountId,
+    input.inboxId,
+    input.commandId,
+    input.operationKind,
+  ])
+}
 
 export const zaloAccountCommandResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("rejected_stale") }).strict(),
@@ -1673,6 +1886,10 @@ export const zaloAccountCommandResultSchema = z.discriminatedUnion("status", [
           groupSync: zaloAccountGroupSyncSchema.optional(),
           friendSync: zaloAccountFriendSyncSchema.optional(),
           groupMembers: zaloAccountGroupMembersResultSchema.optional(),
+          groupAdministration:
+            zaloAccountGroupAdministrationResultSchema.optional(),
+          groupManagement: zaloAccountGroupManagementResultSchema.optional(),
+          nativeToolCiphertext: encryptedTransportPayloadSchema.optional(),
           historyPage: zaloAccountHistoryPageSchema.optional(),
           profiles: z.array(zaloAccountProfileSchema).max(20).optional(),
           contactsResult: zaloAccountContactResultSchema.optional(),
@@ -1711,17 +1928,6 @@ export const parseZaloAccountCommandEnvelope = (
   }
   return command
 }
-
-const encryptedTransportPayloadSchema = z
-  .object({
-    v: z.literal(1),
-    kid: z.string().min(1).optional(),
-    iv: z.string().length(24),
-    text: z.string().min(1),
-    tag: z.string().length(32),
-    aad: z.string().min(1),
-  })
-  .strict()
 
 const transportEventBaseShape = {
   ...runtimeObservationShape,
@@ -1900,6 +2106,21 @@ export const zaloAccountTransportEventSchema = z.union([
       ),
       kind: z.literal("group_activity"),
       payload: zaloAccountGroupActivitySchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...transportEventBaseShape,
+      route: zaloAccountTransportRouteSchema.pipe(
+        z.object({
+          kind: z.literal("account"),
+          workspaceId: z.string().min(1),
+          accountId: z.string().min(1),
+          inboxId: z.string().min(1),
+        }),
+      ),
+      kind: z.literal("group_event"),
+      payload: zaloAccountGroupEventSchema,
     })
     .strict(),
 ])

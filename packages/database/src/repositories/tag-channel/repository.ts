@@ -1,5 +1,13 @@
 import { createId } from "@chatbotx.io/utils"
-import { and, type DatabaseClient, db, eq, inArray, sql } from "../../client"
+import {
+  and,
+  type DatabaseClient,
+  db,
+  eq,
+  inArray,
+  isNull,
+  sql,
+} from "../../client"
 import {
   contactInboxModel,
   contactsToTagsModel,
@@ -139,6 +147,35 @@ export const tagChannelRepository = {
         externalLabelId: input.externalLabelId,
       })
       .onConflictDoNothing({ target: tagChannelConflictTarget() })
+  },
+
+  async insertMappingPreservingIdentity(
+    input: {
+      workspaceId: string
+      tagId: string
+      channelType: string
+      integrationId: string
+      externalLabelId: string
+    },
+    tx: DatabaseClient = db,
+  ) {
+    const [inserted] = await tx
+      .insert(tagChannelModel)
+      .values({ id: createId(), ...input })
+      .onConflictDoNothing()
+      .returning({ id: tagChannelModel.id, tagId: tagChannelModel.tagId })
+    return (
+      inserted ??
+      (await tx.query.tagChannelModel.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          channelType: input.channelType,
+          integrationId: input.integrationId,
+          externalLabelId: input.externalLabelId,
+        },
+        columns: { id: true, tagId: true },
+      }))
+    )
   },
 
   async findByTagAndIntegration(
@@ -347,6 +384,60 @@ export const tagChannelRepository = {
         integrationId: input.integrationId,
       },
       columns: { id: true, tagId: true, externalLabelId: true },
+    })
+  },
+
+  async listNamedByIntegration(input: {
+    workspaceId: string
+    channelType: string
+    integrationId: string
+    externalLabelIds: string[]
+  }) {
+    if (input.externalLabelIds.length === 0) {
+      return []
+    }
+    return await db
+      .select({
+        externalLabelId: tagChannelModel.externalLabelId,
+        tagId: tagChannelModel.tagId,
+        tagName: tagModel.name,
+      })
+      .from(tagChannelModel)
+      .innerJoin(
+        tagModel,
+        and(
+          eq(tagModel.id, tagChannelModel.tagId),
+          eq(tagModel.workspaceId, input.workspaceId),
+          isNull(tagModel.deletedAt),
+        ),
+      )
+      .where(
+        and(
+          eq(tagChannelModel.workspaceId, input.workspaceId),
+          eq(tagChannelModel.channelType, input.channelType),
+          eq(tagChannelModel.integrationId, input.integrationId),
+          inArray(tagChannelModel.externalLabelId, input.externalLabelIds),
+        ),
+      )
+  },
+
+  async listMappedTagIds(input: {
+    workspaceId: string
+    channelType: string
+    integrationId: string
+    tagIds: string[]
+  }) {
+    if (input.tagIds.length === 0) {
+      return []
+    }
+    return await db.query.tagChannelModel.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        channelType: input.channelType,
+        integrationId: input.integrationId,
+        tagId: { in: input.tagIds },
+      },
+      columns: { tagId: true },
     })
   },
 

@@ -13,6 +13,7 @@ export const zaloAccountMediaOwnerKinds = z.enum([
   "member",
   "group",
   "sticker",
+  "quickMessage",
 ])
 export const zaloAccountMediaRoles = z.enum([
   "original",

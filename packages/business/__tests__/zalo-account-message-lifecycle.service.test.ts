@@ -74,6 +74,7 @@ beforeEach(() => {
   mocks.account.mockResolvedValue({
     id: "a1",
     inboxId: "in1",
+    zaloUid: "own",
     groupMessagingEnabled: true,
     groupPolicyEpoch: 1,
   })
@@ -232,5 +233,68 @@ it("projects retained state before publishing a late receipt", async () => {
   )
   expect(JSON.stringify(mocks.publish.mock.calls)).not.toContain(
     "https://provider",
+  )
+})
+
+it.each([
+  "peer",
+  "own",
+])("stores exact %s reaction targets and publishes against the scoped canonical message", async (actorId) => {
+  mocks.inbox.mockResolvedValueOnce({
+    id: "ci1",
+    contactId: "c1",
+    contactKind: "person",
+    inboxId: "in1",
+    conversation: { id: "cv1", workspaceId: "w1", contactId: "c1" },
+  })
+  mocks.ownAttempt.mockResolvedValueOnce({
+    providerMessageIds: ["primary", "alias"],
+  })
+  await zaloAccountMessageLifecycleService.handle({
+    ...route,
+    event: {
+      ...base,
+      type: "reaction",
+      threadType: "user",
+      threadId: "peer",
+      providerMessageId: "alias",
+      actorId,
+      operation: "add",
+      reactionKey: "/-heart",
+    },
+  })
+  expect(mocks.ownAttempt).toHaveBeenCalledWith(
+    expect.objectContaining({
+      workspaceId: "w1",
+      accountId: "a1",
+      threadType: "user",
+      threadId: "peer",
+      providerMessageId: "alias",
+    }),
+  )
+  expect(mocks.reaction).toHaveBeenCalledWith(
+    expect.objectContaining({
+      workspaceId: "w1",
+      accountId: "a1",
+      inboxId: "in1",
+      event: expect.objectContaining({
+        actorId,
+        providerMessageId: "alias",
+        reactionKey: "/-heart",
+      }),
+    }),
+  )
+  expect(mocks.message).toHaveBeenCalledWith(
+    "za:a1:user:peer:primary",
+    "cv1",
+    "w1",
+    expect.any(Date),
+  )
+  expect(mocks.publish).toHaveBeenCalledWith(
+    "w1",
+    expect.objectContaining({
+      eventType: "messageContentUpdated",
+      data: expect.objectContaining({ messageId: "m1" }),
+    }),
   )
 })

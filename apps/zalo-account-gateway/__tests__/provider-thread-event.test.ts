@@ -99,3 +99,113 @@ it("keeps direct receipt and typing evidence inside the peer thread", () => {
     }),
   ).toEqual([])
 })
+
+it("routes Zalo direct reactions from either side to the same verified peer", () => {
+  const ownUid = "100"
+  const peerUid = "200"
+  const base = { ts: "1800000000000" }
+  const content = (gMsgID: string) => ({
+    rMsg: [{ gMsgID }],
+    rIcon: "/-heart",
+    rType: 5,
+  })
+  const peer = normalizeProviderThreadEvent(
+    "reaction",
+    {
+      threadId: peerUid,
+      isSelf: false,
+      isGroup: false,
+      data: {
+        ...base,
+        uidFrom: peerUid,
+        idTo: ownUid,
+        content: content("1001"),
+      },
+    },
+    ownUid,
+  )
+  // Pinned SDK derives threadId from uidFrom when the provider sends the actual own UID.
+  const own = normalizeProviderThreadEvent(
+    "reaction",
+    {
+      threadId: ownUid,
+      isSelf: false,
+      isGroup: false,
+      data: {
+        ...base,
+        uidFrom: ownUid,
+        idTo: peerUid,
+        content: content("1002"),
+      },
+    },
+    ownUid,
+  )
+  expect(peer).toMatchObject([
+    {
+      threadId: peerUid,
+      actorId: peerUid,
+      providerMessageId: "1001",
+      reactionKey: "/-heart",
+    },
+  ])
+  expect(own).toMatchObject([
+    {
+      threadId: peerUid,
+      actorId: ownUid,
+      providerMessageId: "1002",
+      reactionKey: "/-heart",
+    },
+  ])
+})
+
+it("rejects Zalo direct reaction payloads addressed to another account", () => {
+  expect(
+    normalizeProviderThreadEvent(
+      "reaction",
+      {
+        threadId: "200",
+        isSelf: false,
+        isGroup: false,
+        data: {
+          uidFrom: "200",
+          idTo: "999",
+          ts: "1800000000000",
+          content: { rMsg: [{ gMsgID: "1001" }], rIcon: "/-heart", rType: 5 },
+        },
+      },
+      "100",
+    ),
+  ).toEqual([])
+})
+
+it("reads historical Zalo reaction JSON while ignoring the wrapper packet ID", () => {
+  expect(
+    normalizeProviderThreadEvent(
+      "reaction",
+      {
+        threadId: "200",
+        isSelf: true,
+        isGroup: false,
+        data: {
+          uidFrom: "100",
+          idTo: "200",
+          ts: "1800000000000",
+          msgId: "9000",
+          content: JSON.stringify({
+            rMsg: [{ gMsgID: "1003" }],
+            rIcon: "/-strong",
+            rType: 3,
+          }),
+        },
+      },
+      "100",
+    ),
+  ).toMatchObject([
+    {
+      threadId: "200",
+      actorId: "100",
+      providerMessageId: "1003",
+      reactionKey: "/-strong",
+    },
+  ])
+})

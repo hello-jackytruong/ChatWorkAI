@@ -66,6 +66,24 @@ vi.mock(
   () => ({ updateZaloAccountGroupPolicyAction: vi.fn() }),
 )
 
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}))
+vi.mock(
+  "../src/features/zalo-accounts/components/zalo-group-administration-sheet",
+  () => ({
+    ZaloGroupAdministrationSheet: ({ name }: { name: string }) => (
+      <span>{name}</span>
+    ),
+  }),
+)
+vi.mock(
+  "../src/features/zalo-accounts/components/zalo-group-management-controls",
+  () => ({
+    ZaloGroupManagementControls: () => null,
+  }),
+)
+
 import { ZaloAccountGroups } from "../src/features/zalo-accounts/components/zalo-account-groups"
 
 let host: HTMLDivElement
@@ -113,12 +131,11 @@ const render = (accessible = true) =>
   )
 it("disables group controls under the account kill switch and renders safe label recovery copy", () => {
   render()
+  expect(host.querySelector('[role="switch"]')).toBeNull()
   expect(
-    host.querySelector('[aria-label="Receive"]')?.getAttribute("aria-disabled"),
-  ).toBe("true")
-  expect(
-    host.querySelector('[aria-label="Send"]')?.getAttribute("aria-disabled"),
-  ).toBe("true")
+    host.querySelector<HTMLInputElement>('input[aria-label="Message"]')
+      ?.disabled,
+  ).toBe(true)
   expect(host.textContent).toContain("Label update outcome unknown")
   expect(host.textContent).not.toContain("outcomeUnknown")
 })
@@ -126,9 +143,10 @@ it("keeps inaccessible groups disabled and invalidates after policy changes", as
   mocks.enabled = true
   render(false)
   expect(
-    host.querySelector('[aria-label="Send"]')?.getAttribute("aria-disabled"),
-  ).toBe("true")
-  await mocks.options[4]?.onSuccess?.()
+    host.querySelector<HTMLInputElement>('input[aria-label="Message"]')
+      ?.disabled,
+  ).toBe(true)
+  await mocks.options[3]?.onSuccess?.()
   expect(mocks.invalidate).toHaveBeenCalled()
 })
 it("blocks settings sends while the gateway is unavailable", () => {
@@ -141,36 +159,24 @@ it("blocks settings sends while the gateway is unavailable", () => {
   ).toBe(true)
 })
 
-it("runs account sync controls and persists group receive/send changes", async () => {
+it("leaves automation as the group setting and retains sync controls", async () => {
   mocks.enabled = true
   render()
   const executions = [...mocks.executions]
   act(() => {
-    host
-      .querySelector<HTMLButtonElement>('[id="zalo-group-messaging-a"]')
-      ?.click()
-    host.querySelector<HTMLButtonElement>('[aria-label="Receive"]')?.click()
-    host.querySelector<HTMLButtonElement>('[aria-label="Send"]')?.click()
     for (const button of Array.from(host.querySelectorAll("button"))) {
       if (button.textContent?.includes(messages.actions.synchronize)) {
         button.click()
       }
     }
   })
-  expect(executions[0]).toHaveBeenCalledWith({ enabled: false })
-  expect(executions[1]).toHaveBeenCalledWith(
+  expect(host.querySelector('[role="switch"]')).toBeNull()
+  expect(host.querySelector('[aria-label="Automation"]')).not.toBeNull()
+  expect(executions[0]).toHaveBeenCalledWith(
     expect.objectContaining({ commandId: expect.any(String) }),
   )
+  expect(executions[1]).toHaveBeenCalledWith()
   expect(executions[2]).toHaveBeenCalledWith()
-  expect(executions[3]).toHaveBeenCalledWith()
-  expect(executions[4]).toHaveBeenCalledWith({
-    groupId: "g",
-    receiveEnabled: false,
-  })
-  expect(executions[4]).toHaveBeenCalledWith({
-    groupId: "g",
-    sendEnabled: false,
-  })
   for (const options of [...mocks.options]) {
     await act(async () => {
       await options.onSuccess?.()

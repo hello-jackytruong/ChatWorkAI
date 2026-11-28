@@ -518,6 +518,7 @@ export class ZaloAccountMediaService {
     input: MediaScope & {
       ownerKind?: RegisterMediaResource["ownerKind"]
       ownerIds?: string[]
+      sourceRevision?: string
     },
   ) {
     return db.transaction((tx) => repository.releaseOwners(input, tx))

@@ -1,3 +1,4 @@
+import { encryptUtils } from "@chatbotx.io/encryption"
 import type { ZaloAccountCommandEnvelope } from "@chatbotx.io/sdk"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ZaloAccountCommandTransport } from "../src/zalo-account/transport.service"
@@ -14,6 +15,89 @@ describe("ZaloAccountCommandTransport", () => {
     vi.resetAllMocks()
     redis.eval.mockResolvedValue(1)
     redis.get.mockResolvedValue(null)
+  })
+
+  const nativeInput = {
+    commandId: "native-tool-1",
+    workspaceId: "w",
+    accountId: "a",
+    inboxId: "i",
+    accountPolicyEpoch: 2,
+    operation: { kind: "readOwnQr" as const },
+    ttlMs: 5000,
+    waitTimeoutMs: 100,
+  }
+  const sensitiveResult = {
+    kind: "readOwnQr",
+    outcome: "confirmed",
+    profileQr: { imageUrl: "https://qr.zalo.me/test-result?token=fixture" },
+  }
+
+  it("decrypts a native result only under the exact command and account scope", async () => {
+    const aad = JSON.stringify([
+      "zalo-native-tool-result-v1",
+      "w",
+      "a",
+      "i",
+      "native-tool-1",
+      "readOwnQr",
+    ])
+    const nativeToolCiphertext = await encryptUtils.encryptObject(
+      sensitiveResult,
+      aad,
+    )
+    const serialized = JSON.stringify({
+      status: "applied",
+      result: { status: "synced", nativeToolCiphertext },
+    })
+    redis.get
+      .mockResolvedValueOnce("owner-1:9")
+      .mockResolvedValueOnce(serialized)
+    await expect(transport.nativeToolAndWait(nativeInput)).resolves.toEqual(
+      sensitiveResult,
+    )
+    redis.get
+      .mockResolvedValueOnce("owner-1:9")
+      .mockResolvedValueOnce(serialized)
+    await expect(
+      transport.nativeToolAndWait({
+        ...nativeInput,
+        accountId: "other-native-account",
+      }),
+    ).rejects.toThrow()
+  })
+
+  it("refuses plaintext or a different native operation result", async () => {
+    redis.get.mockResolvedValueOnce("owner-1:9").mockResolvedValueOnce(
+      JSON.stringify({
+        status: "applied",
+        result: { status: "synced", nativeTool: sensitiveResult },
+      }),
+    )
+    await expect(transport.nativeToolAndWait(nativeInput)).rejects.toThrow()
+    const aad = JSON.stringify([
+      "zalo-native-tool-result-v1",
+      "w",
+      "a",
+      "i",
+      "native-tool-1",
+      "readOwnQr",
+    ])
+    const nativeToolCiphertext = await encryptUtils.encryptObject(
+      {
+        kind: "readOwnBusiness",
+        outcome: "confirmed",
+        ownBusiness: { packageId: 2 },
+      },
+      aad,
+    )
+    redis.get.mockResolvedValueOnce("owner-1:9").mockResolvedValueOnce(
+      JSON.stringify({
+        status: "applied",
+        result: { status: "synced", nativeToolCiphertext },
+      }),
+    )
+    await expect(transport.nativeToolAndWait(nativeInput)).rejects.toThrow()
   })
 
   it("preserves the friend page cursor in the dispatched command", async () => {
@@ -38,6 +122,44 @@ describe("ZaloAccountCommandTransport", () => {
     expect(JSON.parse(String(redis.eval.mock.calls[0]?.at(-1)))).toMatchObject({
       kind: "sync_friends",
       cursor: 2,
+    })
+  })
+
+  it("sends bounded group administration reads to the current owner's fenced mailbox", async () => {
+    const groupAdministration = {
+      kind: "members",
+      members: [],
+      complete: false,
+      visibility: "restricted",
+    }
+    redis.get.mockResolvedValueOnce("owner-1:9").mockResolvedValueOnce(
+      JSON.stringify({
+        status: "applied",
+        result: { status: "synced", groupAdministration },
+      }),
+    )
+    const groupRead = { kind: "members", cursor: "next", limit: 25 } as const
+    await expect(
+      transport.readGroupAdministrationAndWait({
+        commandId: "group-read-1",
+        workspaceId: "w",
+        accountId: "a",
+        inboxId: "i",
+        groupId: "provider-group",
+        groupPolicyEpoch: 2,
+        accountPolicyEpoch: 1,
+        groupRead,
+        ttlMs: 5000,
+        waitTimeoutMs: 100,
+      }),
+    ).resolves.toEqual(groupAdministration)
+    expect(JSON.parse(String(redis.eval.mock.calls[0]?.at(-1)))).toMatchObject({
+      kind: "read_group_administration",
+      target: { ownerId: "owner-1", fenceToken: "9" },
+      groupRead,
+      groupId: "provider-group",
+      groupPolicyEpoch: 2,
+      accountPolicyEpoch: 1,
     })
   })
 

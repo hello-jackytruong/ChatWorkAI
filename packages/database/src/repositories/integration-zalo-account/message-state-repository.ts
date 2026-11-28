@@ -4,6 +4,7 @@ import {
   and,
   type DatabaseClient,
   db,
+  desc,
   eq,
   inArray,
   lte,
@@ -295,7 +296,10 @@ export const zaloAccountMessageStateRepository = {
     })
   },
   async summarize(
-    input: Omit<Thread, "providerMessageId"> & { providerMessageIds: string[] },
+    input: Omit<Thread, "providerMessageId"> & {
+      providerMessageIds: string[]
+      reactionAliases?: Record<string, string>
+    },
   ) {
     if (!input.providerMessageIds.length) {
       return { receipts: [], reactions: [] }
@@ -317,11 +321,17 @@ export const zaloAccountMessageStateRepository = {
         ),
       )
       .groupBy(receipt.providerMessageId)
+    const aliases = input.reactionAliases ?? {}
+    const aliasIds = Object.keys(aliases)
+    const reactionTarget =
+      sql<string>`COALESCE(${JSON.stringify(aliases)}::jsonb ->> ${reaction.providerMessageId}, ${reaction.providerMessageId})`.as(
+        "reaction_target",
+      )
     const reactions = await db
       .select({
-        providerMessageId: reaction.providerMessageId,
+        providerMessageId: reactionTarget,
         key: reaction.reactionKey,
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(DISTINCT ${reaction.actorId})::int`,
       })
       .from(reaction)
       .where(
@@ -331,14 +341,17 @@ export const zaloAccountMessageStateRepository = {
           eq(reaction.threadType, input.threadType),
           eq(reaction.threadId, input.threadId),
           eq(reaction.active, true),
-          inArray(reaction.providerMessageId, input.providerMessageIds),
+          inArray(reaction.providerMessageId, [
+            ...input.providerMessageIds,
+            ...aliasIds,
+          ]),
         ),
       )
-      .groupBy(reaction.providerMessageId, reaction.reactionKey)
+      .groupBy(({ providerMessageId, key }) => [providerMessageId, key])
       .limit(2500)
     return { receipts, reactions }
   },
-  async listActors(input: Thread) {
+  async listActors(input: Thread & { reactionAliasIds?: string[] }) {
     const receipts = await db
       .select({
         actorId: receipt.memberId,
@@ -358,14 +371,30 @@ export const zaloAccountMessageStateRepository = {
       .orderBy(receipt.memberId)
       .limit(ACTOR_DETAILS_LIMIT + 1)
     const reactions = await db
-      .select({
+      .selectDistinctOn([reaction.actorId, reaction.reactionKey], {
         actorId: reaction.actorId,
         reaction: reaction.reactionKey,
         occurredAt: reaction.occurredAt,
       })
       .from(reaction)
-      .where(and(reactionScope(input), eq(reaction.active, true)))
-      .orderBy(reaction.actorId, reaction.reactionKey)
+      .where(
+        and(
+          eq(reaction.workspaceId, input.workspaceId),
+          eq(reaction.accountId, input.accountId),
+          eq(reaction.threadType, input.threadType),
+          eq(reaction.threadId, input.threadId),
+          eq(reaction.active, true),
+          inArray(reaction.providerMessageId, [
+            input.providerMessageId,
+            ...(input.reactionAliasIds ?? []),
+          ]),
+        ),
+      )
+      .orderBy(
+        reaction.actorId,
+        reaction.reactionKey,
+        desc(reaction.occurredAt),
+      )
       .limit(ACTOR_DETAILS_LIMIT + 1)
     return {
       receipts: receipts.slice(0, ACTOR_DETAILS_LIMIT),

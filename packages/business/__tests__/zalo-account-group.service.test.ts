@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   upsert: vi.fn(),
   takeRate: vi.fn(),
   beginSync: vi.fn(),
+  withRuntimeAccount: vi.fn(),
 }))
 vi.mock("../src/zalo-account/group-rate-limit", () => ({
   takeGroupSendCapacity: mocks.takeRate,
@@ -29,6 +30,7 @@ vi.mock("../src/audit/dispatcher", () => ({
 vi.mock("@chatbotx.io/database/repositories", () => ({
   integrationZaloAccountRepository: {
     beginGroupSync: mocks.beginSync,
+    withRuntimeAccount: mocks.withRuntimeAccount,
     commitGroupSync: async (
       _input: unknown,
       fn: (tx: object) => Promise<unknown>,
@@ -340,4 +342,61 @@ describe("zaloAccountGroupService", () => {
       }),
     )
   })
+})
+
+it("provisions an Inbox for the first incoming message from a synchronized group under the current socket fence", async () => {
+  const scope = {
+    workspaceId: account.workspaceId,
+    accountId: account.id,
+    inboxId: account.inboxId,
+  }
+  const fence = { epoch: 2, fenceToken: "9" }
+  const group = {
+    id: "group-1",
+    accessible: true,
+    receiveEnabled: true,
+    sendEnabled: true,
+    policyEpoch: 3,
+  }
+  mocks.findAccount.mockResolvedValue({ ...account, groupPolicyEpoch: 5 })
+  mocks.findGroup.mockResolvedValue(group)
+  mocks.updateInboxPolicy.mockClear()
+  mocks.updateInboxPolicy.mockResolvedValue({
+    ...group,
+    conversationId: "conversation",
+    contactInboxId: "contact-inbox",
+  })
+  const tx = {}
+  mocks.withRuntimeAccount.mockImplementation(
+    async (_route, apply) =>
+      await apply(tx, {
+        ...account,
+        groupPolicyEpoch: 5,
+        operations: { runtime: { ...fence, state: "connected" } },
+      }),
+  )
+  await expect(
+    zaloAccountGroupService.resolveReceivePolicy({
+      ...scope,
+      providerGroupId: "native-1",
+      inboundRuntime: fence,
+    }),
+  ).resolves.toEqual({ accountPolicyEpoch: 5, groupPolicyEpoch: 3 })
+  expect(mocks.updateInboxPolicy).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      ...scope,
+      id: "group-1",
+      ensureInbox: "receive",
+    }),
+    tx,
+  )
+  mocks.updateInboxPolicy.mockClear()
+  await expect(
+    zaloAccountGroupService.resolveReceivePolicy({
+      ...scope,
+      providerGroupId: "native-1",
+      inboundRuntime: { ...fence, fenceToken: "8" },
+    }),
+  ).resolves.toBeNull()
+  expect(mocks.updateInboxPolicy).not.toHaveBeenCalled()
 })

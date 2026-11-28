@@ -4249,6 +4249,21 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "GET",
+    "operationId": "zaloAccounts.getGroupAdministration",
+    "path": "/v1/zalo-accounts/{accountId}/groups/{groupId}/administration",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getGroupManagementAttempt",
+    "path": "/v1/zalo-accounts/{accountId}/group-management/attempts/{commandId}",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getGroupManagementCapability",
+    "path": "/v1/zalo-accounts/{accountId}/group-management/capability",
+  },
+  {
+    "method": "GET",
     "operationId": "zaloAccounts.getHistorySyncStatus",
     "path": "/v1/zalo-accounts/{accountId}/history-sync",
   },
@@ -4284,6 +4299,26 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "GET",
+    "operationId": "zaloAccounts.getNativeAccountProfileAttempt",
+    "path": "/v1/zalo-accounts/{accountId}/native-profile/attempts/{commandId}",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getNativeConversationSettingAttempt",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/native-settings/attempts/{commandId}",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getNativeConversationSettings",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/native-settings",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getNativeReplyAttempt",
+    "path": "/v1/zalo-accounts/{accountId}/native-replies/attempts/{commandId}",
+  },
+  {
+    "method": "GET",
     "operationId": "zaloAccounts.getSavedMessageAttachment",
     "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/saved-content/attachments/{attachmentId}",
   },
@@ -4308,6 +4343,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/hide-locally",
   },
   {
+    "method": "POST",
+    "operationId": "zaloAccounts.inspectGroupLink",
+    "path": "/v1/zalo-accounts/{accountId}/group-management/inspect-link",
+  },
+  {
     "method": "GET",
     "operationId": "zaloAccounts.list",
     "path": "/v1/zalo-accounts",
@@ -4316,6 +4356,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "GET",
     "operationId": "zaloAccounts.listContactRelationships",
     "path": "/v1/zalo-accounts/{accountId}/contacts/relationships",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.listGroupAdministrationMembers",
+    "path": "/v1/zalo-accounts/{accountId}/groups/{groupId}/administration/members",
   },
   {
     "method": "GET",
@@ -4339,6 +4384,16 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "GET",
+    "operationId": "zaloAccounts.listNativeLabels",
+    "path": "/v1/zalo-accounts/{accountId}/labels",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.listRelatedGroups",
+    "path": "/v1/zalo-accounts/{accountId}/groups/{groupId}/administration/related-groups",
+  },
+  {
+    "method": "GET",
     "operationId": "zaloAccounts.listStickers",
     "path": "/v1/zalo-accounts/{accountId}/stickers",
   },
@@ -4359,8 +4414,33 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "POST",
+    "operationId": "zaloAccounts.mutateGroupManagement",
+    "path": "/v1/zalo-accounts/{accountId}/group-management",
+  },
+  {
+    "method": "POST",
     "operationId": "zaloAccounts.openContactConversation",
     "path": "/v1/zalo-accounts/{accountId}/contacts/open-conversation",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.queueNativeLabelSync",
+    "path": "/v1/zalo-accounts/{accountId}/labels/queue-sync",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.readGroupManagement",
+    "path": "/v1/zalo-accounts/{accountId}/group-management",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.readNativeAccountProfile",
+    "path": "/v1/zalo-accounts/{accountId}/native-profile",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.readNativeReplies",
+    "path": "/v1/zalo-accounts/{accountId}/native-replies",
   },
   {
     "method": "POST",
@@ -4423,6 +4503,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "path": "/v1/zalo-accounts/{accountId}/typing",
   },
   {
+    "method": "PATCH",
+    "operationId": "zaloAccounts.setNativeConversationSetting",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/native-settings",
+  },
+  {
     "method": "POST",
     "operationId": "zaloAccounts.setReaction",
     "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/reaction",
@@ -4461,6 +4546,21 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "PATCH",
     "operationId": "zaloAccounts.updateGroupTags",
     "path": "/v1/zalo-accounts/{accountId}/groups/{groupId}/tags",
+  },
+  {
+    "method": "PATCH",
+    "operationId": "zaloAccounts.updateNativeAccountProfile",
+    "path": "/v1/zalo-accounts/{accountId}/native-profile",
+  },
+  {
+    "method": "PATCH",
+    "operationId": "zaloAccounts.updateNativeLabel",
+    "path": "/v1/zalo-accounts/{accountId}/labels/{labelId}/definition",
+  },
+  {
+    "method": "PATCH",
+    "operationId": "zaloAccounts.updateNativeReplies",
+    "path": "/v1/zalo-accounts/{accountId}/native-replies",
   },
   {
     "method": "PATCH",

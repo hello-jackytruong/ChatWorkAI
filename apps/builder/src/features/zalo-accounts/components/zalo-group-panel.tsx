@@ -19,6 +19,7 @@ import {
   useInvalidateZaloGroupInbox,
   useZaloGroupInbox,
 } from "../queries/use-group-inbox"
+import { ZaloTagOrigin } from "./zalo-tag-origin"
 
 export function ZaloGroupPanel({
   workspaceId,
@@ -30,6 +31,9 @@ export function ZaloGroupPanel({
   const t = useTranslations()
   const query = useZaloGroupInbox(workspaceId, audience)
   const tags = useTags(workspaceId)
+  const nativeTagIds = query.data?.nativeTagIds
+    ? new Set(query.data.nativeTagIds)
+    : null
   const [selected, setSelected] = useState<string | null>(null)
   const invalidate = useInvalidateZaloGroupInbox(workspaceId, audience)
   const action = useAction(
@@ -76,7 +80,11 @@ export function ZaloGroupPanel({
             size="sm"
             variant="secondary"
           >
-            {tag.name} ×
+            {tag.name}
+            {nativeTagIds && (
+              <ZaloTagOrigin native={nativeTagIds.has(tag.id)} />
+            )}
+            <span aria-hidden>×</span>
           </Button>
         ))}
       </div>

@@ -472,9 +472,23 @@ export const zaloAccountCanonicalSendService = {
         id: input.groupId,
       })
       if (
+        account.groupMessagingEnabled &&
+        group.accessible &&
+        group.sendEnabled &&
+        !(group.contactInboxId && group.conversationId)
+      ) {
+        group =
+          (await zaloAccountGroupService.ensureSendInbox({
+            workspaceId: input.workspaceId,
+            accountId: account.id,
+            inboxId: account.inboxId,
+            id: group.id,
+          })) ?? undefined
+      }
+      if (
         !(
           account.groupMessagingEnabled &&
-          group.accessible &&
+          group?.accessible &&
           group.sendEnabled &&
           group.contactInboxId &&
           group.conversationId

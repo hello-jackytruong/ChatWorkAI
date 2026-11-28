@@ -1,6 +1,10 @@
 import { zaloAccountMediaReadService } from "@chatbotx.io/business/zalo-account-media"
 import type { IntegrationZaloAccountPublicModel } from "@chatbotx.io/database/types"
-import type { ZaloAccountResource } from "../schema/resource"
+import {
+  type ZaloAccountGroupResource,
+  type ZaloAccountResource,
+  zaloAccountGroupResource,
+} from "../schema/resource"
 
 export const toZaloAccountResource = (
   account: IntegrationZaloAccountPublicModel,
@@ -9,7 +13,7 @@ export const toZaloAccountResource = (
   inboxId: account.inboxId,
   zaloUid: account.zaloUid,
   name: account.name,
-  groupMessagingEnabled: account.groupMessagingEnabled ?? false,
+  groupMessagingEnabled: account.groupMessagingEnabled ?? true,
   avatarUrl: account.avatarUrl,
   sessionVerifiedAt: account.sessionVerifiedAt.toISOString(),
   createdAt: account.createdAt.toISOString(),
@@ -50,17 +54,11 @@ export const toZaloAccountResources = async (
   }
   return result
 }
-export const withZaloGroupResources = async <
-  T extends {
-    accountId: string
-    providerGroupId: string
-    avatarUrl: string | null
-  },
->(
+export const withZaloGroupResources = async (
   workspaceId: string,
-  groups: T[],
-): Promise<T[]> => {
-  const result: T[] = []
+  groups: ZaloAccountGroupResource[],
+): Promise<ZaloAccountGroupResource[]> => {
+  const result: ZaloAccountGroupResource[] = []
   for (let offset = 0; offset < groups.length; offset += 50) {
     const page = groups.slice(offset, offset + 50)
     const projection = await zaloAccountMediaReadService.projectProfiles({
@@ -72,12 +70,14 @@ export const withZaloGroupResources = async <
       })),
     })
     result.push(
-      ...page.map((group) => ({
-        ...group,
-        ...projection.get(
-          JSON.stringify([group.accountId, "group", group.providerGroupId]),
-        ),
-      })),
+      ...page.map((group) =>
+        zaloAccountGroupResource.parse({
+          ...group,
+          ...projection.get(
+            JSON.stringify([group.accountId, "group", group.providerGroupId]),
+          ),
+        }),
+      ),
     )
   }
   return result

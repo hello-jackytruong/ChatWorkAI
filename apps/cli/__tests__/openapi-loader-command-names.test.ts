@@ -437,6 +437,19 @@ describe("pathAndMethodToCommandName — Zalo Account contacts", () => {
   })
 })
 
+test("maps Zalo group administration reads to separate commands", () => {
+  const path = "/v1/zalo-accounts/{accountId}/groups/{groupId}/administration"
+  expect(
+    ["", "/members", "/related-groups"].map((suffix) =>
+      pathAndMethodToCommandName(`${path}${suffix}`, "GET"),
+    ),
+  ).toEqual([
+    "zalo-accounts:groups:overview",
+    "zalo-accounts:groups:roster",
+    "zalo-accounts:groups:related",
+  ])
+})
+
 describe("pathAndMethodToCommandName — Zalo Account history", () => {
   test("preserves separate account and conversation sync commands", () => {
     const account = "/v1/zalo-accounts/{accountId}/history-sync"
@@ -746,4 +759,17 @@ test("Zalo message and conversation deletion commands stay distinct", () => {
   expect(message).toBe("zalo-accounts:message:delete-on-zalo")
   expect(chat).toBe("zalo-accounts:conversation:delete-on-zalo")
   expect(message).not.toBe(chat)
+})
+
+test("native Zalo replies expose distinct read, update and status commands", () => {
+  const path = "/v1/zalo-accounts/{accountId}/native-replies"
+  expect(pathAndMethodToCommandName(path, "GET")).toBe(
+    "zalo-accounts:native-replies:read",
+  )
+  expect(pathAndMethodToCommandName(path, "PATCH")).toBe(
+    "zalo-accounts:native-replies:update",
+  )
+  expect(
+    pathAndMethodToCommandName(`${path}/attempts/{commandId}`, "GET"),
+  ).toBe("zalo-accounts:native-replies:status")
 })

@@ -4,6 +4,7 @@ import { expect, it } from "vitest"
 import messages from "../../../../../messages/en.json"
 import {
   getZaloGroupConversation,
+  getZaloGroupEventLabel,
   getZaloGroupMessage,
   splitZaloMentions,
 } from "../../../zalo-accounts/lib/group-content"
@@ -71,4 +72,29 @@ it("ignores overlapping or out-of-range mention spans without losing text", () =
   ])
   expect(parts.map((part) => part.text).join("")).toBe("Hi @Bob")
   expect(parts.filter((part) => part.uid)).toHaveLength(1)
+})
+
+it("localizes only validated system activity from a Zalo Account group", () => {
+  const event = {
+    senderType: "system",
+    messageType: "activity",
+    contentAttributes: { zaloAccount: { groupEvent: "avatarUpdated" } },
+  }
+  expect(getZaloGroupEventLabel(event, true)).toBe("groupEvents.avatarUpdated")
+  expect(getZaloGroupEventLabel(event, false)).toBeUndefined()
+  expect(
+    getZaloGroupEventLabel({ ...event, senderType: "contact" }, true),
+  ).toBeUndefined()
+  expect(
+    getZaloGroupEventLabel({ ...event, messageType: "incoming" }, true),
+  ).toBeUndefined()
+  expect(
+    getZaloGroupEventLabel(
+      {
+        ...event,
+        contentAttributes: { zaloAccount: { groupEvent: "constructor" } },
+      },
+      true,
+    ),
+  ).toBeUndefined()
 })

@@ -988,6 +988,7 @@ export const zaloAccountMediaRepository = {
       referenceId?: string
       ownerKind?: string
       ownerId?: string
+      ownerIds?: string[]
       cursor?: string
       limit: number
       conversationIds?: string[]
@@ -1002,6 +1003,9 @@ export const zaloAccountMediaRepository = {
     }
     if (input.ownerId) {
       conditions.push(eq(reference.ownerId, input.ownerId))
+    }
+    if (input.ownerIds) {
+      conditions.push(inArray(reference.ownerId, input.ownerIds))
     }
     if (input.referenceId) {
       conditions.push(eq(reference.id, input.referenceId))
@@ -1219,7 +1223,11 @@ export const zaloAccountMediaRepository = {
     return ids.length
   },
   async releaseOwners(
-    input: Scope & { ownerKind?: Reference["ownerKind"]; ownerIds?: string[] },
+    input: Scope & {
+      ownerKind?: Reference["ownerKind"]
+      ownerIds?: string[]
+      sourceRevision?: string
+    },
     tx: DatabaseClient = db,
   ) {
     const filters = [referenceScope(input)]
@@ -1228,6 +1236,9 @@ export const zaloAccountMediaRepository = {
     }
     if (input.ownerIds) {
       filters.push(inArray(reference.ownerId, input.ownerIds))
+    }
+    if (input.sourceRevision !== undefined) {
+      filters.push(eq(reference.sourceRevision, input.sourceRevision))
     }
     const rows = await tx
       .select({ id: reference.id })

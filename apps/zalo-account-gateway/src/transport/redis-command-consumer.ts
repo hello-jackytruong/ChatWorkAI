@@ -342,12 +342,22 @@ export class RedisCommandConsumer {
     command: ZaloAccountCommandEnvelope,
     outcome: CommandExecutionOutcome,
   ): Promise<void> {
+    let published = outcome
+    if (command.kind === "native_tool" && outcome.status === "applied") {
+      const { status, nativeToolCiphertext } = outcome.result
+      published = nativeToolCiphertext
+        ? { status: "applied", result: { status, nativeToolCiphertext } }
+        : { status: "unknown" }
+    }
     await this.options.redis.set(
       zaloAccountTransportKeys.commandResult(command.commandId),
-      JSON.stringify(outcome),
+      JSON.stringify(published),
       "PX",
       command.kind === "fetch_history_page" ||
         command.kind === "read_profiles" ||
+        command.kind === "read_group_administration" ||
+        command.kind === "group_management" ||
+        command.kind === "native_tool" ||
         (command.kind === "contact_operation" &&
           !zaloAccountContactMutationSchema.safeParse(command.contactOperation)
             .success)

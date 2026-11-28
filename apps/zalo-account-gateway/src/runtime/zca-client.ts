@@ -7,6 +7,7 @@ import {
   zaloAccountAuthSchema,
   zaloAccountFriendSyncSchema,
   zaloAccountLabelSnapshotSchema,
+  zaloAccountNativeToolFamily,
 } from "@chatbotx.io/sdk"
 import {
   type Credentials,
@@ -16,8 +17,13 @@ import {
   ThreadType,
   Zalo,
 } from "zca-js"
+import { runProviderAccountProfile } from "./account-profile"
+import { runProviderConversationSettings } from "./conversation-settings"
+import { readProviderGroupAdministration } from "./group-administration"
+import { runProviderGroupManagement } from "./group-management"
 import { readGroupMembers } from "./group-members"
 import { createZaloAccountHistoryReader } from "./history-page"
+import { runProviderNativeReplies } from "./native-replies"
 import { assertOutboundUrl } from "./outbound-attachment"
 import type {
   ZcaApiPort,
@@ -29,6 +35,7 @@ import {
   normalizeZaloFriendEvent,
   runZaloContactOperation,
 } from "./provider-contacts"
+import { normalizeProviderGroupEvent } from "./provider-group-event"
 import {
   normalizeProviderGroupActivity,
   normalizeProviderMessage,
@@ -207,6 +214,30 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
     getStickerResources,
     getStickerCatalog: createStickerCatalogReader(api, getStickerResources),
     getGroupMembers: (groupId, query) => readGroupMembers(api, groupId, query),
+    readGroupAdministration: (groupId, query, scope) =>
+      readProviderGroupAdministration(api, groupId, query, scope),
+    groupManagement: (groupId, operation, authorizeDispatch) =>
+      runProviderGroupManagement(api, groupId, operation, authorizeDispatch),
+    nativeTool: (thread, operation, authorizeDispatch) => {
+      const family = zaloAccountNativeToolFamily(operation)
+      if (family === "accountProfile") {
+        return runProviderAccountProfile(api, operation, authorizeDispatch)
+      }
+      if (family === "nativeReplies") {
+        return runProviderNativeReplies(api, operation, authorizeDispatch)
+      }
+      if (!thread) {
+        throw new ZaloAccountPreDispatchError(
+          "Native Zalo conversation is unavailable",
+        )
+      }
+      return runProviderConversationSettings(
+        api,
+        thread,
+        operation,
+        authorizeDispatch,
+      )
+    },
     readProfiles: (query) => readProviderProfiles(api, query),
     contactOperation: (operation) =>
       runZaloContactOperation(api, operation, api.getOwnId()),
@@ -438,6 +469,17 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
               api.getOwnId(),
             )) {
               handlers.onFriendEvent?.(activity)
+            }
+          })
+          api.listener.on("group_event", (event) => {
+            if (handlers.onGroupEvent) {
+              const normalized = normalizeProviderGroupEvent(
+                event,
+                handlers.ownUid ?? api.getOwnId(),
+              )
+              if (normalized) {
+                handlers.onGroupEvent(normalized)
+              }
             }
           })
           api.listener.start({ retryOnClose: false })

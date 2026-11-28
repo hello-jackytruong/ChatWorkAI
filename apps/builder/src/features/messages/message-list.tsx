@@ -10,6 +10,7 @@ import { ArrowDownIcon, ReplyIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { useAction } from "next-safe-action/hooks"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import {
   type GridComponents,
   Virtuoso,
@@ -60,7 +61,11 @@ import type { MessageResourceWithRelations } from "./schema/resource"
 
 const START_INDEX = 100_000
 
-export function MessageList() {
+export function MessageList({
+  timelineSlot,
+}: {
+  timelineSlot?: HTMLElement | null
+}) {
   const canInspectZalo = useZaloInspectPermission()
   const workspaceId = useWorkspaceId()
   const t = useTranslations()
@@ -637,19 +642,20 @@ export function MessageList() {
     // is floored at the full list height and pushes the composer below the fold
     // instead of scrolling inside itself.
     <div className="relative flex min-h-0 flex-1 flex-col px-3">
-      {activeConversationId &&
+      {timelineSlot &&
+        activeConversationId &&
         activeInbox?.channel === "zaloAccount" &&
-        timelineAccountId && (
-          <div className="flex justify-end">
-            <ZaloTimelineDialog
-              accountId={timelineAccountId}
-              contactInboxId={activeInbox.id}
-              conversationId={activeConversationId}
-              key={activeConversationId}
-              onSelectMessage={highlightMessage}
-              workspaceId={workspaceId}
-            />
-          </div>
+        timelineAccountId &&
+        createPortal(
+          <ZaloTimelineDialog
+            accountId={timelineAccountId}
+            contactInboxId={activeInbox.id}
+            conversationId={activeConversationId}
+            key={activeConversationId}
+            onSelectMessage={highlightMessage}
+            workspaceId={workspaceId}
+          />,
+          timelineSlot,
         )}
       <Virtuoso
         alignToBottom={true}

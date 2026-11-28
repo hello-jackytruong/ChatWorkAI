@@ -348,9 +348,11 @@ export type IntegrationJobZaloAccountGroupRefresh = {
   data: {
     workspaceId: string
     accountId: string
-    providerGroupId: string
     commandId: string
-  }
+  } & (
+    | { nativeEvent: true; providerGroupId: string }
+    | { nativeEvent?: never; providerGroupId?: string }
+  )
 }
 
 export type IntegrationJobZaloAccountGroupMessage = {

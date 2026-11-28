@@ -1,4 +1,5 @@
 import {
+  type ZaloAccountGroupEvent,
   zaloAccountGroupMessageContextSchema,
   zaloAccountQuoteSchema,
 } from "@chatbotx.io/sdk"
@@ -16,6 +17,49 @@ const record = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined
+
+const groupEventLabels = {
+  joined: "groupEvents.joined",
+  left: "groupEvents.left",
+  removed: "groupEvents.removed",
+  blocked: "groupEvents.blocked",
+  adminAdded: "groupEvents.adminAdded",
+  adminRemoved: "groupEvents.adminRemoved",
+  updated: "groupEvents.updated",
+  avatarUpdated: "groupEvents.avatarUpdated",
+  settingsUpdated: "groupEvents.settingsUpdated",
+  linkUpdated: "groupEvents.linkUpdated",
+  topicUpdated: "groupEvents.topicUpdated",
+} as const satisfies Record<
+  Exclude<ZaloAccountGroupEvent["kind"], "refresh">,
+  string
+>
+
+export function getZaloGroupEventLabel(
+  message: {
+    senderType?: string | null
+    messageType?: string | null
+    contentAttributes?: unknown
+  },
+  isZaloAccountGroup: boolean,
+) {
+  if (
+    !(
+      isZaloAccountGroup &&
+      message.senderType === "system" &&
+      message.messageType === "activity"
+    )
+  ) {
+    return
+  }
+  const event = record(
+    record(message.contentAttributes)?.zaloAccount,
+  )?.groupEvent
+  if (typeof event === "string" && Object.hasOwn(groupEventLabels, event)) {
+    return groupEventLabels[event as keyof typeof groupEventLabels]
+  }
+}
+
 export function getZaloGroupConversation(
   conversation:
     | { sourceId?: string | null; additionalAttributes?: unknown }

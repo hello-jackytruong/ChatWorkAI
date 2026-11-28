@@ -171,15 +171,67 @@ describe("Zalo Account contact operations", () => {
     expect(mocks.findOrCreateConversation).not.toHaveBeenCalled()
   })
 
-  it("is unavailable by default and does not dispatch a provider call", async () => {
-    vi.stubEnv("ZALO_ACCOUNT_CONTACT_OPERATIONS_ACCOUNT_IDS", "")
+  it.each([
+    undefined,
+    "",
+    "   ",
+  ])("dispatches provider lookups when no account allowlist is configured (%s)", async (configuredAccounts) => {
+    vi.stubEnv(
+      "ZALO_ACCOUNT_CONTACT_OPERATIONS_ACCOUNT_IDS",
+      configuredAccounts,
+    )
+    mocks.dispatch.mockResolvedValue(applied({ contacts: [{ uid: peer }] }))
+
     await expect(
       service.lookup({
         ...scope,
         commandId: "lookup",
         operation: { kind: "lookupUsername", username: "known" },
       }),
-    ).rejects.toThrow()
+    ).resolves.toEqual({
+      contacts: [{ uid: peer, selectionToken: expect.any(String) }],
+    })
+    expect(mocks.resolveAccount).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: scope.workspaceId,
+      id: scope.accountId,
+    })
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    "false",
+    " False ",
+    "3, 4",
+  ])("does not dispatch provider calls for an explicitly restricted account (%s)", async (configuredAccounts) => {
+    vi.stubEnv(
+      "ZALO_ACCOUNT_CONTACT_OPERATIONS_ACCOUNT_IDS",
+      configuredAccounts,
+    )
+    await expect(
+      service.lookup({
+        ...scope,
+        commandId: "lookup",
+        operation: { kind: "lookupUsername", username: "known" },
+      }),
+    ).rejects.toThrow("Zalo Account contacts are unavailable")
+    expect(mocks.dispatch).not.toHaveBeenCalled()
+  })
+
+  it("requires an account in the selected workspace even without an allowlist", async () => {
+    vi.stubEnv("ZALO_ACCOUNT_CONTACT_OPERATIONS_ACCOUNT_IDS", undefined)
+    mocks.resolveAccount.mockResolvedValueOnce(undefined)
+
+    await expect(
+      service.lookup({
+        ...scope,
+        commandId: "lookup",
+        operation: { kind: "lookupUsername", username: "known" },
+      }),
+    ).rejects.toThrow("Zalo Account not found")
+    expect(mocks.resolveAccount).toHaveBeenCalledExactlyOnceWith({
+      workspaceId: scope.workspaceId,
+      id: scope.accountId,
+    })
     expect(mocks.dispatch).not.toHaveBeenCalled()
   })
 

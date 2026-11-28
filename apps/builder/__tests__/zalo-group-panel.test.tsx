@@ -4,12 +4,12 @@ import { createRoot } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import messages from "../messages/en.json"
 
-const mocks = vi.hoisted(() => ({ execute: vi.fn() }))
+const mocks = vi.hoisted(() => ({ execute: vi.fn(), groupQuery: vi.fn() }))
 vi.mock("@/features/tags/provider/tag-hook", () => ({
   useTags: () => ({ data: [{ id: "123456789", name: "Customer support" }] }),
 }))
 vi.mock("../src/features/zalo-accounts/queries/use-group-inbox", () => ({
-  useZaloGroupInbox: () => ({ data: { group: { name: "Team" }, tags: [] } }),
+  useZaloGroupInbox: () => mocks.groupQuery(),
   useInvalidateZaloGroupInbox: () => vi.fn(),
 }))
 vi.mock("../src/features/zalo-accounts/actions/group-inbox.action", () => ({
@@ -25,10 +25,50 @@ let host: HTMLDivElement
 let root: ReturnType<typeof createRoot>
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.groupQuery.mockReturnValue({
+    data: { group: { name: "Team" }, tags: [] },
+  })
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   host = document.createElement("div")
   document.body.append(host)
   root = createRoot(host)
+})
+
+it("shows exact account-native and ChatbotX tag provenance from the group panel data", async () => {
+  mocks.groupQuery.mockReturnValue({
+    data: {
+      group: { name: "Team" },
+      tags: [
+        { id: "77", name: "Native support" },
+        { id: "88", name: "Local support" },
+      ],
+      nativeTagIds: ["77"],
+    },
+  })
+  await act(async () =>
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ZaloGroupPanel
+          audience={{
+            kind: "zaloAccountGroup",
+            accountId: "a",
+            groupId: "g",
+            providerGroupId: "pg",
+          }}
+          workspaceId="w"
+        />
+      </NextIntlClientProvider>,
+    ),
+  )
+  const buttons = Array.from(host.querySelectorAll("button"))
+  expect(
+    buttons.find((button) => button.textContent?.includes("Native support"))
+      ?.textContent,
+  ).toContain("Zalo label")
+  expect(
+    buttons.find((button) => button.textContent?.includes("Local support"))
+      ?.textContent,
+  ).toContain("ChatbotX tag")
 })
 afterEach(() => {
   act(() => root.unmount())

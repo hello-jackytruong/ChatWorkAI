@@ -12,9 +12,6 @@ const editionRule = z
 export const env = createEnv({
   extends: [realtime(), database(), mail()],
   server: {
-    ZALO_ACCOUNT_NATIVE_MESSAGE_OPERATIONS_ENABLED: z
-      .enum(["true", "false"])
-      .default("false"),
     BETTER_AUTH_SECRET: z
       .string()
       .min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),

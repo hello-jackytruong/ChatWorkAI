@@ -1,15 +1,18 @@
-import { isZaloAccountNativeOperationsEnabled } from "@chatbotx.io/business/zalo-account/native-operation-policy"
+import { randomUUID } from "node:crypto"
+import { isZaloAccountEnabledByDefault } from "@chatbotx.io/business/zalo-account/native-operation-policy"
 import { z } from "zod"
 
 const booleanString = z
   .enum(["true", "false"])
-  .default("false")
+  .default("true")
   .transform((value) => value === "true")
+
+const processOwnerId = `gateway-${randomUUID()}`
 
 const gatewayEnvSchema = z
   .object({
     enabled: booleanString,
-    nativeMessageOperationsEnabled: z.boolean().default(false),
+    nativeMessageOperationsEnabled: z.boolean(),
     messageIntegrityEnabled: booleanString,
     host: z.string().min(1).default("0.0.0.0"),
     port: z.coerce.number().int().positive().default(3211),
@@ -26,22 +29,14 @@ const gatewayEnvSchema = z
         path: ["leaseRenewMs"],
       })
     }
-    if (value.enabled && !value.ownerId) {
-      context.addIssue({
-        code: "custom",
-        message:
-          "ZALO_ACCOUNT_GATEWAY_OWNER_ID is required when the gateway is enabled",
-        path: ["ownerId"],
-      })
-    }
   })
 
 export const resolveGatewayEnv = (
   runtimeEnv: NodeJS.ProcessEnv = process.env,
-) =>
-  gatewayEnvSchema.parse({
+) => {
+  const config = gatewayEnvSchema.parse({
     enabled: runtimeEnv.ZALO_ACCOUNT_GATEWAY_ENABLED,
-    nativeMessageOperationsEnabled: isZaloAccountNativeOperationsEnabled(
+    nativeMessageOperationsEnabled: isZaloAccountEnabledByDefault(
       runtimeEnv.ZALO_ACCOUNT_NATIVE_MESSAGE_OPERATIONS_ENABLED,
     ),
     messageIntegrityEnabled: runtimeEnv.ZALO_ACCOUNT_MESSAGE_INTEGRITY_ENABLED,
@@ -52,3 +47,7 @@ export const resolveGatewayEnv = (
     leaseRenewMs: runtimeEnv.ZALO_ACCOUNT_LEASE_RENEW_MS,
     ownerId: runtimeEnv.ZALO_ACCOUNT_GATEWAY_OWNER_ID,
   })
+  return config.enabled && !config.ownerId
+    ? { ...config, ownerId: processOwnerId }
+    : config
+}

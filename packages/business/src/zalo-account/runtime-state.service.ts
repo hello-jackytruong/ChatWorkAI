@@ -48,6 +48,50 @@ const runtimeTransitions = {
 } as const
 
 export const zaloAccountRuntimeStateService = {
+  async isCurrentConnectedSocket(
+    input: RuntimeOwner & { socketAttempt: number; sequence: number },
+  ) {
+    const row =
+      await integrationZaloAccountRepository.findConnectedRuntimeOrder(
+        accountRef(input),
+      )
+    const order = row?.runtime
+    if (
+      order?.state !== "connected" ||
+      order.fenceToken !== input.fenceToken ||
+      order.epoch !== input.epoch ||
+      order.socketAttempt !== input.socketAttempt ||
+      order.sequence !== input.sequence
+    ) {
+      return false
+    }
+    const diagnostics = row?.diagnostics
+    if (
+      diagnostics &&
+      isNewerZaloAccountRuntimeEvent(
+        {
+          ...diagnostics,
+          state: "closed",
+          occurredAt: diagnostics.lastLifecycleAt ?? order.occurredAt,
+        },
+        order,
+      ) &&
+      (diagnostics.phase !== "connected" ||
+        diagnostics.fenceToken !== order.fenceToken ||
+        diagnostics.epoch !== order.epoch ||
+        diagnostics.socketAttempt !== order.socketAttempt)
+    ) {
+      return false
+    }
+    const redis = await cacheConnections.useExisting()
+    const lease = await redis.get(
+      zaloAccountTransportKeys.lease({
+        workspaceId: input.workspaceId,
+        runtime: { kind: "account", id: input.accountId },
+      }),
+    )
+    return lease?.endsWith(`:${input.fenceToken}`) ?? false
+  },
   async claim(input: RuntimeOwner): Promise<boolean> {
     return await integrationZaloAccountRepository.withRuntimeAccount(
       accountRef(input),

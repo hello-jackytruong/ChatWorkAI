@@ -2,6 +2,7 @@ import {
   contactInboxRepository,
   integrationZaloAccountGroupRepository,
   zaloAccountMessageStateRepository,
+  zaloAccountSendAttemptRepository,
 } from "@chatbotx.io/database/repositories"
 import { notFoundException, validationException } from "../errors"
 import { scopedZaloCommandId } from "./command-identity"
@@ -12,6 +13,36 @@ import {
 } from "./message-recall.service"
 import { zaloAccountService } from "./service"
 import { zaloAccountCommandTransportService } from "./transport.service"
+
+async function resolveReactionAliases(input: {
+  workspaceId: string
+  accountId: string
+  threadType: "user" | "group"
+  threadId: string
+  providerMessageIds: string[]
+}) {
+  const requested = new Set(input.providerMessageIds)
+  const attempts =
+    await zaloAccountSendAttemptRepository.listReactionAliases(input)
+  const owners = new Map<string, string | null>()
+  for (const { providerMessageIds } of attempts) {
+    if (providerMessageIds.length > 10) {
+      continue
+    }
+    const visibleId = providerMessageIds.find((id) => requested.has(id))
+    if (!visibleId) {
+      continue
+    }
+    for (const alias of new Set(providerMessageIds)) {
+      if (!requested.has(alias)) {
+        owners.set(alias, owners.has(alias) ? null : visibleId)
+      }
+    }
+  }
+  return Object.fromEntries(
+    [...owners].flatMap(([alias, owner]) => (owner ? [[alias, owner]] : [])),
+  )
+}
 
 export const zaloAccountMessageStateService = {
   async sendTyping(input: {
@@ -79,7 +110,18 @@ export const zaloAccountMessageStateService = {
     ) {
       throw notFoundException("Zalo Account message not found")
     }
-    const details = await zaloAccountMessageStateRepository.listActors(target)
+    const reactionAliases = await resolveReactionAliases({
+      workspaceId: target.workspaceId,
+      accountId: target.accountId,
+      threadType: target.threadType,
+      threadId: target.threadId,
+      providerMessageIds: [target.providerMessageId],
+    })
+    const reactionAliasIds = Object.keys(reactionAliases)
+    const details = await zaloAccountMessageStateRepository.listActors({
+      ...target,
+      ...(reactionAliasIds.length ? { reactionAliasIds } : {}),
+    })
     return {
       receipts: details.receipts.map(({ actorId, deliveredAt, seenAt }) => ({
         actorId,
@@ -144,14 +186,19 @@ export const zaloAccountMessageStateService = {
       }
       threadId = inbox.sourceId
     }
-    return await zaloAccountMessageStateRepository.summarize({
+    const scope = {
       workspaceId: input.workspaceId,
       accountId: input.accountId,
-      inboxId: account.inboxId,
       threadId,
-      threadType: input.groupId ? "group" : "user",
-      groupId: input.groupId,
+      threadType: input.groupId ? ("group" as const) : ("user" as const),
       providerMessageIds: [...new Set(input.providerMessageIds)],
+    }
+    const reactionAliases = await resolveReactionAliases(scope)
+    return await zaloAccountMessageStateRepository.summarize({
+      ...scope,
+      inboxId: account.inboxId,
+      groupId: input.groupId,
+      reactionAliases,
     })
   },
 }

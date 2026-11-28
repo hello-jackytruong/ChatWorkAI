@@ -10,11 +10,12 @@ import {
 } from "../src/zalo-account-media/policy"
 
 describe("Zalo account media isolation", () => {
-  it("defaults writes off and bounds retries, pages and lease", () => {
+  it("defaults writes on and bounds retries, pages and lease", () => {
     const policy = getZaloAccountMediaPolicy({})
-    expect(policy.enabled).toBe(false)
+    expect(policy.enabled).toBe(true)
     expect(policy.maxAttempts).toBe(5)
     expect(policy.pageSize).toBe(50)
+    expect(policy.leaseMs).toBe(120_000)
     expect(policy.globalConcurrency).toBe(1)
   })
   it("separates accounts, roles and source revisions without retaining source tokens", () => {

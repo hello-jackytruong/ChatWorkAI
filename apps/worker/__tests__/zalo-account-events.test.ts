@@ -7,11 +7,15 @@ const mocks = vi.hoisted(() => ({
   completeTrusted: vi.fn(),
   decryptObject: vi.fn(),
   enqueueIntegrationJob: vi.fn(),
+  enqueueHistoryCatchup: vi.fn(),
   applyRuntime: vi.fn(),
   applyDiagnostics: vi.fn(),
+  currentSocket: vi.fn(),
+  enqueueLabelSync: vi.fn(),
   findSession: vi.fn(),
   failSession: vi.fn(),
   recordFriendActivity: vi.fn(),
+  handleGroupEvent: vi.fn(),
   realtime: vi.fn(),
   markScanned: vi.fn(),
   publishQr: vi.fn(),
@@ -24,10 +28,14 @@ vi.mock("@chatbotx.io/business/zalo-account/runtime-state", () => ({
   zaloAccountRuntimeStateService: {
     apply: mocks.applyRuntime,
     applyDiagnostics: mocks.applyDiagnostics,
+    isCurrentConnectedSocket: mocks.currentSocket,
   },
 }))
 vi.mock("@chatbotx.io/business/zalo-account/friend-activity", () => ({
   zaloAccountFriendActivityService: { record: mocks.recordFriendActivity },
+}))
+vi.mock("@chatbotx.io/business/zalo-account/group-lifecycle", () => ({
+  zaloAccountGroupLifecycleService: { handle: mocks.handleGroupEvent },
 }))
 vi.mock("@chatbotx.io/business/connect-session", () => ({
   connectSessionService: {
@@ -61,6 +69,10 @@ vi.mock("@chatbotx.io/worker-config", () => ({
     zaloAccountThreadEvent: "zaloAccountThreadEvent",
   },
   enqueueIntegrationJob: mocks.enqueueIntegrationJob,
+  enqueueZaloAccountLabelSync: mocks.enqueueLabelSync,
+  LowJobAction: { zaloAccountHistoryCatchup: "zaloAccountHistoryCatchup" },
+  lowQueue: { add: mocks.enqueueHistoryCatchup },
+  LOW_BULK_PRIORITY: 100,
 }))
 
 const { handleZaloAccountEvents } = await import(
@@ -96,6 +108,114 @@ const secretBase = {
 }
 
 describe("handleZaloAccountEvents", () => {
+  it("routes provider group events through lifecycle and coalesces a refresh per group", async () => {
+    mocks.handleGroupEvent.mockResolvedValue(true)
+    const route = {
+      kind: "account" as const,
+      workspaceId: "w",
+      accountId: "a",
+      inboxId: "i",
+    }
+    const payload = { providerGroupId: "42", kind: "refresh" as const }
+    const event = {
+      version: 1 as const,
+      eventId: "group-refresh",
+      route,
+      kind: "group_event" as const,
+      epoch: 3,
+      fenceToken: "9",
+      occurredAt: "2026-11-20T02:00:43.000Z",
+      payload,
+    }
+    await handleZaloAccountEvents([
+      event,
+      { ...event, eventId: "again" },
+      {
+        ...event,
+        eventId: "other-group",
+        payload: { ...payload, providerGroupId: "43" },
+      },
+    ])
+    expect(mocks.handleGroupEvent).toHaveBeenNthCalledWith(1, {
+      workspaceId: "w",
+      accountId: "a",
+      inboxId: "i",
+      epoch: 3,
+      fenceToken: "9",
+      event: payload,
+    })
+    const [first, repeated, otherGroup] = mocks.enqueueIntegrationJob.mock.calls
+    expect(first?.[0]).toMatchObject({
+      type: "zaloAccountGroupRefresh",
+      data: {
+        workspaceId: "w",
+        accountId: "a",
+        providerGroupId: "42",
+        nativeEvent: true,
+      },
+    })
+    expect(repeated?.[1].jobId).toBe(first?.[1].jobId)
+    expect(otherGroup?.[1].jobId).not.toBe(first?.[1].jobId)
+  })
+
+  it("queues account group discovery only for an accepted own join", async () => {
+    mocks.handleGroupEvent
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+    const route = {
+      kind: "account" as const,
+      workspaceId: "w",
+      accountId: "a",
+      inboxId: "i",
+    }
+    const occurredAt = new Date().toISOString()
+    const joined = {
+      version: 1 as const,
+      eventId: "own-joined",
+      route,
+      kind: "group_event" as const,
+      epoch: 3,
+      fenceToken: "9",
+      occurredAt,
+      payload: {
+        providerGroupId: "42",
+        kind: "joined" as const,
+        identity: "d".repeat(64),
+        timestampMs: Date.parse(occurredAt),
+        providerVersion: "5",
+        targetIncludesAccount: true,
+      },
+    }
+    await handleZaloAccountEvents([
+      joined,
+      { ...joined, eventId: "rejected-join", fenceToken: "8" },
+      {
+        ...joined,
+        eventId: "someone-joined",
+        payload: { ...joined.payload, targetIncludesAccount: false },
+      },
+      {
+        ...joined,
+        eventId: "own-removed",
+        payload: { ...joined.payload, kind: "removed" },
+      },
+    ])
+    const discoveryJobs = mocks.enqueueIntegrationJob.mock.calls.filter(
+      ([job]) => !job.data.nativeEvent,
+    )
+    expect(discoveryJobs).toHaveLength(1)
+    expect(discoveryJobs[0]?.[0]).toEqual({
+      type: "zaloAccountGroupRefresh",
+      data: {
+        workspaceId: "w",
+        accountId: "a",
+        commandId: expect.stringMatching(GROUP_REFRESH_JOB_ID_PATTERN),
+      },
+    })
+  })
+
   it("records scoped friend activity without queueing message work or connection transitions", async () => {
     mocks.enqueueIntegrationJob.mockClear()
     mocks.applyRuntime.mockClear()
@@ -203,6 +323,121 @@ describe("handleZaloAccountEvents", () => {
     mocks.applyRuntime.mockResolvedValueOnce(false)
     await handleZaloAccountEvents([event])
     expect(mocks.realtime).not.toHaveBeenCalled()
+  })
+  it("replays a committed Zalo socket open into one account label job without publishing another status", async () => {
+    vi.stubEnv("ZALO_ACCOUNT_LABEL_RECONNECT_SYNC_ENABLED", "true")
+    const event = {
+      version: 1 as const,
+      eventId: "replayed-open",
+      kind: "lifecycle" as const,
+      route: {
+        kind: "account" as const,
+        workspaceId: "w",
+        accountId: "a",
+        inboxId: "i",
+      },
+      fenceToken: "2",
+      epoch: 1,
+      socketAttempt: 2,
+      sequence: 4,
+      occurredAt: new Date().toISOString(),
+      payload: { type: "connected" as const, zaloUid: "private-uid" },
+    }
+    try {
+      mocks.applyRuntime.mockResolvedValue(false)
+      mocks.currentSocket
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false)
+      await handleZaloAccountEvents([
+        event,
+        { ...event, eventId: "stale-open", socketAttempt: 1 },
+      ])
+      expect(mocks.currentSocket).toHaveBeenCalledWith({
+        workspaceId: "w",
+        accountId: "a",
+        inboxId: "i",
+        fenceToken: "2",
+        epoch: 1,
+        socketAttempt: 2,
+        sequence: 4,
+      })
+      expect(mocks.enqueueLabelSync).toHaveBeenCalledExactlyOnceWith({
+        workspaceId: "w",
+        accountId: "a",
+      })
+      expect(mocks.realtime).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+  it("coalesces group discovery on verified socket opens with same-account group activity", async () => {
+    vi.stubEnv("ZALO_ACCOUNT_LABEL_RECONNECT_SYNC_ENABLED", "false")
+    const route = {
+      kind: "account" as const,
+      workspaceId: "w",
+      accountId: "a",
+      inboxId: "i",
+    }
+    const open = {
+      version: 1 as const,
+      eventId: "group-discovery-open",
+      kind: "lifecycle" as const,
+      route,
+      fenceToken: "2",
+      epoch: 1,
+      socketAttempt: 2,
+      sequence: 4,
+      occurredAt: new Date().toISOString(),
+      payload: { type: "connected" as const, zaloUid: "private-uid" },
+    }
+    try {
+      mocks.applyRuntime.mockResolvedValue(false)
+      mocks.currentSocket
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true)
+      await handleZaloAccountEvents([
+        open,
+        { ...open, eventId: "stale-open", socketAttempt: 1 },
+        {
+          ...open,
+          eventId: "other-account",
+          route: { ...route, accountId: "other" },
+        },
+        {
+          ...open,
+          eventId: "old-replay",
+          occurredAt: new Date(Date.now() - 600_000).toISOString(),
+        },
+        {
+          ...open,
+          eventId: "activity",
+          kind: "group_activity",
+          payload: { providerGroupId: "42", providerMessageId: "11" },
+        },
+      ])
+      expect(mocks.currentSocket).toHaveBeenCalledTimes(3)
+      expect(mocks.enqueueIntegrationJob).toHaveBeenCalledTimes(3)
+      const [current, other, activity] = mocks.enqueueIntegrationJob.mock.calls
+      expect(current?.[0]).toEqual({
+        type: "zaloAccountGroupRefresh",
+        data: {
+          workspaceId: "w",
+          accountId: "a",
+          commandId: expect.stringMatching(GROUP_REFRESH_JOB_ID_PATTERN),
+        },
+      })
+      expect(activity?.[1].jobId).toBe(current?.[1].jobId)
+      expect(other?.[1].jobId).not.toBe(current?.[1].jobId)
+      expect(activity?.[1].deduplication).toEqual(current?.[1].deduplication)
+      expect(other?.[1].deduplication.id).not.toBe(
+        current?.[1].deduplication.id,
+      )
+      expect(mocks.enqueueLabelSync).not.toHaveBeenCalled()
+      expect(mocks.realtime).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
   it.each([
     ["qr_declined", "provider_denied"],
@@ -634,6 +869,10 @@ describe("handleZaloAccountEvents", () => {
       {
         jobId: expect.stringMatching(GROUP_REFRESH_JOB_ID_PATTERN),
         delay: 10_000,
+        deduplication: {
+          id: expect.stringMatching(GROUP_REFRESH_JOB_ID_PATTERN),
+          ttl: 60_000,
+        },
       },
     )
     expect(mocks.enqueueIntegrationJob).not.toHaveBeenCalledWith(

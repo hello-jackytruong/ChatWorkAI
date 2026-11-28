@@ -67,6 +67,7 @@ import {
 } from "@/features/translation/components/outgoing-translation-status"
 import type { ZaloProfileTarget } from "@/features/zalo-accounts/components/zalo-profile-details"
 import {
+  getZaloGroupEventLabel,
   getZaloGroupMessage,
   getZaloGroupQuote,
 } from "@/features/zalo-accounts/lib/group-content"
@@ -233,6 +234,13 @@ export const MessageItem = (props: MessageItemProps) => {
   const zaloGroupMessage = props.zaloGroup
     ? getZaloGroupMessage(message.contentAttributes)
     : null
+  const zaloGroupEventLabel = getZaloGroupEventLabel(
+    message,
+    Boolean(props.zaloAccount && props.zaloGroup && !guestDisplay),
+  )
+  const displayText = zaloGroupEventLabel
+    ? tZalo(zaloGroupEventLabel)
+    : message.text
   const attributes = message.attributes as {
     liked?: boolean
     hidden?: boolean
@@ -404,7 +412,7 @@ export const MessageItem = (props: MessageItemProps) => {
           </div>
         ) : (
           <>
-            {(isDeleted || (message.text && message.text.length > 0)) &&
+            {(isDeleted || (displayText && displayText.length > 0)) &&
               !suppressRawText && (
                 <div
                   className={cn(
@@ -446,7 +454,7 @@ export const MessageItem = (props: MessageItemProps) => {
                             text={message.text ?? ""}
                           />
                         ) : (
-                          message.text
+                          displayText
                         )))
                       )}
                     </pre>

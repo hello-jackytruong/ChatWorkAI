@@ -56,6 +56,7 @@ describe("optimizeStoredImage", () => {
   beforeEach(() => {
     repository.updateAttachment.mockResolvedValue(1)
     vi.clearAllMocks()
+    isProtectedAttachment.mockResolvedValue(false)
     // Well above the small-source floor; the buffer itself stays tiny.
     uploader.headObject.mockResolvedValue({
       ContentLength: 64 * 1024,
@@ -79,7 +80,7 @@ describe("optimizeStoredImage", () => {
   })
 
   it("preserves an already queued Zalo original once its archive reference exists", async () => {
-    vi.stubEnv("ZALO_ACCOUNT_MEDIA_STORAGE_ENABLED", "true")
+    vi.stubEnv("ZALO_ACCOUNT_MEDIA_STORAGE_ENABLED", undefined)
     vi.stubEnv("STORED_IMAGE_OPTIMIZATION", "on")
     isProtectedAttachment.mockResolvedValue(true)
     try {

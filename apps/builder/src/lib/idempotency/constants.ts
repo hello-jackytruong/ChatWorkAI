@@ -25,4 +25,6 @@ export const IDEMPOTENCY_EXEMPT_READ_PATHS: ReadonlySet<string> = new Set([
   // A one-time handoff code must not replay a prior browser sign-in URL.
   "/v1/me/web-handoff",
   "/v1/templates/locked-resources",
+  // The group invitation URL stays in the request body and is never replayed.
+  "/v1/zalo-accounts/{accountId}/group-management/inspect-link",
 ])

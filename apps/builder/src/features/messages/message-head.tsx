@@ -1,6 +1,11 @@
 "use client"
 
 import { channelTypes } from "@chatbotx.io/database/partials"
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@chatbotx.io/ui/components/ui/avatar"
 import { Button } from "@chatbotx.io/ui/components/ui/button"
 import {
   Tooltip,
@@ -12,6 +17,7 @@ import { useTranslations } from "next-intl"
 import { useAction } from "next-safe-action/hooks"
 import { toast } from "sonner"
 import { contactDisplayName } from "@/features/contacts/lib/contact-display-name"
+import { useAvatarUrl } from "@/features/contacts/utils"
 import { withoutTranslationTurnedOn } from "@/features/translation/lib/conversation-translation"
 import { getZaloGroupConversation } from "@/features/zalo-accounts/lib/group-content"
 import { useWorkspaceId } from "@/hooks/routing"
@@ -35,9 +41,11 @@ import { useOptionalWhatsappVoipCallContext } from "../integration-whatsapp/call
 export default function MessageHead({
   onBack,
   onOpenContact,
+  timelineSlotRef,
 }: {
   onBack?: () => void
   onOpenContact?: () => void
+  timelineSlotRef?: (node: HTMLDivElement | null) => void
 }) {
   const t = useTranslations()
   const workspaceId = useWorkspaceId()
@@ -53,6 +61,8 @@ export default function MessageHead({
     (c) => c.id === activeConversationId,
   )
   const groupAudience = getZaloGroupConversation(activeConversation)
+  const contactName = contactDisplayName(activeConversation?.contact)
+  const avatarUrl = useAvatarUrl(activeConversation?.contact)
 
   const voipCallContext = useOptionalWhatsappVoipCallContext()
 
@@ -99,7 +109,7 @@ export default function MessageHead({
 
   return (
     activeConversation && (
-      <div className="flex shrink-0 items-center gap-2 border-b px-3 pb-3">
+      <div className="flex shrink-0 items-center gap-1 border-b px-3 pb-3 sm:gap-2">
         {onBack && (
           <Button
             aria-label={t("actions.back")}
@@ -111,9 +121,19 @@ export default function MessageHead({
             <ArrowLeftIcon className="rtl:rotate-180" />
           </Button>
         )}
+        <Avatar className="size-8 shrink-0 sm:size-9">
+          <AvatarImage alt="" className="object-cover" src={avatarUrl} />
+          <AvatarFallback aria-hidden="true">
+            {contactName ? (
+              contactName.slice(0, 2).toUpperCase()
+            ) : (
+              <UserRoundIcon className="size-4" />
+            )}
+          </AvatarFallback>
+        </Avatar>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="truncate font-medium text-semibold">
-            {contactDisplayName(activeConversation?.contact)}
+            {contactName}
             {groupAudience && (
               <span className="ms-2 text-muted-foreground text-xs">
                 {t("zaloAccount.groupBadge")} · {groupAudience.memberCount ?? 0}
@@ -128,7 +148,7 @@ export default function MessageHead({
         {whatsappContactInbox && (
           <WhatsappVoipCallButton
             contactInboxId={whatsappContactInbox.id}
-            contactName={contactDisplayName(activeConversation?.contact)}
+            contactName={contactName}
             conversationId={activeConversation.id}
             outboundCallMode={outboundCallMode.data}
           />
@@ -139,10 +159,12 @@ export default function MessageHead({
             <TooltipTrigger
               render={
                 <Button
+                  aria-label={t("actions.transferConversationToBot")}
                   disabled={isEnablingBot}
                   onClick={() => {
                     enableBot({ ids: [activeConversation.id] })
                   }}
+                  size="icon"
                   variant="ghost"
                 >
                   <BotIcon />
@@ -154,6 +176,13 @@ export default function MessageHead({
             </TooltipContent>
           </Tooltip>
         )}
+        {timelineSlotRef &&
+          activeConversation.contactInboxes?.[0]?.channel === "zaloAccount" && (
+            <div
+              className="flex shrink-0 items-center empty:hidden"
+              ref={timelineSlotRef}
+            />
+          )}
         {onOpenContact && (
           <Button
             aria-label={

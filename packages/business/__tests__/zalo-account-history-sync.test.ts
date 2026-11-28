@@ -124,8 +124,8 @@ afterEach(() => {
 })
 
 describe("Zalo Account history sync", () => {
-  it("defaults to disabled and performs no provider work", async () => {
-    vi.stubEnv("ZALO_ACCOUNT_HISTORY_SYNC_ENABLED", "")
+  it("performs no provider work when explicitly disabled", async () => {
+    vi.stubEnv("ZALO_ACCOUNT_HISTORY_SYNC_ENABLED", "false")
     expect(isZaloAccountHistorySyncEnabled()).toBe(false)
     await expect(
       zaloAccountHistorySyncService.start({ ...target, commandId: "request" }),
