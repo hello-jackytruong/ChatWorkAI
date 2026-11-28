@@ -1,7 +1,9 @@
 import { parseZaloAccountSourceId } from "@chatbotx.io/business/zalo-account/message-projection"
 import {
   toZaloAccountWebUrl,
+  zaloAccountInlineGifSchema,
   zaloAccountRichContentSchema,
+  zaloStickerSourceUrl,
 } from "@chatbotx.io/sdk"
 import { z } from "zod"
 import type { AttachmentResource } from "@/features/attachments/schema/resource"
@@ -16,6 +18,7 @@ const projectedResources = z
       role: z.string(),
       slot: z.string().nullish(),
       kind: z.string().nullish(),
+      providerResourceId: z.string().nullish(),
       state: z.string(),
       url: z.string().nullish(),
       mimeType: z.string().nullish(),
@@ -39,6 +42,7 @@ export type ZaloRichClip = {
   media?: ProjectedResource
   attachment?: AttachmentResource
   poster?: string
+  providerGif?: z.infer<typeof zaloAccountInlineGifSchema>
 }
 
 export function getZaloAccountAttributes(attributes: unknown) {
@@ -93,6 +97,26 @@ export function isZaloStickerType(value: unknown) {
   return value === "sticker" || value === "chat.sticker"
 }
 
+function legacyStickerId(text: string | null) {
+  if (!text || text.length > 4096) {
+    return
+  }
+  try {
+    const sticker = z
+      .object({
+        stickerId: z.union([z.string(), z.number().int()]).optional(),
+        sticker_id: z.union([z.string(), z.number().int()]).optional(),
+        id: z.union([z.string(), z.number().int()]).optional(),
+      })
+      .safeParse(JSON.parse(text))
+    const id =
+      sticker.data?.stickerId ?? sticker.data?.sticker_id ?? sticker.data?.id
+    return id === undefined ? undefined : String(id)
+  } catch {
+    return
+  }
+}
+
 export function getZaloRichMessage(
   message: MessageResourceWithRelations,
   allowUnidentifiedOutgoing = false,
@@ -138,6 +162,10 @@ export function getZaloRichMessage(
       ? getZaloMediaUrl(cardAttachment?.url ?? cardResource.url)
       : undefined
   const originalResources = resources.filter(({ role }) => role === "original")
+  const providerGif =
+    "inlineGif" in attrs
+      ? zaloAccountInlineGifSchema.safeParse(attrs.inlineGif).data
+      : undefined
   const clips = attachments.flatMap<ZaloRichClip>((attachment) => {
     const kind = attachment.fileType
     if (!(kind === "video" || kind === "audio" || kind === "gif")) {
@@ -205,17 +233,27 @@ export function getZaloRichMessage(
     )
     const webp = stickerResources.find(({ slot }) => slot === "webp")
     const sprite = stickerResources.find(({ role }) => role === "sprite")
-    const storedUrl = (resource: typeof original) =>
-      resource?.state === "stored" ? getZaloMediaUrl(resource.url) : undefined
+    const artworkUrl = (resource: typeof original) =>
+      resource?.state === "stored" ||
+      (resource?.role === "original" &&
+        ["pending", "downloading", "failed"].includes(resource.state))
+        ? getZaloMediaUrl(resource.url)
+        : undefined
     for (const resource of stickerResources) {
       if (resource.attachmentId) {
         usedIds.add(resource.attachmentId)
       }
     }
     sticker = {
-      staticUrl: storedUrl(original),
-      webpUrl: storedUrl(webp),
-      spriteUrl: storedUrl(sprite),
+      staticUrl:
+        zaloStickerSourceUrl(
+          (content?.kind === "sticker" ? content.stickerId : undefined) ??
+            original?.providerResourceId ??
+            legacyStickerId(message.text) ??
+            "",
+        ) ?? artworkUrl(original),
+      webpUrl: artworkUrl(webp),
+      spriteUrl: artworkUrl(sprite),
       frameCount: sprite?.frameCount,
       frameDurationMs: sprite?.frameDurationMs,
     }
@@ -223,7 +261,18 @@ export function getZaloRichMessage(
   return {
     content,
     cardImage,
-    clips: [...clips, ...standaloneClips],
+    clips: providerGif
+      ? [
+          {
+            id: "provider-gif",
+            kind: "gif" as const,
+            providerGif,
+            media: standaloneClips.find(({ kind }) => kind === "gif")?.media,
+          },
+          ...clips.filter(({ kind }) => kind !== "gif"),
+          ...standaloneClips.filter(({ kind }) => kind !== "gif"),
+        ]
+      : [...clips, ...standaloneClips],
     sticker,
     attachments: attachments.filter(({ id }) => !usedIds.has(id)),
   }

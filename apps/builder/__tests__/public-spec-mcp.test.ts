@@ -83,6 +83,9 @@ const HITL_NONE_WRITE_ALLOWLIST: Record<string, true> = {
   "miniApps.validate": true,
   "templates.listLockedResources": true,
   "templates.previewDependencies": true,
+  "zaloAccounts.getContactPresence": true,
+  "zaloAccounts.getFriendRequestStatus": true,
+  "zaloAccounts.lookupContacts": true,
 }
 
 // Guard against the default set silently growing back toward 346 — a
@@ -299,9 +302,14 @@ describe("x-mcp outbound policy", () => {
       "miniApps.publishWhatsappDraft",
       "miniApps.pushWhatsappDraft",
       "whatsappChannels.sendCapiTestEvent",
+      "zaloAccounts.mutateContactRelationship",
+      "zaloAccounts.requestReactionHistory",
+      "zaloAccounts.sendDelivered",
       "zaloAccounts.sendDirectMessage",
       "zaloAccounts.sendGroupMessage",
+      "zaloAccounts.sendSeen",
       "zaloAccounts.sendTyping",
+      "zaloAccounts.setReaction",
     ])
   })
 })

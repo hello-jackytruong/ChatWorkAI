@@ -30,13 +30,25 @@ const RETENTION_MS = 90 * 24 * 60 * 60 * 1000
 export const zaloAccountMessageLifecycleService = {
   async handle(
     input: ZaloAccountThreadEventInput,
-  ): Promise<{ missingTarget?: boolean; directSeenAt?: string }> {
+  ): Promise<{ missingTarget?: boolean; directReceiptTargetAt?: string }> {
     const event = zaloAccountThreadEventSchema.parse(input.event)
     const account = await zaloAccountService.findById({
       workspaceId: input.workspaceId,
       id: input.accountId,
     })
     if (!account || account.inboxId !== input.inboxId) {
+      return {}
+    }
+    if (
+      event.threadType === "user" &&
+      ((event.type === "receipt" &&
+        (event.threadId === account.zaloUid ||
+          event.memberIds.some((id) => id !== event.threadId))) ||
+        (event.type === "typing" && event.actorId !== event.threadId) ||
+        (event.type === "reaction" &&
+          event.actorId !== event.threadId &&
+          event.actorId !== account.zaloUid))
+    ) {
       return {}
     }
     if (event.type === "undo") {
@@ -185,8 +197,9 @@ export const zaloAccountMessageLifecycleService = {
     }
     return !group &&
       event.type === "receipt" &&
+      providerMessageId === event.providerMessageId &&
       message?.messageType === "outgoing"
-      ? { directSeenAt: new Date(message.createdAt).toISOString() }
+      ? { directReceiptTargetAt: new Date(message.createdAt).toISOString() }
       : {}
   },
 }

@@ -5,7 +5,10 @@ import {
   zaloAccountMediaRepository as repository,
 } from "@chatbotx.io/database/repositories"
 import { uploader } from "@chatbotx.io/filesystem"
-import { toZaloAccountWebUrl } from "@chatbotx.io/sdk"
+import {
+  toZaloAccountStickerCatalogUrl,
+  toZaloAccountWebUrl,
+} from "@chatbotx.io/sdk"
 import { contactInboxService } from "../contact-inbox/service"
 import { notFoundException, validationException } from "../errors"
 import { resolveZaloImagePreviewUrl } from "../media/resolve-media-url"
@@ -75,10 +78,14 @@ const sameTime = (a: Date | null, b: Date) =>
 const previewDomains = ["zdn.vn", "zadn.vn", "zalo.me", "zalo.vn"]
 const isInlineImage = ({ reference, asset }: MediaJoined) =>
   reference.role === "original" &&
-  (asset.kind === "image" || asset.kind === "gif")
+  (asset.kind === "image" || asset.kind === "gif" || asset.kind === "sticker")
 
 const canUseProviderPreview = (asset: MediaJoined["asset"]) =>
-  (asset.state === "pending" || asset.state === "downloading") &&
+  (asset.state === "pending" ||
+    asset.state === "downloading" ||
+    ((asset.kind === "sticker" ||
+      (asset.kind === "gif" && asset.errorCode === "provider_only")) &&
+      asset.state === "failed")) &&
   Boolean(asset.encryptedSource)
 
 const storedObjectKey = (asset: MediaJoined["asset"], scope: MediaScope) => {
@@ -269,6 +276,17 @@ export class ZaloAccountMediaReadService {
       return null
     }
     const origin = toZaloAccountWebUrl(source.url, true)
+    if (row.asset.kind === "sticker") {
+      if (
+        origin &&
+        !origin.port &&
+        !origin.hash &&
+        (origin.hostname === "zdn.vn" || origin.hostname.endsWith(".zdn.vn"))
+      ) {
+        return origin.href
+      }
+      return toZaloAccountStickerCatalogUrl(source.url) ?? null
+    }
     if (
       !origin ||
       origin.port ||

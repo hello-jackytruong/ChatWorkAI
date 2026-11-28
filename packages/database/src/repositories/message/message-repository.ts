@@ -576,6 +576,7 @@ export interface IMessageRepository {
     conversationId: string
     contactInboxId: string
     sourceId: string
+    createdAt?: Date
     cursor?: ZaloAccountRecallScanCursor | null
     maxRanges?: number
     maxCandidates?: number

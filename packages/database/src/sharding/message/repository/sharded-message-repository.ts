@@ -23,6 +23,7 @@ import { db as primaryDb } from "../../../client"
 import {
   isMessageStorageError,
   MessageShardUnavailableError,
+  ZaloAccountMessageIdentityRangeUnavailableError,
 } from "../../../errors"
 import { logger } from "../../../logger"
 import type {
@@ -2297,6 +2298,7 @@ export class ShardedMessageRepository implements IMessageRepository {
     conversationId: string
     contactInboxId: string
     sourceId: string
+    createdAt?: Date
     cursor?: ZaloAccountRecallScanCursor | null
     maxRanges?: number
     maxCandidates?: number
@@ -2311,9 +2313,17 @@ export class ShardedMessageRepository implements IMessageRepository {
     }
     const deadline = Number(input.deadline)
     let progressCursor = input.cursor ?? undefined
-    const ranges = this.mergeWriteShard(
-      await this.getShardsForRange(new Date(0), new Date()),
-      await this.shardManager.getWriteShardInfo(input.workspaceId),
+    const matchingRanges = await this.getShardsForRange(
+      input.createdAt ?? new Date(0),
+      input.createdAt ?? new Date(),
+    )
+    const ranges = (
+      input.createdAt
+        ? matchingRanges
+        : this.mergeWriteShard(
+            matchingRanges,
+            await this.shardManager.getWriteShardInfo(input.workspaceId),
+          )
     ).sort(
       (a, b) =>
         a.startTime.getTime() - b.startTime.getTime() ||
@@ -2350,6 +2360,9 @@ export class ShardedMessageRepository implements IMessageRepository {
               eq(messageModel.conversationId, input.conversationId),
               eq(messageModel.contactInboxId, input.contactInboxId),
               eq(messageModel.sourceId, input.sourceId),
+              input.createdAt
+                ? matchesCreatedAt(messageModel.createdAt, input.createdAt)
+                : undefined,
             ),
           )
           .limit(Math.max(1, Math.min(input.maxCandidates ?? 50, 50)))
@@ -2416,9 +2429,7 @@ export class ShardedMessageRepository implements IMessageRepository {
       const range =
         ranges[workspaceShardIndex(message.workspaceId, ranges.length)]
       if (!range) {
-        throw new MessageShardUnavailableError(
-          "No registered primary covers the Zalo message identity",
-        )
+        throw new ZaloAccountMessageIdentityRangeUnavailableError()
       }
       client = await this.shardManager.getShardClient(range.shard)
     }
@@ -2437,7 +2448,12 @@ export class ShardedMessageRepository implements IMessageRepository {
       conversationId: message.conversationId,
       primaryAndFailOnError: true,
     })
-    if (!existing || existing.contactInboxId !== message.contactInboxId) {
+    if (
+      !existing ||
+      existing.contactInboxId !== message.contactInboxId ||
+      (message.sourceId?.startsWith("za:") &&
+        existing.sourceId !== message.sourceId)
+    ) {
       throw new MessageShardUnavailableError("Stable message identity conflict")
     }
     return { result: existing, isNew: false }

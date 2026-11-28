@@ -6,6 +6,10 @@ import {
 import { notFoundException, validationException } from "../errors"
 import { scopedZaloCommandId } from "./command-identity"
 import { zaloAccountGroupService } from "./group.service"
+import {
+  type ZaloAccountSavedMessageInput,
+  zaloAccountMessageRecallService,
+} from "./message-recall.service"
 import { zaloAccountService } from "./service"
 import { zaloAccountCommandTransportService } from "./transport.service"
 
@@ -62,6 +66,34 @@ export const zaloAccountMessageStateService = {
     return { accepted: true }
   },
   purgeExpired: () => zaloAccountMessageStateRepository.purgeExpired(),
+  async getDetails(input: ZaloAccountSavedMessageInput) {
+    const { message, target } =
+      await zaloAccountMessageRecallService.resolveTarget(input)
+    if (
+      message.deletedAt ||
+      !(await zaloAccountMessageRecallService.isOrdinaryAttachmentVisible({
+        workspaceId: input.workspaceId,
+        messageId: message.id,
+        messageCreatedAt: message.createdAt,
+      }))
+    ) {
+      throw notFoundException("Zalo Account message not found")
+    }
+    const details = await zaloAccountMessageStateRepository.listActors(target)
+    return {
+      receipts: details.receipts.map(({ actorId, deliveredAt, seenAt }) => ({
+        actorId,
+        state: seenAt ? ("seen" as const) : ("delivered" as const),
+        timestampMs: (seenAt ?? deliveredAt).getTime(),
+      })),
+      reactions: details.reactions.map(({ actorId, reaction, occurredAt }) => ({
+        actorId,
+        reaction,
+        timestampMs: occurredAt.getTime(),
+      })),
+      truncated: details.truncated,
+    }
+  },
   async get(input: {
     workspaceId: string
     accountId: string

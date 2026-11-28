@@ -1,7 +1,9 @@
 import {
   type ZaloAccountAuth,
   type ZaloAccountGroup,
+  type ZaloAccountMessageActivity,
   type ZaloAccountNativeOperation,
+  ZaloAccountPreDispatchError,
   zaloAccountAuthSchema,
   zaloAccountFriendSyncSchema,
   zaloAccountLabelSnapshotSchema,
@@ -10,10 +12,12 @@ import {
   type Credentials,
   type LoginQRCallbackEvent,
   LoginQRCallbackEventType,
+  Reactions,
   ThreadType,
   Zalo,
 } from "zca-js"
 import { readGroupMembers } from "./group-members"
+import { createZaloAccountHistoryReader } from "./history-page"
 import { assertOutboundUrl } from "./outbound-attachment"
 import type {
   ZcaApiPort,
@@ -22,13 +26,20 @@ import type {
   ZcaQrEvent,
 } from "./ports"
 import {
+  normalizeZaloFriendEvent,
+  runZaloContactOperation,
+} from "./provider-contacts"
+import {
   normalizeProviderGroupActivity,
   normalizeProviderMessage,
 } from "./provider-message"
+import { normalizeZaloProfile, readProviderProfiles } from "./provider-profile"
 import { normalizeProviderThreadEvent } from "./provider-thread-event"
 import { sendOutbound } from "./send-outbound"
 import { createStickerCatalogReader } from "./sticker-catalog"
 import { createStickerResourceReader } from "./sticker-resource"
+
+const positiveIntegerId = /^[1-9]\d*$/
 
 const normalizeQrImage = (image: string) =>
   image.startsWith("data:image/") ? image : `data:image/png;base64,${image}`
@@ -44,6 +55,75 @@ type NativeSdkPort = Pick<
   Awaited<ReturnType<Zalo["login"]>>,
   "undo" | "deleteMessage" | "deleteChat"
 >
+
+type ActivitySdkPort = Pick<
+  Awaited<ReturnType<Zalo["login"]>>,
+  "addReaction" | "sendSeenEvent" | "sendDeliveredEvent"
+> & {
+  listener: Pick<
+    Awaited<ReturnType<Zalo["login"]>>["listener"],
+    "requestOldReactions"
+  >
+}
+
+const reactionIcons = {
+  heart: Reactions.HEART,
+  like: Reactions.LIKE,
+  haha: Reactions.HAHA,
+  wow: Reactions.WOW,
+  sad: Reactions.CRY,
+  angry: Reactions.ANGRY,
+}
+
+export const invokeMessageActivity = async (
+  api: ActivitySdkPort,
+  activity: ZaloAccountMessageActivity,
+): Promise<void> => {
+  const type =
+    activity.threadType === "group" ? ThreadType.Group : ThreadType.User
+  if (activity.operation === "requestReactionHistory") {
+    api.listener.requestOldReactions(type)
+    return
+  }
+  const { providerMessageId: msgId, providerClientMessageId: cliMsgId } =
+    activity
+  if (activity.operation === "setReaction") {
+    // The pinned SDK parses both IDs as Number before serializing the request.
+    if (
+      [msgId, cliMsgId].some(
+        (id) =>
+          !(positiveIntegerId.test(id) && Number.isSafeInteger(Number(id))),
+      )
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo reaction requires exact numeric message IDs",
+      )
+    }
+    await api.addReaction(
+      activity.reaction === null
+        ? Reactions.NONE
+        : reactionIcons[activity.reaction],
+      { data: { msgId, cliMsgId }, threadId: activity.threadId, type },
+    )
+    return
+  }
+  const message = {
+    msgId,
+    cliMsgId,
+    uidFrom: activity.providerSenderId,
+    idTo: activity.providerRecipientId,
+    msgType: activity.msgType,
+    st: activity.st,
+    at: activity.at,
+    cmd: activity.cmd,
+    ts: activity.timestampMs,
+  }
+  if (activity.operation === "sendSeen") {
+    await api.sendSeenEvent(message, type)
+  } else {
+    await api.sendDeliveredEvent(false, message, type)
+  }
+}
 
 export const invokeNativeOperation = async (
   api: NativeSdkPort,
@@ -106,6 +186,12 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
   let socketClosed = false
   let closePromise: Promise<void> | undefined
   let confirmClose: (() => void) | undefined
+  let historyReader:
+    | ReturnType<typeof createZaloAccountHistoryReader>
+    | undefined
+  let historyNormalization:
+    | Parameters<typeof createZaloAccountHistoryReader>[1]
+    | undefined
   const onClosed = () => {
     socketClosed = true
     confirmClose?.()
@@ -116,10 +202,28 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
     api.getStickersDetail(ids),
   )
   return {
+    messageActivity: (activity) => invokeMessageActivity(api, activity),
     nativeOperation: (input) => invokeNativeOperation(api, input),
     getStickerResources,
     getStickerCatalog: createStickerCatalogReader(api, getStickerResources),
     getGroupMembers: (groupId, query) => readGroupMembers(api, groupId, query),
+    readProfiles: (query) => readProviderProfiles(api, query),
+    contactOperation: (operation) =>
+      runZaloContactOperation(api, operation, api.getOwnId()),
+    fetchHistoryPage: (history, options) => {
+      historyReader ??= createZaloAccountHistoryReader(
+        api,
+        historyNormalization ?? { ownUid: api.getOwnId() },
+      )
+      if (history.threadType === "group") {
+        return historyReader.group({ ...options, groupId: history.threadId })
+      }
+      return historyReader.direct({
+        ...options,
+        cursor: history.cursor ?? null,
+        ...(history.threadId ? { threadId: history.threadId } : {}),
+      })
+    },
     sendTyping: async (threadId, threadType) => {
       await api.sendTypingEvent(
         threadId,
@@ -156,6 +260,14 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
         cookie: api.getCookie().serializeSync()?.cookies,
       }),
     listen: (handlers) => {
+      if (handlers.ownUid) {
+        historyNormalization = {
+          ownUid: handlers.ownUid,
+          ...(handlers.messageIntegrityEnabled === undefined
+            ? {}
+            : { messageIntegrityEnabled: handlers.messageIntegrityEnabled }),
+        }
+      }
       let started = false
       return {
         start: () => {
@@ -218,6 +330,7 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
                 for (const event of normalizeProviderThreadEvent(
                   "seen",
                   message,
+                  handlers.ownUid,
                 )) {
                   handlers.onThreadEvent(event)
                 }
@@ -242,6 +355,7 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
                 for (const event of normalizeProviderThreadEvent(
                   "delivered",
                   message,
+                  handlers.ownUid,
                 )) {
                   handlers.onThreadEvent(event)
                 }
@@ -287,6 +401,7 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
             for (const event of normalizeProviderThreadEvent(
               "typing",
               typing,
+              handlers.ownUid,
             )) {
               handlers.onThreadEvent?.(event)
             }
@@ -295,18 +410,34 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
             for (const event of normalizeProviderThreadEvent(
               "reaction",
               reaction,
+              handlers.ownUid,
             )) {
               handlers.onThreadEvent?.(event)
             }
           })
           api.listener.on("old_reactions", (reactions) => {
+            let remaining = 1000
             for (const reaction of reactions.slice(0, 1000)) {
-              for (const event of normalizeProviderThreadEvent(
+              const events = normalizeProviderThreadEvent(
                 "reaction",
                 reaction,
-              )) {
+                handlers.ownUid,
+              ).slice(0, remaining)
+              for (const event of events) {
                 handlers.onThreadEvent?.(event)
               }
+              remaining -= events.length
+              if (remaining === 0) {
+                break
+              }
+            }
+          })
+          api.listener.on("friend_event", (event) => {
+            for (const activity of normalizeZaloFriendEvent(
+              event,
+              api.getOwnId(),
+            )) {
+              handlers.onFriendEvent?.(activity)
             }
           })
           api.listener.start({ retryOnClose: false })
@@ -369,6 +500,12 @@ const adaptApi = (api: Awaited<ReturnType<Zalo["login"]>>): ZcaApiPort => {
         .map((friend) => ({
           uid: friend.userId,
           name: friend.displayName || friend.zaloName || friend.userId,
+          profile: normalizeZaloProfile({
+            uid: friend.userId,
+            source: "getAllFriends",
+            observedAt: Date.now(),
+            data: friend,
+          }),
           ...(friend.avatar?.startsWith("https://")
             ? { avatarUrl: friend.avatar }
             : {}),

@@ -4223,9 +4223,34 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "path": "/v1/zalo-accounts/{id}",
   },
   {
+    "method": "POST",
+    "operationId": "zaloAccounts.getContactPresence",
+    "path": "/v1/zalo-accounts/{accountId}/contacts/presence",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getContactProfile",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/contact-profile",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getConversationHistorySyncStatus",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/history-sync",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.getFriendRequestStatus",
+    "path": "/v1/zalo-accounts/{accountId}/contacts/friend-request-status",
+  },
+  {
     "method": "GET",
     "operationId": "zaloAccounts.getGroup",
     "path": "/v1/zalo-accounts/{accountId}/groups/{id}",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getHistorySyncStatus",
+    "path": "/v1/zalo-accounts/{accountId}/history-sync",
   },
   {
     "method": "GET",
@@ -4251,6 +4276,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "GET",
     "operationId": "zaloAccounts.getMessageState",
     "path": "/v1/zalo-accounts/{accountId}/message-state",
+  },
+  {
+    "method": "GET",
+    "operationId": "zaloAccounts.getMessageStateDetails",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/state",
   },
   {
     "method": "GET",
@@ -4284,6 +4314,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "GET",
+    "operationId": "zaloAccounts.listContactRelationships",
+    "path": "/v1/zalo-accounts/{accountId}/contacts/relationships",
+  },
+  {
+    "method": "GET",
     "operationId": "zaloAccounts.listGroupMembers",
     "path": "/v1/zalo-accounts/{accountId}/groups/{groupId}/members",
   },
@@ -4314,6 +4349,21 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "POST",
+    "operationId": "zaloAccounts.lookupContacts",
+    "path": "/v1/zalo-accounts/{accountId}/contacts/lookup",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.mutateContactRelationship",
+    "path": "/v1/zalo-accounts/{accountId}/contacts/relationship-actions",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.openContactConversation",
+    "path": "/v1/zalo-accounts/{accountId}/contacts/open-conversation",
+  },
+  {
+    "method": "POST",
     "operationId": "zaloAccounts.recallMessage",
     "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/recall",
   },
@@ -4321,6 +4371,21 @@ exports[`public API spec — operation naming guard > operation list (operationI
     "method": "POST",
     "operationId": "zaloAccounts.reconcileMedia",
     "path": "/v1/zalo-accounts/{accountId}/media/reconcile",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.requestReactionHistory",
+    "path": "/v1/zalo-accounts/{accountId}/reaction-history",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.resumeConversationHistorySync",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/history-sync/{runId}/resume",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.resumeHistorySync",
+    "path": "/v1/zalo-accounts/{accountId}/history-sync/{runId}/resume",
   },
   {
     "method": "POST",
@@ -4334,6 +4399,11 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "POST",
+    "operationId": "zaloAccounts.sendDelivered",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/send-delivered",
+  },
+  {
+    "method": "POST",
     "operationId": "zaloAccounts.sendDirectMessage",
     "path": "/v1/zalo-accounts/{accountId}/messages",
   },
@@ -4344,8 +4414,28 @@ exports[`public API spec — operation naming guard > operation list (operationI
   },
   {
     "method": "POST",
+    "operationId": "zaloAccounts.sendSeen",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/send-seen",
+  },
+  {
+    "method": "POST",
     "operationId": "zaloAccounts.sendTyping",
     "path": "/v1/zalo-accounts/{accountId}/typing",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.setReaction",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/reaction",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.startConversationHistorySync",
+    "path": "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/history-sync",
+  },
+  {
+    "method": "POST",
+    "operationId": "zaloAccounts.startHistorySync",
+    "path": "/v1/zalo-accounts/{accountId}/history-sync",
   },
   {
     "method": "POST",

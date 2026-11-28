@@ -26,6 +26,11 @@ import {
   encryptZaloAccountAuth,
   zaloAuthorizationFingerprint,
 } from "./auth"
+import {
+  isZaloAccountOutboundReceiptEnabled,
+  isZaloAccountReactionEnabled,
+  isZaloAccountReactionHistoryEnabled,
+} from "./native-operation-policy"
 
 const GATEWAY_LEASE_PATTERN = /:\d+$/
 const toPublic = (
@@ -176,7 +181,10 @@ export const zaloAccountService = {
         image: true,
         file: true,
         typing: true,
-        reactions: false,
+        reactions: isZaloAccountReactionEnabled(),
+        receiveReactions: true,
+        requestReactionHistory: isZaloAccountReactionHistoryEnabled(),
+        sendReceipts: isZaloAccountOutboundReceiptEnabled(account.id),
         revoke: false,
         delete: false,
       },

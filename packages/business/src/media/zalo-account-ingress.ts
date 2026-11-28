@@ -1,11 +1,9 @@
 import { zaloAccountMediaResourcesSchema } from "@chatbotx.io/sdk"
-import { createId } from "@chatbotx.io/utils"
 import {
   requestZaloAccountMedia,
   type ZaloAccountMediaJobData,
 } from "@chatbotx.io/worker-config"
 import { zaloAccountService } from "../zalo-account/service"
-import { zaloAccountCommandTransportService } from "../zalo-account/transport.service"
 import { getZaloAccountMediaPolicy } from "../zalo-account-media/policy"
 import { zaloAccountMediaService } from "../zalo-account-media/service"
 import { buildZaloMessageResources } from "./zalo-account-capture"
@@ -17,10 +15,11 @@ export async function captureZaloAccountMessage(
     inboxId: string
     accountId?: string
     attributes?: Record<string, unknown> | null
+    priority?: "backfill"
   },
 ) {
   if (input.channel !== "zaloAccount" || !getZaloAccountMediaPolicy().enabled) {
-    return
+    return 0
   }
   const account = input.accountId
     ? { id: input.accountId }
@@ -37,59 +36,14 @@ export async function captureZaloAccountMessage(
   const parsed = zaloAccountMediaResourcesSchema.safeParse(
     input.descriptors ?? attributes?.mediaResources ?? [],
   )
-  let descriptors = parsed.success ? parsed.data : []
-  const stickerIds = [
-    ...new Set(
-      descriptors.flatMap((item) =>
-        item.kind === "sticker" && item.providerResourceId
-          ? [item.providerResourceId]
-          : [],
-      ),
-    ),
-  ].slice(0, 20)
-  if (stickerIds.length) {
-    // Detail lookup is bounded and optional: a missing provider response remains a truthful missing source.
-    const details = await zaloAccountCommandTransportService
-      .getStickerResourcesAndWait({
-        workspaceId: input.workspaceId,
-        accountId: account.id,
-        inboxId: input.inboxId,
-        commandId: createId(),
-        ttlMs: 10_000,
-        waitTimeoutMs: 5000,
-        stickerIds,
-      })
-      .catch(() => [])
-    const sources = new Map(
-      details.map((detail) => [
-        detail.stickerId,
-        detail.resources.filter((resource) => resource.url),
-      ]),
-    )
-    const expanded = new Set<string>()
-    descriptors = descriptors
-      .flatMap((descriptor) => {
-        const stickerId = descriptor.providerResourceId
-        const variants =
-          descriptor.kind === "sticker" && stickerId
-            ? sources.get(stickerId)
-            : undefined
-        if (!(stickerId && variants?.length)) {
-          return [descriptor]
-        }
-        if (expanded.has(stickerId)) {
-          return []
-        }
-        expanded.add(stickerId)
-        return variants
-      })
-      .slice(0, 12)
-  }
+  const descriptors = parsed.success ? parsed.data : []
   const resources = buildZaloMessageResources({
     ...input,
     accountId: account.id,
     descriptors,
-  })
+  }).map((resource) =>
+    input.priority === "backfill" ? { ...resource, priority: 30 } : resource,
+  )
   if (resources.length) {
     const references = await zaloAccountMediaService.registerResources({
       workspaceId: input.workspaceId,
@@ -108,7 +62,7 @@ export async function captureZaloAccountMessage(
           workspaceId: input.workspaceId,
           accountId: account.id,
           assetId: reference.assetId,
-          priority: "live",
+          priority: input.priority ?? "live",
           createdAt: reference.createdAt.getTime(),
         },
       })
@@ -116,5 +70,7 @@ export async function captureZaloAccountMessage(
     if (jobs.size) {
       requestZaloAccountMedia([...jobs.values()])
     }
+    return jobs.size
   }
+  return 0
 }

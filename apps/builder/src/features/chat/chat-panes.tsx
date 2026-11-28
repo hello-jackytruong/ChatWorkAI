@@ -104,6 +104,9 @@ export function MessageThreadPane({
         )
       : undefined,
   )
+  const typingConversation = activeListConversation ?? activeConversation
+  const typingGroup = getZaloGroupConversation(typingConversation)
+  const typingInbox = activeListConversation?.contactInboxes[0]
   // While another responder owns the WhatsApp thread the bot is suppressed,
   // so "Bot is active" would be misleading.
   const isThreadOnStandby =
@@ -155,10 +158,15 @@ export function MessageThreadPane({
               </Button>
             )}
           <MessageList />
-          {getZaloGroupConversation(activeConversation) && (
+          {(typingGroup || typingInbox?.channel === "zaloAccount") && (
             <ZaloGroupTypingIndicator
+              contactName={
+                activeListConversation?.contact?.fullName ?? undefined
+              }
+              contactUid={typingGroup ? undefined : typingInbox?.sourceId}
               conversationId={activeConversation.id}
               key={activeConversation.id}
+              threadType={typingGroup ? "group" : "user"}
             />
           )}
           <MessageInput />

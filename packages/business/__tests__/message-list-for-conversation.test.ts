@@ -184,6 +184,35 @@ describe("message list-for-conversation", () => {
   })
 
   describe("listForConversation", () => {
+    test("widens the shard window for saved Zalo history without widening another filtered channel", async () => {
+      const historical = new Date("2026-03-01T00:00:00Z")
+      const createdAt = new Date("2026-05-01T00:00:00Z")
+      mocks.conversationService.findBy.mockResolvedValue({
+        id: "conv-1",
+        createdAt,
+        additionalAttributes: { zaloHistorySinceMs: historical.getTime() },
+      })
+      const input = {
+        workspaceId: "ws-1",
+        conversationId: "conv-1",
+        contactInboxId: "ci-1",
+        limit: 20,
+      }
+      mocks.contactInboxService.findByUncached.mockResolvedValueOnce({
+        channel: "zaloAccount",
+      })
+      await listForConversation(input)
+      expect(mocks.repo.listByConversation).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sinceTime: historical }),
+      )
+      mocks.contactInboxService.findByUncached.mockResolvedValueOnce({
+        channel: "whatsapp",
+      })
+      await listForConversation(input)
+      expect(mocks.repo.listByConversation).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sinceTime: createdAt }),
+      )
+    })
     test("scopes conversation metadata lookup by workspaceId", async () => {
       await listForConversation({
         workspaceId: "ws-1",

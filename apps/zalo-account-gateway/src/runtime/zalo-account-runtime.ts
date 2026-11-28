@@ -1,13 +1,19 @@
-import type { ZaloAccountNativeOperation } from "@chatbotx.io/sdk"
+import type {
+  ZaloAccountMessageActivity,
+  ZaloAccountNativeOperation,
+} from "@chatbotx.io/sdk"
 import {
   type ZaloAccountAuth,
+  type ZaloAccountContactOperation,
   type ZaloAccountDirectMessage,
   type ZaloAccountGroupMembersQuery,
+  type ZaloAccountHistoryPageRequest,
   type ZaloAccountLabel,
   type ZaloAccountLabelSnapshot,
   type ZaloAccountLifecycleEvent,
   type ZaloAccountOutboundMessage,
   ZaloAccountPreDispatchError,
+  type ZaloAccountProfileRequest,
   type ZaloAccountRuntimeDiagnostics,
   type ZaloAccountRuntimeRef,
   type ZaloAccountStickerCatalogQuery,
@@ -98,6 +104,7 @@ export class ZaloAccountRuntime {
   private sequence = 0
   private closeDecision = false
   private closeObserved = false
+  private historyLifetime: AbortController | null = null
   private settled = true
   private finishing: Promise<void> | undefined
   private acquireTask: Promise<boolean> | undefined
@@ -340,6 +347,22 @@ export class ZaloAccountRuntime {
     }
     return await this.api.listFriends(cursor)
   }
+  async messageActivity(input: ZaloAccountMessageActivity): Promise<void> {
+    if (
+      !(
+        this.active &&
+        this.api?.messageActivity &&
+        this.state === "connected" &&
+        !this.closeObserved
+      )
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account message activity unavailable",
+      )
+    }
+    await this.api.messageActivity(input)
+  }
+
   async nativeOperation(
     input: ZaloAccountNativeOperation,
   ): Promise<{ status: number }> {
@@ -403,6 +426,40 @@ export class ZaloAccountRuntime {
     return await this.api.getStickerResources(stickerIds)
   }
 
+  async readProfiles(query: ZaloAccountProfileRequest) {
+    const api = this.api
+    if (
+      !(this.active && api?.readProfiles && this.state === "connected") ||
+      this.closeObserved ||
+      Date.now() >= this.leaseExpiresAt
+    ) {
+      throw new ZaloAccountPreDispatchError("Zalo Account profiles unavailable")
+    }
+    const profiles = await api.readProfiles(query)
+    if (
+      this.api !== api ||
+      this.closeObserved ||
+      Date.now() >= this.leaseExpiresAt
+    ) {
+      throw new ZaloAccountPreDispatchError(
+        "Zalo Account profile lease expired",
+      )
+    }
+    return profiles
+  }
+
+  async contactOperation(operation: ZaloAccountContactOperation) {
+    const api = this.api
+    if (
+      !(this.active && api?.contactOperation && this.state === "connected") ||
+      this.closeObserved ||
+      Date.now() >= this.leaseExpiresAt
+    ) {
+      throw new ZaloAccountPreDispatchError("Zalo Account contacts unavailable")
+    }
+    return await api.contactOperation(operation)
+  }
+
   async getStickerCatalog(query: ZaloAccountStickerCatalogQuery) {
     if (
       !(
@@ -435,6 +492,43 @@ export class ZaloAccountRuntime {
       )
     }
     return await this.api.getGroupMembers(groupId, query)
+  }
+
+  async fetchHistoryPage(input: {
+    workspaceId: string
+    inboxId: string
+    history: ZaloAccountHistoryPageRequest
+    deadlineAt: number
+  }) {
+    const api = this.api
+    const lifetime = this.historyLifetime
+    const scopeMatches =
+      input.workspaceId === this.options.workspaceId &&
+      input.inboxId === this.options.inboxId
+    const timeoutMs =
+      Math.min(input.deadlineAt, this.leaseExpiresAt) - Date.now()
+    if (
+      !(scopeMatches && api?.fetchHistoryPage && lifetime) ||
+      lifetime.signal.aborted ||
+      !this.active ||
+      this.state !== "connected" ||
+      this.closeObserved ||
+      timeoutMs <= 0
+    ) {
+      throw new ZaloAccountPreDispatchError("Zalo Account history unavailable")
+    }
+    const page = await api.fetchHistoryPage(input.history, {
+      timeoutMs,
+      signal: lifetime.signal,
+    })
+    if (
+      this.api !== api ||
+      lifetime.signal.aborted ||
+      Date.now() >= Math.min(input.deadlineAt, this.leaseExpiresAt)
+    ) {
+      throw new ZaloAccountPreDispatchError("Zalo Account history became stale")
+    }
+    return page
   }
 
   async getLabels(): Promise<ZaloAccountLabelSnapshot> {
@@ -878,6 +972,7 @@ export class ZaloAccountRuntime {
       return
     }
     this.api = api
+    this.historyLifetime = new AbortController()
     this.listener = api.listen({
       ownUid: zaloUid,
       messageIntegrityEnabled: this.options.messageIntegrityEnabled,
@@ -942,6 +1037,17 @@ export class ZaloAccountRuntime {
               fenceToken: this.lease.fenceToken,
             })
           }
+        })
+      },
+      onFriendEvent: (activity) => {
+        if (this.options.runtime.kind !== "account") {
+          return
+        }
+        this.enqueueMessage(generation, activity, async () => {
+          await this.publishLifecycle(
+            { type: "friend_activity", activity },
+            generation,
+          )
         })
       },
       onClosed: (reason, code) => this.scheduleClose(reason, generation, code),
@@ -1009,6 +1115,7 @@ export class ZaloAccountRuntime {
       return
     }
     this.closeObserved = true
+    this.historyLifetime?.abort()
     this.enqueueEvent(
       generation,
       () => this.handlePassiveClose(reason, generation, code),
@@ -1281,7 +1388,7 @@ export class ZaloAccountRuntime {
       sequence: ++this.sequence,
       occurredAt: new Date().toISOString(),
     }
-    if (event.diagnostics) {
+    if ("diagnostics" in event && event.diagnostics) {
       this.diagnostics = event.diagnostics
     } else if (event.type === "connected") {
       this.diagnostics = {
@@ -1388,6 +1495,7 @@ export class ZaloAccountRuntime {
     const lease = this.lease
     const wasActive = this.active
     this.active = false
+    this.historyLifetime?.abort()
     this.state = state
     this.generation += 1
     this.clearWatchdog()
@@ -1413,6 +1521,7 @@ export class ZaloAccountRuntime {
     this.client = null
     this.listener = null
     this.api = null
+    this.historyLifetime = null
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
     }

@@ -13,7 +13,7 @@ export async function handleZaloAccountThreadEvent(
   if (
     input.event.type === "receipt" &&
     input.event.threadType === "user" &&
-    result.directSeenAt
+    result.directReceiptTargetAt
   ) {
     await handleMessageStatus({
       integrationType: "zaloAccount",
@@ -31,7 +31,7 @@ export async function handleZaloAccountThreadEvent(
         status: input.event.status,
         timestamp:
           input.event.status === "read"
-            ? result.directSeenAt
+            ? result.directReceiptTargetAt
             : new Date(input.event.timestampMs).toISOString(),
       },
     })

@@ -28,6 +28,7 @@ export const LowJobAction = {
   coexistAttachmentDownload: "coexistAttachmentDownload",
   updateContactAvatar: "updateContactAvatar",
   replayMissedComment: "replayMissedComment",
+  zaloAccountHistoryCatchup: "zaloAccountHistoryCatchup",
   // Routed here by `enqueueIntegrationJob`; same strings as IntegrationJobAction.
   messageStatus: "messageStatus",
   contactMarkAsRead: "contactMarkAsRead",
@@ -36,6 +37,18 @@ export const LowJobAction = {
 } as const
 
 export type LowJobAction = (typeof LowJobAction)[keyof typeof LowJobAction]
+
+export type LowJobZaloAccountHistoryCatchup = {
+  type: typeof LowJobAction.zaloAccountHistoryCatchup
+  data: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    fenceToken: string
+    epoch: number
+    socketAttempt: number
+  }
+}
 
 /**
  * BullMQ priority for bulk producers on this queue (attachment mirroring,
@@ -103,6 +116,7 @@ export type LowJobData =
   | LowJobCoexistAttachmentDownload
   | LowJobUpdateContactAvatar
   | LowJobReplayMissedComment
+  | LowJobZaloAccountHistoryCatchup
   | LowRoutedIntegrationJob
 
 export const lowQueue = isNoRedisEnv()

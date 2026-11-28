@@ -3,6 +3,8 @@ import {
   withBlockedOwnerGuard,
 } from "@chatbotx.io/business"
 import { connectSessionService } from "@chatbotx.io/business/connect-session"
+import { zaloAccountFriendActivityService } from "@chatbotx.io/business/zalo-account/friend-activity"
+import { isZaloAccountHistoryAutoSyncEnabled } from "@chatbotx.io/business/zalo-account/native-operation-policy"
 import { zaloAccountRuntimeStateService } from "@chatbotx.io/business/zalo-account/runtime-state"
 import { connectionService } from "@chatbotx.io/connections"
 import { encryptUtils } from "@chatbotx.io/encryption"
@@ -15,6 +17,9 @@ import { sha256Hex } from "@chatbotx.io/utils/crypto"
 import {
   enqueueIntegrationJob,
   IntegrationJobAction,
+  LOW_BULK_PRIORITY,
+  LowJobAction,
+  lowQueue,
 } from "@chatbotx.io/worker-config"
 import { z } from "zod"
 
@@ -137,6 +142,25 @@ export const handleZaloAccountEvents = async (
       if (
         event.kind === "lifecycle" &&
         event.route.kind === "account" &&
+        event.payload.type === "friend_activity"
+      ) {
+        await zaloAccountFriendActivityService.record({
+          workspaceId: event.route.workspaceId,
+          accountId: event.route.accountId,
+          inboxId: event.route.inboxId,
+          eventId: event.eventId,
+          epoch: event.epoch,
+          fenceToken: event.fenceToken,
+          socketAttempt: event.socketAttempt,
+          sequence: event.sequence,
+          occurredAt: event.occurredAt,
+          activity: event.payload.activity,
+        })
+        return
+      }
+      if (
+        event.kind === "lifecycle" &&
+        event.route.kind === "account" &&
         event.payload.type === "runtime_diagnostic"
       ) {
         const accepted = await zaloAccountRuntimeStateService.applyDiagnostics({
@@ -218,6 +242,45 @@ export const handleZaloAccountEvents = async (
           await notifyStatusChanged(
             event.route.workspaceId,
             event.route.accountId,
+          )
+        }
+        if (
+          event.payload.type === "connected" &&
+          event.socketAttempt !== undefined &&
+          isZaloAccountHistoryAutoSyncEnabled()
+        ) {
+          const { workspaceId, accountId, inboxId } = event.route
+          const { fenceToken, epoch, socketAttempt } = event
+          const identity = await sha256Hex(
+            JSON.stringify([
+              workspaceId,
+              accountId,
+              inboxId,
+              fenceToken,
+              epoch,
+              socketAttempt,
+            ]),
+          )
+          // A replay can recover a crash after the lifecycle row committed.
+          // The worker checks that this is still the current socket.
+          await lowQueue.add(
+            LowJobAction.zaloAccountHistoryCatchup,
+            {
+              type: LowJobAction.zaloAccountHistoryCatchup,
+              data: {
+                workspaceId,
+                accountId,
+                inboxId,
+                fenceToken,
+                epoch,
+                socketAttempt,
+              },
+            },
+            {
+              jobId: `zalo-history-catchup-${identity}`,
+              priority: LOW_BULK_PRIORITY,
+              removeOnComplete: { age: 600, count: 1000 },
+            },
           )
         }
         return

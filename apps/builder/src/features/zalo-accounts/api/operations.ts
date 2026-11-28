@@ -20,8 +20,13 @@ import {
   possibleErrorsOnFindingResource,
   possibleIdempotencyErrors,
 } from "@/lib/orpc/orpc-error-helper"
+import {
+  assertConversationAccessForCaller,
+  conversationScopeForCaller,
+} from "@/lib/public-api/member-scope"
 import { workspaceTokenAuthAPIForScope } from "@/orpc"
 import { zaloAccountErrors } from "../schema/errors"
+import { zaloMessageTarget } from "../schema/message-operations"
 import {
   zaloAccountGroupResource,
   zaloAccountStatusResource,
@@ -468,6 +473,47 @@ export const zaloAccountOperations = {
           workspaceId: context.workspace.id,
         }),
     ),
+  getMessageStateDetails: workspaceTokenAuthAPIForScope("inbox")
+    .route({
+      method: "GET",
+      path: "/v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/state",
+      summary: "List Zalo message delivery and reaction participants",
+      description:
+        "Returns up to 50 receipt actors and 50 reaction entries for one visible message. Get the exact message ID and createdAt from messages.list. The recorded timestamp may be the time the event was observed.",
+      tags: ["Zalo Accounts"],
+    })
+    .input(zaloMessageTarget)
+    .output(
+      z.object({
+        receipts: z.array(
+          z.object({
+            actorId: z.string(),
+            state: z.enum(["delivered", "seen"]),
+            timestampMs: z.number(),
+          }),
+        ),
+        reactions: z.array(
+          z.object({
+            actorId: z.string(),
+            reaction: z.string(),
+            timestampMs: z.number(),
+          }),
+        ),
+        truncated: z.boolean(),
+      }),
+    )
+    .errors(readErrors)
+    .handler(async ({ context, input }) => {
+      await assertConversationAccessForCaller(context, input.conversationId)
+      return await zaloAccountMessageStateService.getDetails({
+        workspaceId: context.workspace.id,
+        accountId: input.accountId,
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        messageCreatedAt: input.createdAt,
+        scope: await conversationScopeForCaller(context),
+      })
+    }),
   listGroupTags: api
     .route({
       method: "GET",

@@ -3,6 +3,29 @@ import { and, type DatabaseClient, db, eq, isNull, sql } from "../../client"
 import { conversationModel } from "../../schema"
 import type { ConversationModel } from "../../types"
 
+export async function noteZaloHistoryStart(input: {
+  workspaceId: string
+  conversationId: string
+  contactId: string
+  timestampMs: number
+}): Promise<void> {
+  const existing = sql`(${conversationModel.additionalAttributes}->>'zaloHistorySinceMs')::bigint`
+  await db
+    .update(conversationModel)
+    .set({
+      additionalAttributes: sql`jsonb_set(COALESCE(${conversationModel.additionalAttributes}, '{}'::jsonb), '{zaloHistorySinceMs}', to_jsonb(${input.timestampMs}::bigint), true)`,
+      updatedAt: sql`${conversationModel.updatedAt}`,
+    })
+    .where(
+      and(
+        eq(conversationModel.workspaceId, input.workspaceId),
+        eq(conversationModel.id, input.conversationId),
+        eq(conversationModel.contactId, input.contactId),
+        sql`(${existing} IS NULL OR ${existing} > ${input.timestampMs}::bigint)`,
+      ),
+    )
+}
+
 /**
  * Opens the DM (`sourceId IS NULL`) of each contact that has none. A contact
  * whose DM already exists — or is opened concurrently, e.g. by the message

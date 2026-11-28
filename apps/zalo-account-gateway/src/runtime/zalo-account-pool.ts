@@ -1,9 +1,13 @@
 import type {
+  ZaloAccountContactOperation,
   ZaloAccountGroupMembersQuery,
+  ZaloAccountHistoryPageRequest,
   ZaloAccountLabel,
   ZaloAccountLabelSnapshot,
+  ZaloAccountMessageActivity,
   ZaloAccountNativeOperation,
   ZaloAccountOutboundMessage,
+  ZaloAccountProfileRequest,
   ZaloAccountRuntimeRef,
   ZaloAccountStickerCatalogQuery,
 } from "@chatbotx.io/sdk"
@@ -62,6 +66,12 @@ type PoolOptions = RuntimeOwnershipHooks & {
     groupPolicyEpoch: number
     consumeCapacity?: boolean
   }) => Promise<void>
+  resolveGroupHistoryPolicy?: (input: {
+    workspaceId: string
+    accountId: string
+    inboxId: string
+    providerGroupId: string
+  }) => Promise<{ accountPolicyEpoch: number; groupPolicyEpoch: number } | null>
 }
 
 const keyOf = (runtime: ZaloAccountRuntimeRef) =>
@@ -344,6 +354,22 @@ export class ZaloAccountPool {
     )
   }
 
+  async readProfiles(
+    command: RuntimeCommand & { profileQuery: ZaloAccountProfileRequest },
+  ) {
+    return await this.withAccountRuntime(command, (runtime) =>
+      runtime.readProfiles(command.profileQuery),
+    )
+  }
+
+  async contactOperation(
+    command: RuntimeCommand & { contactOperation: ZaloAccountContactOperation },
+  ) {
+    return await this.withAccountRuntime(command, (runtime) =>
+      runtime.contactOperation(command.contactOperation),
+    )
+  }
+
   async getStickerCatalog(
     command: RuntimeCommand & { query: ZaloAccountStickerCatalogQuery },
   ) {
@@ -393,11 +419,87 @@ export class ZaloAccountPool {
     })
   }
 
+  async fetchHistoryPage(
+    command: RuntimeCommand & {
+      history: ZaloAccountHistoryPageRequest
+      authorizeLease: () => Promise<void>
+    },
+  ) {
+    return await this.withAccountRuntime(command, async (runtime) => {
+      const deadlineAt = Math.min(
+        command.deadlineAt ?? Number.POSITIVE_INFINITY,
+        Date.now() + 4000,
+      )
+      const { history } = command
+      const inboxId = command.inboxId ?? ""
+      const checkPolicy = async () => {
+        if (history.threadType === "group") {
+          const policy = await this.options.resolveGroupHistoryPolicy?.({
+            workspaceId: command.workspaceId,
+            accountId: command.runtime.id,
+            inboxId,
+            providerGroupId: history.threadId,
+          })
+          if (
+            policy?.accountPolicyEpoch !== history.accountPolicyEpoch ||
+            policy?.groupPolicyEpoch !== history.groupPolicyEpoch
+          ) {
+            throw new ZaloAccountPreDispatchError(
+              "Zalo Account group history policy is stale",
+            )
+          }
+        }
+        await command.authorizeLease()
+        if (Date.now() >= deadlineAt) {
+          throw new ZaloAccountPreDispatchError(
+            "Zalo Account history deadline expired",
+          )
+        }
+      }
+      await checkPolicy()
+      const page = await runtime.fetchHistoryPage({
+        workspaceId: command.workspaceId,
+        inboxId,
+        history,
+        deadlineAt,
+      })
+      await checkPolicy()
+      return page
+    })
+  }
+
   async getLabels(command: RuntimeCommand): Promise<ZaloAccountLabelSnapshot> {
     return await this.withAccountRuntime(command, (runtime) =>
       runtime.getLabels(),
     )
   }
+  async messageActivity(
+    command: RuntimeCommand & {
+      activity: ZaloAccountMessageActivity
+      beforeDispatch: () => Promise<void>
+    },
+  ): Promise<void> {
+    await this.withAccountRuntime(command, async (runtime) => {
+      const activity = command.activity
+      if (
+        activity.operation !== "requestReactionHistory" &&
+        activity.threadType === "group"
+      ) {
+        await this.options.admitGroupSend?.({
+          workspaceId: command.workspaceId,
+          accountId: command.runtime.id,
+          inboxId: command.inboxId ?? "",
+          providerGroupId: activity.threadId,
+          accountPolicyEpoch: activity.accountPolicyEpoch ?? -1,
+          groupPolicyEpoch: activity.groupPolicyEpoch ?? -1,
+          consumeCapacity: false,
+        })
+      }
+      await command.beforeDispatch()
+      await runtime.messageActivity(activity)
+    })
+  }
+
   async nativeOperation(
     command: RuntimeCommand & {
       nativeOperation: ZaloAccountNativeOperation

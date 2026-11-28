@@ -1692,6 +1692,11 @@ chatbotx zalo-accounts message send-direct <accountId> --contactInboxId <id> --c
 chatbotx zalo-accounts send-attempt get <accountId> <commandId> --groupId <groupId>
 chatbotx zalo-accounts send-attempt list <accountId> <messageId> --messageCreatedAt <exact-createdAt>
 chatbotx zalo-accounts message-state list <accountId> --groupId <groupId> --providerMessageIds <id>
+chatbotx zalo-accounts state list <accountId> <conversationId> <messageId> --createdAt <iso>
+chatbotx zalo-accounts reaction add <accountId> <conversationId> <messageId> --createdAt <iso> --commandId <stable-id> --reaction <choice>
+chatbotx zalo-accounts reaction-history add <accountId> --commandId <stable-id> --threadType <user|group>
+chatbotx zalo-accounts send-seen add <accountId> <conversationId> <messageId> --createdAt <iso> --commandId <stable-id>
+chatbotx zalo-accounts send-delivered add <accountId> <conversationId> <messageId> --createdAt <iso> --commandId <stable-id>
 chatbotx zalo-accounts typing add <accountId> --groupId <groupId> --commandId <stable-id>
 chatbotx zalo-accounts tags list <accountId> <groupId>
 chatbotx zalo-accounts tags update <accountId> <groupId> --commandId <stable-id> --tagIds '["tag-id"]' --assigned <true|false>

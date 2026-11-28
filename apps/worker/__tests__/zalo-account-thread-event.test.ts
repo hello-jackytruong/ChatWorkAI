@@ -36,7 +36,7 @@ const input = {
 } as const
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.lifecycle.mockResolvedValue({ directSeenAt: at })
+  mocks.lifecycle.mockResolvedValue({ directReceiptTargetAt: at })
 })
 it("anchors direct read bookkeeping to the targeted outgoing message rather than a late provider timestamp", async () => {
   await handleZaloAccountThreadEvent(input as never)
@@ -58,6 +58,7 @@ it("preserves actual provider delivery time for a direct delivered receipt", asy
   expect(mocks.status).toHaveBeenCalledWith(
     expect.objectContaining({
       payload: expect.objectContaining({
+        status: "delivered",
         timestamp: new Date(input.event.timestampMs).toISOString(),
       }),
     }),
@@ -67,6 +68,20 @@ it("never enters customer receipt bookkeeping for a group", async () => {
   await handleZaloAccountThreadEvent({
     ...input,
     event: { ...input.event, threadType: "group" },
+  } as never)
+  expect(mocks.status).not.toHaveBeenCalled()
+})
+it("never enters customer receipt bookkeeping for a group reaction", async () => {
+  await handleZaloAccountThreadEvent({
+    ...input,
+    event: {
+      ...input.event,
+      threadType: "group",
+      type: "reaction",
+      actorId: "member",
+      reactionKey: "/-heart",
+      operation: "add",
+    },
   } as never)
   expect(mocks.status).not.toHaveBeenCalled()
 })

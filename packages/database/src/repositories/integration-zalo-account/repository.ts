@@ -16,6 +16,7 @@ import {
 import { connectionModel, integrationZaloAccountModel } from "../../schema"
 import type {
   ZaloAccountDiagnosticState,
+  ZaloAccountHistoryRun,
   ZaloAccountLabelState,
 } from "../../schema/integration-zalo-account"
 import { workspaceRepository } from "../workspace"
@@ -110,6 +111,36 @@ const newerDiagnostics = (
   )
 
 export const integrationZaloAccountRepository = {
+  async updateHistoryRun(
+    input: WorkspaceInboxRef & { id: string },
+    apply: (
+      previous: ZaloAccountHistoryRun | undefined,
+      runtime: ZaloAccountRuntimeOrder | undefined,
+    ) => ZaloAccountHistoryRun | undefined,
+  ) {
+    return await withRuntimeAccount(input, async (tx, account) => {
+      const next = apply(
+        account.operations?.history,
+        account.operations?.runtime,
+      )
+      if (!next) {
+        return account.operations?.history
+      }
+      await tx
+        .update(integrationZaloAccountModel)
+        .set({
+          operations: sql`jsonb_set(coalesce(${integrationZaloAccountModel.operations}, '{}'::jsonb), '{history}', ${JSON.stringify(next)}::jsonb)`,
+        })
+        .where(
+          and(
+            eq(integrationZaloAccountModel.workspaceId, input.workspaceId),
+            eq(integrationZaloAccountModel.id, input.id),
+            eq(integrationZaloAccountModel.inboxId, input.inboxId),
+          ),
+        )
+      return next
+    })
+  },
   async withRuntimeAccount<T>(
     input: {
       workspaceId: string

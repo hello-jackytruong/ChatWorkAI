@@ -173,7 +173,10 @@ export function normalizeProviderRichContent(input: {
           stickerId: id.data,
           categoryId: identity.categoryId.safeParse(
             asNonEmptyString(
-              fields.categoryId ?? fields.cateId ?? fields.cate_id,
+              fields.categoryId ??
+                fields.catId ??
+                fields.cateId ??
+                fields.cate_id,
             ),
           ).data,
           stickerType: identity.stickerType.safeParse(

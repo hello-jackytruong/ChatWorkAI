@@ -192,10 +192,34 @@ function extractPathParamNames(pathTemplate: string): string[] {
  * unambiguous verb here. Keyed by `METHOD path`.
  */
 const COMMAND_NAME_OVERRIDES: Readonly<Record<string, string>> = {
+  "POST /v1/zalo-accounts/{accountId}/contacts/lookup":
+    "zalo-accounts:contacts:lookup",
+  "GET /v1/zalo-accounts/{accountId}/contacts/relationships":
+    "zalo-accounts:contacts:relationships",
+  "POST /v1/zalo-accounts/{accountId}/contacts/open-conversation":
+    "zalo-accounts:contacts:open-conversation",
+  "POST /v1/zalo-accounts/{accountId}/contacts/friend-request-status":
+    "zalo-accounts:contacts:request-status",
+  "POST /v1/zalo-accounts/{accountId}/contacts/presence":
+    "zalo-accounts:contacts:presence",
+  "POST /v1/zalo-accounts/{accountId}/contacts/relationship-actions":
+    "zalo-accounts:contacts:change-relationship",
   "POST /v1/zalo-accounts/{accountId}/conversations/{conversationId}/messages/{messageId}/delete-on-zalo":
     "zalo-accounts:message:delete-on-zalo",
   "POST /v1/zalo-accounts/{accountId}/conversations/{conversationId}/delete-on-zalo":
     "zalo-accounts:conversation:delete-on-zalo",
+  "GET /v1/zalo-accounts/{accountId}/history-sync":
+    "zalo-accounts:history-sync:status",
+  "POST /v1/zalo-accounts/{accountId}/history-sync":
+    "zalo-accounts:history-sync:start",
+  "POST /v1/zalo-accounts/{accountId}/history-sync/{runId}/resume":
+    "zalo-accounts:history-sync:resume",
+  "GET /v1/zalo-accounts/{accountId}/conversations/{conversationId}/history-sync":
+    "zalo-accounts:conversation-history-sync:status",
+  "POST /v1/zalo-accounts/{accountId}/conversations/{conversationId}/history-sync":
+    "zalo-accounts:conversation-history-sync:start",
+  "POST /v1/zalo-accounts/{accountId}/conversations/{conversationId}/history-sync/{runId}/resume":
+    "zalo-accounts:conversation-history-sync:resume",
 
   "POST /v1/zalo-accounts/{accountId}/messages":
     "zalo-accounts:message:send-direct",

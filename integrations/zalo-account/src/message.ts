@@ -172,7 +172,11 @@ export const receiveMessage: MessageHandlers<ZaloAccountAuthValue>["receiveMessa
             threadId: payload.threadId,
             senderId: payload.senderId,
             msgType: payload.msgType,
+            ...(payload.receiptReferences
+              ? { receiptReferences: payload.receiptReferences }
+              : {}),
             timestampMs: payload.timestampMs,
+            ...(payload.inlineGif ? { inlineGif: payload.inlineGif } : {}),
             quote: payload.quote,
             ...(payload.album ? { album: payload.album } : {}),
             ...(payload.richContent

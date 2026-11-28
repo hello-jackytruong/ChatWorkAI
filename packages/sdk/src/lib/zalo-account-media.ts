@@ -43,6 +43,44 @@ const stickerAssetPath =
   /^\/api\/emoticon\/(?:sticker\/(?:webpc|webp|sprite)|sprite|package\/\d{1,15}\/icon_\d{1,15}_big\.(?:webp|png))$/
 const stickerAssetParameters = new Set(["eid", "size", "version"])
 const numericAssetParameter = /^\d{1,15}$/
+const inlineGifDomains = ["zdn.vn", "zadn.vn", "zalo.me", "zalo.vn"]
+
+export function zaloStickerSourceUrl(stickerId: string): string | undefined {
+  if (numericAssetParameter.test(stickerId) && Number(stickerId) > 0) {
+    return `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=${stickerId}`
+  }
+}
+
+export function toZaloInlineGifUrl(value: string): string | undefined {
+  try {
+    const url = new URL(value)
+    if (
+      url.protocol === "https:" &&
+      !url.port &&
+      !url.username &&
+      !url.password &&
+      !url.hash &&
+      inlineGifDomains.some(
+        (domain) =>
+          url.hostname === domain || url.hostname.endsWith(`.${domain}`),
+      )
+    ) {
+      return url.href
+    }
+  } catch {
+    return
+  }
+}
+
+export const zaloAccountInlineGifSchema = z.strictObject({
+  url: z
+    .string()
+    .max(8192)
+    .refine((value) => Boolean(toZaloInlineGifUrl(value))),
+  mimeType: z.enum(["image/gif", "video/mp4", "video/webm"]).optional(),
+  width: z.number().int().positive().max(100_000).optional(),
+  height: z.number().int().positive().max(100_000).optional(),
+})
 
 /** The live account supplies catalog IDs separately from publicly usable previews. */
 export function toZaloAccountStickerCatalogUrl(

@@ -122,13 +122,25 @@ All operations require the normal `channels` workspace-token scope.
 
 ## Rich content in the Inbox
 
-Personal Zalo chats display video, voice, GIF, link previews, contact cards, locations, bank/QR information and call notices when the incoming payload includes the required fields. For inbound images and GIFs with a usable Zalo source, the Inbox receives a short-lived preview link while the existing worker archives the original. The preview checks the current account, conversation and recall state before redirecting. Reopening the conversation prefers the private R2/S3 object when ready. The original provider URL remains encrypted in the existing asset record. Other standalone assets that finish downloading after the message arrives are available after refreshing the conversation. Rich text uses validated style spans. The provider TTL is retained as metadata.
+Personal Zalo chats display video, voice, GIF, link previews, contact cards,
+locations, bank/QR information and call notices when the incoming payload
+includes the required fields. Photo descriptions from the socket are retained
+as message text. For eligible received photos, the Inbox displays a short-lived
+provider preview while the existing worker archives the original. Reopening a
+conversation prefers the private R2/S3 object when it is ready. The original
+photo URL remains encrypted in the asset record.
+
+Sticker artwork uses the public Zalo CDN and begins with the numeric sticker
+ID when catalog metadata is unavailable. GIFs use a validated HTTPS Zalo
+source. Neither creates new R2/S3 archive objects. Previously stored content
+stays available subject to existing access and retention rules. Videos, photos,
+files and eligible audio continue through normal archival.
 
 Typed outbound messages are opt-in by account. Set `ZALO_ACCOUNT_RICH_SEND_ACCOUNT_IDS` to a comma-separated list of internal account IDs in the builder, worker and Zalo Account gateway. Existing text and single-attachment inputs remain available. For the public DM and group send commands, pass one typed `content` object or a `forward` source pointer with the source conversation ID, message ID and creation timestamp. For media forwarding the source attachment must already be available in the archive.
 
 The API exposes `delivery=partial` when only part of a multi-item send is confirmed. `remainingUnknown` indicates a later attempt may have reached the provider. `delivery=accepted_without_id` records an acknowledgment without a provider message ID. Inspect the existing send attempt for either outcome before issuing another command.
 
-Search sticker packs through `zaloAccounts.listStickers`, then use the returned ID, category and type to send a sticker. The gateway looks up catalog entries under the account session. Saved message artwork stays in the private archive. The picker keeps recent and favorite entries per user and account in the current browser.
+Search sticker packs through `zaloAccounts.listStickers`, then use the returned ID, category and type to send a sticker. The gateway looks up catalog entries under the account session. The picker groups stickers by the provider category ID and uses the static, WebP, or sprite artwork returned by the catalog. No new sticker artwork is copied to private storage. The picker keeps recent and favorite entries per user and account in the current browser.
 
 `zaloAccounts.searchHistory` reads one bounded Inbox history page in the specified account and conversation. Follow the cursor for older pages, including pages with zero matches. `zaloAccounts.locateQuote` reads a bounded page near the quoted timestamp and returns the visible original if found. Group mentions use provider UIDs from `zaloAccounts.listGroupMembers` and the gateway rechecks current membership before sending. All three read operations require `inbox` scope and conversation access. Member names may be missing when the provider returns a partial roster.
 
@@ -215,10 +227,31 @@ records a durable tombstone before resolving a missing Message, preventing late
 messages or reactions from restoring it. Direct missing targets also retain durable recall intent; bounded repair resolves an existing anchor before creating a stable placeholder. Receipt/reaction detail is retained for 90 days and purged in
 bounded batches; durable dedupe identities remain compacted.
 
-`GET /v1/zalo-accounts/{accountId}/message-state` reads at most 50 provider
-message IDs per request (reaction aggregates are bounded to 2,500 rows).
-`POST /v1/zalo-accounts/{accountId}/typing` is ephemeral, throttled to one call
-per thread per five seconds; the Inbox expires the indicator locally. Outbound reactions remain unavailable. Native recall/delete dispatch is default-off until controlled live provider proof; dedicated local hide retains originals and makes no provider call. Generic delete remains rejected for this channel.
+`zaloAccounts.getMessageState` reads at most 50 provider message IDs per
+request. Inbox shows confirmed delivery state in direct chats and separate
+delivery and seen counts in groups. The detail popup uses
+`zaloAccounts.getMessageStateDetails` and reads up to 50 receipt actors and
+50 reaction entries for one visible, authorized message. The displayed time
+can be the time the gateway observed an event.
+
+`zaloAccounts.sendTyping` is ephemeral and throttled to one call per thread
+per five seconds. Direct and group indicators expire locally.
+Enable `ZALO_ACCOUNT_REACTIONS_ENABLED` to allow add, change, and remove
+operations through `zaloAccounts.setReaction`. The Inbox waits for event
+evidence before changing counts. `ZALO_ACCOUNT_REACTION_HISTORY_ENABLED`
+allows one reaction history request per account and stream type every 24
+hours. The response is asynchronous.
+
+`zaloAccounts.sendSeen` and `zaloAccounts.sendDelivered` require the account
+ID in `ZALO_ACCOUNT_OUTBOUND_RECEIPT_ACCOUNT_IDS` in the Builder and gateway,
+and an authorized incoming message with the exact original provider fields.
+For groups, the current group send policy also applies. Marking a CRM
+conversation read is a local operation. Reaction sends, reaction history
+requests and outbound receipts are disabled by default.
+
+Native recall/delete dispatch is default-off until controlled live provider
+proof. Local hide retains originals. Generic delete remains rejected for
+this channel.
 
 ### Message integrity and bounded recovery
 
@@ -273,7 +306,53 @@ until a separately approved data-retention decision. Automated evidence and
 remaining database/live-provider gates are tracked in the
 [implementation report](../plans/261123-0500-zalo-account-message-integrity-recovery-tdd/reports/implementation.md).
 
+## Provider history and reconnect catch-up
+
+Enable `ZALO_ACCOUNT_HISTORY_SYNC_ENABLED` after verifying the pinned provider
+contract with a staging account. An account-wide run imports available direct
+messages for existing Inbox conversations. A conversation run can import direct
+messages or a permitted group's history window. History uses the provider's
+original timestamps, preserves recalls, and emits no new-message notifications,
+automation, customer activity, or MAC. Media uses the existing background archive.
+
+Start or resume imports one bounded page. `canResume` indicates whether another
+attempt can use the retained checkpoint. `complete` means this run reached the
+end of the data Zalo returned for its scope. The pinned group API accepts no
+cursor and can return only one window. The reported message count covers
+accepted message identities in persisted pages, including messages already
+stored from realtime delivery. `skipped` covers entries outside the eligible
+Inbox scope or entries that cannot be imported. The cursor can advance past
+these entries with a partial result. Storage failures or uncertain writes keep
+the current checkpoint for retry.
+
+The latest run is retained on the account and is readable only in its exact
+account or conversation scope. Starting another run can replace the retained
+checkpoint. With `ZALO_ACCOUNT_HISTORY_AUTO_SYNC_ENABLED`, the existing low
+priority worker imports one direct-history page after a verified socket open.
+Reconnects within five minutes coalesce. An automatic run preserves an existing
+resumable manual checkpoint. Disable the automatic flag to pause catch-up, or
+disable the history flag to pause provider requests while retaining progress.
+
+For account history, use `GET` or `POST /v1/zalo-accounts/{accountId}/history-sync`
+and `POST /v1/zalo-accounts/{accountId}/history-sync/{runId}/resume` with the
+`channels` scope. For conversation history, use the same suffixes under
+`/v1/zalo-accounts/{accountId}/conversations/{conversationId}` with the `inbox`
+scope and the matching `contactInboxId`. Use a stable `commandId` for start and
+each resume. In the CLI these are `zalo-accounts:history-sync:status`,
+`:start`, and `:resume`, and the corresponding commands use
+`zalo-accounts:conversation-history-sync` for a single conversation.
+
 ## Friend sync and safe status
+
+Apply the additive `ZaloAccountUserProfile` migration through the approved
+deploy workflow before deploying profile and friend-event consumers. The
+Inbox loads a Zalo profile when an agent opens the direct contact panel
+or an authorized group sender popover. The profile uses account-scoped
+observations and refreshes with a short cooldown. It keeps the original Zalo
+name and account display name separate from CRM contact edits. A public phone
+number is provider-reported and unverified, and requires the appropriate
+contact permission. Use `zaloAccounts.getContactProfile` with the selected
+conversation and ContactInbox to read the same data through the API.
 
 `POST /v1/zalo-accounts/{accountId}/friends/sync` imports up to 500 provider
 entries per page, in sequential transactions of 100. Follow `nextCursor` with
@@ -282,6 +361,35 @@ profile fields and missing friends are never deleted. Each newly created person,
 ContactInbox, import ledger and durable contact counters commit together. A
 revision-fenced cache outbox recovers invalidation after crashes without counting
 twice. Imports emit no customer-created/activity automation and consume no MAC.
+
+### Contact lookup, relationships, and presence
+
+Set `ZALO_ACCOUNT_CONTACT_OPERATIONS_ACCOUNT_IDS` to the internal account IDs
+approved for this feature. The allowlist is empty by default. The settings panel
+requires workspace administration permission, and public operations require the
+`channels` token scope. Phone and username searches are deliberate and bounded.
+Select a returned contact with its five-minute, account-scoped selection token.
+Opening a direct conversation uses that account's existing Inbox contact or
+quietly creates one for the selected verified UID. A new contact updates the
+usual contact counters without consuming MAC, emitting automation, or sending a
+message.
+
+Incoming requests reflect retained, observed friend events. Other relationship
+lists reflect the provider response. Missing rows do not establish removal.
+Presence is read on demand, stays fresh for 30 seconds, and exposes only the
+online, offline, hidden, or unknown state for that account. Missing bulk entries
+are unknown, and hidden and unknown entries omit the last-online timestamp.
+
+Keep the same `commandId` when recovering a missed response from a relationship
+write. The claim is retained for 24 hours. If a result is `unknown`, inspect the
+current provider state or relationship list before choosing a new action. Redis
+must be available to claim a write. Disable the account's allowlist entry to stop
+new lookups, presence, and relationship operations for that account.
+
+Public paths are under `/v1/zalo-accounts/{accountId}/contacts`. Use `POST /lookup`,
+`GET /relationships`, `POST /open-conversation`, `POST /friend-request-status`,
+`POST /presence`, and `POST /relationship-actions`. The corresponding CLI
+commands are in `zalo-accounts:contacts`.
 
 `GET /v1/zalo-accounts/{accountId}/status` exposes Connection state, gateway
 availability, capabilities and friend/group/label sync summaries. Availability

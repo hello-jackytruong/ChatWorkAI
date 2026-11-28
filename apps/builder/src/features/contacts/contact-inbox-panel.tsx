@@ -10,7 +10,15 @@ import { Button } from "@chatbotx.io/ui/components/ui/button"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Loader2Icon, PlusIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { CreateContactAppointmentDialog } from "@/features/appointment-management/components/inbox/create-contact-appointment-dialog"
 import { ContactPipelinesSection } from "@/features/pipelines/components/inbox/contact-pipelines-section"
 import { orpc } from "@/lib/orpc/query"
@@ -29,6 +37,12 @@ import { ContactDetail } from "./contact-detail"
 import { useAutoRefreshContactProfile } from "./hooks/use-auto-refresh-contact-profile"
 import { contactDisplayName } from "./lib/contact-display-name"
 import type { GetContactResponse } from "./schema/query"
+
+const ZaloProfileDetails = lazy(async () => ({
+  default: (
+    await import("@/features/zalo-accounts/components/zalo-profile-details")
+  ).ZaloProfileDetails,
+}))
 
 type AccordionModule = {
   readonly keyName: string
@@ -86,6 +100,9 @@ export const ContactInboxPanel = ({
     [conversations, activeConversationId],
   )
   const storeContact = activeConversation?.contact ?? null
+  const activeInbox = activeConversation?.contactInboxes?.[0]
+  const zaloContactInboxId =
+    activeInbox?.channel === "zaloAccount" ? activeInbox.id : undefined
 
   const contactId = storeContact?.id
   const contactQueryOptions =
@@ -180,8 +197,35 @@ export const ContactInboxPanel = ({
           ]
         : []
 
+    const zaloModules: AccordionModule[] =
+      zaloContactInboxId && activeConversationId
+        ? [
+            {
+              keyName: t("zaloAccount.profile.title"),
+              content: (
+                <Suspense
+                  fallback={
+                    <p role="status">{t("zaloAccount.profile.loading")}</p>
+                  }
+                >
+                  <ZaloProfileDetails
+                    crmName={contactData.fullName}
+                    target={{
+                      workspaceId,
+                      accountId: null,
+                      conversationId: activeConversationId,
+                      contactInboxId: zaloContactInboxId,
+                    }}
+                  />
+                </Suspense>
+              ),
+            },
+          ]
+        : []
+
     return [
       ...routingModules,
+      ...zaloModules,
       {
         keyName: t("coupons.title"),
         content: (
@@ -260,6 +304,7 @@ export const ContactInboxPanel = ({
     setContactData,
     threadControl,
     activeConversationId,
+    zaloContactInboxId,
   ])
 
   if (!storeContact) {

@@ -29,10 +29,14 @@ import {
   zaloAccountResource,
 } from "../schema/resource"
 import { zaloForwardInput } from "../schema/send-attempt"
+import { zaloAccountContactOperations } from "./contact-operations"
 import { zaloAccountGroupMemberOperations } from "./group-members"
+import { zaloAccountHistorySyncOperations } from "./history-sync"
 import { zaloAccountMediaOperations } from "./media"
+import { zaloAccountMessageActivityOperations } from "./message-activity"
 import { zaloAccountMessageOperations } from "./message-operations"
 import { zaloAccountOperations } from "./operations"
+import { zaloAccountProfileOperations } from "./profile"
 import { zaloAccountTimelineOperations } from "./timeline"
 
 const workspaceTokenAuthAPI = workspaceTokenAuthAPIForScope("channels")
@@ -60,10 +64,14 @@ const writeErrors = {
 }
 
 export const zaloAccountsPublicRouter = {
+  ...zaloAccountContactOperations,
   ...zaloAccountGroupMemberOperations,
+  ...zaloAccountHistorySyncOperations,
   ...zaloAccountOperations,
+  ...zaloAccountProfileOperations,
   ...zaloAccountTimelineOperations,
   ...zaloAccountMediaOperations,
+  ...zaloAccountMessageActivityOperations,
   ...zaloAccountMessageOperations,
   list: workspaceTokenAuthAPI
     .route({

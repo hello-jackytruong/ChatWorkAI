@@ -58,11 +58,12 @@ import { useTranslationUiStore } from "@/features/translation/store/translation-
 import { authClient } from "@/lib/auth/auth-client"
 import { shouldSendOnEnter } from "@/lib/keyboard/should-send-on-enter"
 import { useChatStore } from "../../chat/store/chat-store-provider"
-import { sendZaloGroupTypingAction } from "../../zalo-accounts/actions/group-inbox.action"
+import { sendZaloInboxTypingAction } from "../../zalo-accounts/actions/message-activity.action"
 import {
   getZaloGroupConversation,
   getZaloGroupMessage,
 } from "../../zalo-accounts/lib/group-content"
+import { getZaloMessageActivityThread } from "../../zalo-accounts/lib/message-activity"
 import { useZaloGroupInbox } from "../../zalo-accounts/queries/use-group-inbox"
 import { createMessageAction } from "../actions/create-message.action"
 import {
@@ -171,6 +172,7 @@ export const MessageInput = () => {
   const composerInbox = conversation?.contactInboxes[0]
   const channel = composerInbox?.channel
   const groupAudience = getZaloGroupConversation(conversation)
+  const typingThread = getZaloMessageActivityThread(conversation, messages)
   const groupInbox = useZaloGroupInbox(
     conversation?.workspaceId ?? "",
     groupAudience,
@@ -219,7 +221,7 @@ export const MessageInput = () => {
         : [],
     [activeConversationId, groupAudience, messages],
   )
-  const lastTypingAt = useRef(0)
+  const lastTyping = useRef<{ conversationId: string; at: number } | null>(null)
   const threadControl = useThreadControl(conversation, channel)
 
   // A send with a reply target (picked, or the last contact comment that
@@ -1081,21 +1083,37 @@ export const MessageInput = () => {
                         )
                       }
                       if (
-                        groupAudience &&
-                        conversation &&
-                        !groupSendDisabled &&
-                        Date.now() - lastTypingAt.current >= 5000
+                        !(
+                          typingThread &&
+                          conversation &&
+                          !groupSendDisabled &&
+                          event.currentTarget.value.trim()
+                        )
                       ) {
-                        lastTypingAt.current = Date.now()
-                        sendZaloGroupTypingAction(
-                          conversation.workspaceId,
-                          groupAudience.accountId,
-                          {
-                            groupId: groupAudience.groupId,
-                            commandId: crypto.randomUUID(),
-                          },
-                        ).catch(() => undefined)
+                        return
                       }
+                      const now = Date.now()
+                      if (
+                        lastTyping.current?.conversationId ===
+                          conversation.id &&
+                        now - lastTyping.current.at < 5000
+                      ) {
+                        return
+                      }
+                      lastTyping.current = {
+                        conversationId: conversation.id,
+                        at: now,
+                      }
+                      sendZaloInboxTypingAction(
+                        conversation.workspaceId,
+                        typingThread.accountId,
+                        {
+                          conversationId: typingThread.conversationId,
+                          contactInboxId: typingThread.contactInboxId,
+                          groupId: typingThread.group?.groupId,
+                          commandId: crypto.randomUUID(),
+                        },
+                      ).catch(() => undefined)
                     }}
                     onKeyDown={onKeyDown}
                     ref={textareaRef}

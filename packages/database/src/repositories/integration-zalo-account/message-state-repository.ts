@@ -17,7 +17,12 @@ import {
   zaloAccountMessageReceiptModel as receipt,
 } from "../../schema"
 import { workspaceRepository } from "../workspace"
-import { lockZaloAccountMessageTarget as lockTarget } from "./message-recall-repository"
+import {
+  lockZaloAccountMessageTarget as lockTarget,
+  zaloAccountMessageRecallRepository,
+} from "./message-recall-repository"
+
+const ACTOR_DETAILS_LIMIT = 50
 
 type Scope = {
   workspaceId: string
@@ -155,6 +160,12 @@ export const zaloAccountMessageStateRepository = {
       await lockTarget(tx, { ...input, ...input.event })
       const { event } = input
       const scope = { ...input, ...event }
+      if (
+        (await zaloAccountMessageRecallRepository.findTarget(scope, tx))
+          ?.recallReceivedAt
+      ) {
+        return false
+      }
       const at = new Date(event.timestampMs)
       const marker = await tx.query.zaloAccountMessageReactionModel.findFirst({
         where: {
@@ -326,6 +337,43 @@ export const zaloAccountMessageStateRepository = {
       .groupBy(reaction.providerMessageId, reaction.reactionKey)
       .limit(2500)
     return { receipts, reactions }
+  },
+  async listActors(input: Thread) {
+    const receipts = await db
+      .select({
+        actorId: receipt.memberId,
+        deliveredAt: receipt.deliveredAt,
+        seenAt: receipt.seenAt,
+      })
+      .from(receipt)
+      .where(
+        and(
+          eq(receipt.workspaceId, input.workspaceId),
+          eq(receipt.accountId, input.accountId),
+          eq(receipt.threadType, input.threadType),
+          eq(receipt.threadId, input.threadId),
+          eq(receipt.providerMessageId, input.providerMessageId),
+        ),
+      )
+      .orderBy(receipt.memberId)
+      .limit(ACTOR_DETAILS_LIMIT + 1)
+    const reactions = await db
+      .select({
+        actorId: reaction.actorId,
+        reaction: reaction.reactionKey,
+        occurredAt: reaction.occurredAt,
+      })
+      .from(reaction)
+      .where(and(reactionScope(input), eq(reaction.active, true)))
+      .orderBy(reaction.actorId, reaction.reactionKey)
+      .limit(ACTOR_DETAILS_LIMIT + 1)
+    return {
+      receipts: receipts.slice(0, ACTOR_DETAILS_LIMIT),
+      reactions: reactions.slice(0, ACTOR_DETAILS_LIMIT),
+      truncated:
+        receipts.length > ACTOR_DETAILS_LIMIT ||
+        reactions.length > ACTOR_DETAILS_LIMIT,
+    }
   },
   async purgeExpired(): Promise<number> {
     const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)

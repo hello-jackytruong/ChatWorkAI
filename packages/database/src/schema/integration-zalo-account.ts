@@ -56,6 +56,32 @@ export type ZaloAccountDiagnosticState = ZaloAccountRuntimeDiagnostics & {
   hold?: { authFingerprint: string; category: string; heldAt: string }
 }
 
+export type ZaloAccountHistoryRun = {
+  runId: string
+  scope: {
+    threadType: "user" | "group"
+    threadId?: string
+    conversationId?: string
+    contactInboxId?: string
+  }
+  status: "pending" | "running" | "partial" | "complete" | "failed"
+  pages: number
+  messages: number
+  mediaQueued: number
+  skipped: number
+  canResume: boolean
+  updatedAt: string
+  claimId?: string
+  startRequestId?: string
+  pageRequestId?: string
+  completedRequestIds?: string[]
+  triggerSource?: "manual" | "automatic"
+  cursor?: string
+  fingerprints: string[]
+  cursors: string[]
+  error?: string
+}
+
 /** Durable identity and encrypted device authorization for one personal Zalo account. */
 export const integrationZaloAccountModel = pgTable(
   "IntegrationZaloAccount",
@@ -100,6 +126,7 @@ export const integrationZaloAccountModel = pgTable(
       }
       runtime?: ZaloAccountRuntimeOrder
       diagnostics?: ZaloAccountDiagnosticState
+      history?: ZaloAccountHistoryRun
     }>(),
   },
   (table) => [

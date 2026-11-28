@@ -5,6 +5,18 @@ import * as schema from "../schema"
 export const integrationZaloAccountRelations = defineRelationsPart(
   schema,
   (r) => ({
+    zaloAccountUserProfileModel: {
+      workspace: r.one.workspaceModel({
+        from: r.zaloAccountUserProfileModel.workspaceId,
+        to: r.workspaceModel.id,
+        optional: false,
+      }),
+      account: r.one.integrationZaloAccountModel({
+        from: r.zaloAccountUserProfileModel.accountId,
+        to: r.integrationZaloAccountModel.id,
+        optional: false,
+      }),
+    },
     zaloAccountFriendImportModel: {
       workspace: r.one.workspaceModel({
         from: r.zaloAccountFriendImportModel.workspaceId,

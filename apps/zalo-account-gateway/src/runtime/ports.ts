@@ -1,9 +1,12 @@
 import type {
   ZaloAccountAuth,
   ZaloAccountAuthorizationEvent,
+  ZaloAccountContactOperation,
+  ZaloAccountContactResult,
   ZaloAccountDirectMessage,
   ZaloAccountDirectStatus,
   ZaloAccountDirectUndo,
+  ZaloAccountFriendEvent,
   ZaloAccountFriendSync,
   ZaloAccountGroup,
   ZaloAccountGroupActivity,
@@ -11,11 +14,16 @@ import type {
   ZaloAccountGroupMembersResult,
   ZaloAccountGroupMessage,
   ZaloAccountGroupSync,
+  ZaloAccountHistoryPage,
+  ZaloAccountHistoryPageRequest,
   ZaloAccountLabel,
   ZaloAccountLabelSnapshot,
   ZaloAccountLifecycleEvent,
+  ZaloAccountMessageActivity,
   ZaloAccountNativeOperation,
   ZaloAccountOutboundMessage,
+  ZaloAccountProfile,
+  ZaloAccountProfileRequest,
   ZaloAccountRuntimeDiagnostics,
   ZaloAccountRuntimeRef,
   ZaloAccountSendDelivery,
@@ -112,6 +120,7 @@ export type ZcaListenerHandlers = {
   messageIntegrityEnabled?: boolean
   onEvent?: () => void
   onThreadEvent?: (event: ZaloAccountThreadEvent) => void
+  onFriendEvent?: (event: ZaloAccountFriendEvent) => void
   onConnected?: () => void
   onDisconnected?: (code: number, reason: string) => void
   onError?: (category: "network" | "timeout" | "unknown") => void
@@ -128,6 +137,7 @@ export type ZcaListenerHandlers = {
 }
 
 export type ZcaApiPort = {
+  messageActivity?: (activity: ZaloAccountMessageActivity) => Promise<void>
   nativeOperation?: (
     operation: ZaloAccountNativeOperation,
   ) => Promise<{ status: number }>
@@ -144,6 +154,16 @@ export type ZcaApiPort = {
     groupId: string,
     query: ZaloAccountGroupMembersQuery,
   ) => Promise<ZaloAccountGroupMembersResult>
+  readProfiles?: (
+    query: ZaloAccountProfileRequest,
+  ) => Promise<ZaloAccountProfile[]>
+  contactOperation?: (
+    operation: ZaloAccountContactOperation,
+  ) => Promise<ZaloAccountContactResult>
+  fetchHistoryPage?: (
+    history: ZaloAccountHistoryPageRequest,
+    options: { timeoutMs: number; signal: AbortSignal },
+  ) => Promise<ZaloAccountHistoryPage>
   listFriends?: (cursor: number) => Promise<ZaloAccountFriendSync>
   sendTyping?: (threadId: string, threadType: "user" | "group") => Promise<void>
   getOwnId: () => Promise<string>

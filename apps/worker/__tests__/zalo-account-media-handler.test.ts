@@ -79,6 +79,22 @@ describe("Zalo media transfer", () => {
     await transferZaloAccountMedia(scope)
     expect(mocks.download).not.toHaveBeenCalled()
   })
+  it("does not archive GIF bytes served from an extensionless image URL", async () => {
+    mocks.download.mockResolvedValue({
+      size: 12,
+      sha256: "hash",
+      mime: "image/gif",
+      extension: "gif",
+      cleanup: mocks.cleanup,
+    })
+    await transferZaloAccountMedia(scope)
+    expect(mocks.reserveCandidate).not.toHaveBeenCalled()
+    expect(mocks.put).not.toHaveBeenCalled()
+    expect(mocks.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: "provider_only", retryable: false }),
+    )
+    expect(mocks.cleanup).toHaveBeenCalledOnce()
+  })
   it("refuses a PUT after losing candidate reservation", async () => {
     mocks.reserveCandidate.mockResolvedValue(false)
     await expect(transferZaloAccountMedia(scope)).rejects.toThrow()

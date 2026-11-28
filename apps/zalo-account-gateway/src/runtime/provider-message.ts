@@ -1,11 +1,14 @@
 import {
+  toZaloInlineGifUrl,
   type ZaloAccountAttachment,
   type ZaloAccountDirectMessage,
   type ZaloAccountGroupMessage,
   type ZaloAccountMediaResource,
   zaloAccountDirectMessageSchema,
   zaloAccountGroupMessageSchema,
+  zaloAccountInlineGifSchema,
   zaloAccountMediaResourceSchema,
+  zaloAccountReceiptReferencesSchema,
 } from "@chatbotx.io/sdk"
 import { readProviderAlbum } from "./provider-album"
 import {
@@ -18,6 +21,11 @@ import {
 } from "./provider-content"
 import { quoteOf } from "./provider-quote"
 import { normalizeProviderRichContent } from "./provider-rich-content"
+
+const mediaPathPrefix = /^(?:https?:\/\/|\/)/i
+const imageFileExtension = /\.(?:jpe?g|png|webp|gif|heic|avif)$/i
+const gifUrlExtension = /\.gif(?:[?#]|$)/i
+const encodedMediaType = /(?:^|\.)(?:sticker|photo|image|gif)$/i
 
 type ProviderMessageData = {
   msgId?: unknown
@@ -33,7 +41,17 @@ type ProviderMessageData = {
   propertyExt?: unknown
   textProperties?: unknown
   ttl?: unknown
+  st?: unknown
+  at?: unknown
+  cmd?: unknown
 }
+
+const receiptReferences = (data: ProviderMessageData | undefined) =>
+  zaloAccountReceiptReferencesSchema.safeParse({
+    st: data?.st,
+    at: data?.at,
+    cmd: data?.cmd,
+  }).data
 
 export type ProviderMessageInput = {
   type?: unknown
@@ -237,10 +255,12 @@ const normalizeContent = (
   group: boolean,
 ) => {
   const rawContent = data?.content
-  const content = asObject(rawContent)
+  const content = encodedMediaType.test(msgType)
+    ? parseObject(rawContent)
+    : asObject(rawContent)
   const presentation = normalizeProviderRichContent({
     msgType,
-    content: rawContent,
+    content: content ?? rawContent,
     propertyExt: data?.propertyExt,
     textProperties: data?.textProperties,
     isSelf,
@@ -252,22 +272,47 @@ const normalizeContent = (
     presentationKind !== "sticker"
   const attachment =
     content && !card ? attachmentOf(msgType, content) : undefined
-  const mediaType = presentationKind === "sticker" ? "sticker" : msgType
+  const isGifPhoto =
+    attachment?.kind === "image" &&
+    (gifUrlExtension.test(attachment.url) ||
+      content?.mimeType === "image/gif" ||
+      content?.mime === "image/gif")
+  let mediaType = msgType
+  if (presentationKind === "sticker") {
+    mediaType = "sticker"
+  } else if (isGifPhoto) {
+    mediaType = "gif"
+  }
   const mediaResources =
     content && !card ? mediaResourcesOf(mediaType, content) : []
   if (presentation.image) {
     mediaResources.push(presentation.image)
   }
-  const photo =
-    content && attachment?.kind === "image" && msgType === "chat.photo"
-      ? content
-      : undefined
-  const album = photo ? readProviderAlbum(asObject(data), photo) : undefined
+  const photo = attachment?.kind === "image" ? content : undefined
+  const album =
+    photo && !isGifPhoto ? readProviderAlbum(asObject(data), photo) : undefined
+  const photoParams = parseObject(photo?.params)
   const photoCaption = photo
-    ? asNonEmptyString(
-        photo.desc ?? photo.caption ?? parseObject(photo.params)?.desc,
-        20_000,
-      )
+    ? ([
+        photo.desc,
+        photo.caption,
+        photo.description,
+        photo.text,
+        photoParams?.desc,
+        photoParams?.caption,
+        photoParams?.description,
+        photoParams?.text,
+      ]
+        .map((value) => asNonEmptyString(value, 20_000))
+        .find((value) => value && value !== attachment?.url) ??
+      [photo.title, photoParams?.title]
+        .map((value) => asNonEmptyString(value, 20_000))
+        .find(
+          (value) =>
+            value &&
+            !mediaPathPrefix.test(value) &&
+            !imageFileExtension.test(value),
+        ))
     : undefined
   const caption =
     content &&
@@ -277,17 +322,33 @@ const normalizeContent = (
       ? asNonEmptyString(content.title ?? content.caption, 20_000)
       : undefined
   let text = presentation.text ?? photoCaption ?? caption
-  if (typeof rawContent === "string") {
+  if (typeof rawContent === "string" && !content) {
     text =
       group || presentation.richContent
         ? rawContent
         : asNonEmptyString(rawContent, 20_000)
   }
   const providerTtl = providerNumber(data?.ttl, 0)
+  const gif = mediaResources.find(
+    (resource) => resource.kind === "gif" && resource.role === "original",
+  )
+  const gifSource = gif?.url ?? (isGifPhoto ? attachment?.url : undefined)
+  const inlineGif = gifSource
+    ? zaloAccountInlineGifSchema.safeParse({
+        url: toZaloInlineGifUrl(gifSource),
+        mimeType:
+          gif?.mimeType === "video/mp4" || gif?.mimeType === "video/webm"
+            ? gif.mimeType
+            : "image/gif",
+        width: gif?.width,
+        height: gif?.height,
+      }).data
+    : undefined
   return {
     ...(text === undefined ? {} : { text }),
-    attachments: attachment ? [attachment] : [],
+    attachments: attachment && !isGifPhoto ? [attachment] : [],
     ...(mediaResources.length ? { mediaResources } : {}),
+    ...(inlineGif ? { inlineGif } : {}),
     ...(album ? { album } : {}),
     ...(presentation.richContent
       ? { richContent: presentation.richContent }
@@ -319,6 +380,7 @@ const normalizeGroupMessage = (
     senderName: asNonEmptyString(data?.dName),
     timestampMs: Number(data?.ts),
     msgType,
+    receiptReferences: receiptReferences(data),
     isSelf,
     ...normalizeContent(data, msgType, isSelf, true),
     quote: quoteOf(data?.quote),
@@ -402,6 +464,7 @@ const normalizeLegacyMessage = (
       ...(senderName ? { senderName } : {}),
       timestampMs,
       msgType,
+      receiptReferences: receiptReferences(data),
       isSelf,
       ...content,
       ...(quote ? { quote } : {}),

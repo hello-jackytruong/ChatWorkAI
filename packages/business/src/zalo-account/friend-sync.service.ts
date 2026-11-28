@@ -1,4 +1,7 @@
-import { zaloAccountFriendImportRepository } from "@chatbotx.io/database/repositories"
+import {
+  zaloAccountFriendImportRepository,
+  zaloAccountUserProfileRepository,
+} from "@chatbotx.io/database/repositories"
 import { zaloAccountFriendSyncSchema } from "@chatbotx.io/sdk"
 import { sha256Hex } from "@chatbotx.io/utils/crypto"
 import { quotaEnforcementService } from "../quota-enforcement/service"
@@ -82,8 +85,10 @@ export const zaloAccountFriendSyncService = {
         snapshot.friends.map((friend) => [friend.uid, friend]),
       ).values(),
     ]
+    const observedAt = new Date()
     let created = 0
     for (let offset = 0; offset < Math.max(friends.length, 1); offset += 100) {
+      const chunk = friends.slice(offset, offset + 100)
       const result = await zaloAccountFriendImportRepository.importChunk(
         {
           ...input,
@@ -91,18 +96,33 @@ export const zaloAccountFriendSyncService = {
           runId: run.runId,
           cursor: run.cursor,
           quotaUserIds,
-          friends: friends.slice(offset, offset + 100),
+          friends: chunk,
           finishPage: offset + 100 >= friends.length,
           pageCount: friends.length,
           complete: snapshot.complete,
           nextCursor: snapshot.nextCursor,
         },
         async (tx, count) => {
+          const profiles = chunk.flatMap((friend) =>
+            friend.profile?.uid === friend.uid ? [friend.profile] : [],
+          )
+          if (profiles.length) {
+            await zaloAccountUserProfileRepository.observe(
+              {
+                workspaceId: input.workspaceId,
+                accountId: input.accountId,
+                inboxId: account.inboxId,
+                profiles,
+                observedAt,
+              },
+              tx,
+            )
+          }
           await captureZaloAccountResourceMedia({
             workspaceId: input.workspaceId,
             accountId: input.accountId,
             tx,
-            resources: friends.slice(offset, offset + 100).map((friend) => ({
+            resources: chunk.map((friend) => ({
               ownerKind: "contact",
               ownerId: friend.uid,
               avatarUrl: friend.avatarUrl,

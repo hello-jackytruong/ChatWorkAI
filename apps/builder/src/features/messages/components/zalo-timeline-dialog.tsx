@@ -20,6 +20,7 @@ import { FolderOpenIcon } from "lucide-react"
 import Image from "next/image"
 import { useFormatter, useTranslations } from "next-intl"
 import { useEffect, useState } from "react"
+import { ZaloHistorySyncControls } from "@/features/zalo-accounts/components/zalo-history-sync-controls"
 import {
   lookupZaloQuoteAction,
   searchZaloTimelineAction,
@@ -216,6 +217,14 @@ export function ZaloTimelineDialog({
           </>
         ) : (
           <>
+            {open && (
+              <ZaloHistorySyncControls
+                accountId={accountId}
+                contactInboxId={contactInboxId}
+                conversationId={conversationId}
+                workspaceId={workspaceId}
+              />
+            )}
             <div className="flex flex-wrap gap-1">
               {kinds.map((tab) => (
                 <Button

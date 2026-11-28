@@ -51,17 +51,19 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P0 · 2. Lưu ảnh/file và media trên R2/S3
 
+**Chính sách hiện tại:** ảnh, video, file và audio đủ điều kiện vẫn lưu R2. Sticker hiển thị từ CDN Zalo theo ID và bộ. GIF dùng URL nguồn Zalo đã kiểm tra. Luồng mới không lưu sticker hoặc GIF lên R2. Bản lưu cũ giữ theo chính sách lưu trữ hiện có.
+
 **Cập nhật 2026-11-23:** phần code P0 · 2 đã triển khai và qua lint, typecheck, regression local trên nhánh `feat/zalo-account-media-r2`; xem [báo cáo kiểm chứng](../plans/261123-0500-zalo-account-media-r2-tdd/reports/implementation-and-verification.md). Cờ lưu trữ mặc định tắt, migration chưa áp dụng và các gate staging/R2 thật còn chờ. Checkbox vận hành dưới đây được giữ cho đến khi có bằng chứng chạy thực tế.
 
 - [x] File gửi từ ChatbotX có đường upload/lưu storage; API gửi bằng URL có bước tải về storage.
 - [ ] Tự tải **ảnh/file nhận từ Zalo** về R2/S3.
 - [ ] Tự lưu media từ **own-echo**: tài khoản gửi bằng điện thoại/Zalo PC/Web.
 - [ ] Dùng cùng cơ chế lưu cho DM, nhóm và tin lịch sử.
-- [ ] Mở rộng lưu video, voice/audio, GIF và media trong các loại card được hỗ trợ.
+- [ ] Mở rộng lưu video, voice/audio và media trong các loại card được hỗ trợ.
 - [ ] Lưu thumbnail/poster, ảnh preview và các biến thể cần cho hiển thị.
 - [ ] Lưu avatar tài khoản, khách hàng, thành viên và nhóm; cập nhật khi nguồn thay đổi.
 - [ ] Lưu cover khi thực sự sử dụng trong giao diện hồ sơ.
-- [ ] Cache/lưu tài nguyên sticker static, WebP, sprite theo chính sách dung lượng.
+- [x] Hiển thị sticker và GIF từ CDN Zalo. Luồng mới bỏ qua tải lên R2, kể cả khi worker phát hiện GIF bằng nội dung file.
 - [ ] Giữ bản gốc; bản tối ưu/thumbnail là object riêng, không ghi đè bản gốc.
 - [ ] Có trạng thái `pending / downloading / stored / failed / expired`.
 - [ ] Có retry giới hạn, thời điểm thử gần nhất, lỗi và số lần thử.
@@ -126,7 +128,8 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 - [x] Text, ảnh, file và metadata quote cơ bản.
 - [ ] Nhận/gửi video; player inline, poster, duration và download.
 - [ ] Nhận/gửi voice/audio; player, duration và ghi âm từ composer.
-- [x] Nhận/hiển thị GIF đúng loại; bảo toàn animation.
+- [x] Nhận/hiển thị GIF đúng loại từ URL Zalo; bảo toàn animation.
+- [x] Giữ mô tả ảnh đến qua socket trong cùng tin nhắn DM hoặc nhóm.
 - [x] Nhận/hiển thị link preview: tiêu đề, mô tả, thumbnail, URL gốc.
 - [ ] Gửi link bằng `sendLink`, tận dụng `parseLink` khi phù hợp.
 - [ ] Nhận/gửi danh thiếp bằng `sendCard`.
@@ -143,6 +146,8 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 - [ ] Hoàn thiện `sendMessage`, `sendVideo`, `sendVoice`, `uploadAttachment` với progress, cancel và lỗi rõ ràng.
 
 ## P1 · 6. Sticker đầy đủ như ZaloCRM
+
+**Pha 3 · Kiểm thử cục bộ:** nhận diện sticker có category/type, cache theo phiên, tìm và duyệt bộ, gửi qua hàng đợi Inbox, xem sticker tĩnh/động từ CDN Zalo và dùng xem gần đây/yêu thích theo người dùng và tài khoản. Đã kiểm tra fallback, giảm chuyển động, cache và ảnh sticker tải trực tiếp theo ID. Bộ Vui mở mặc định như ZaloCRM. Còn xác nhận trên Zalo thật về payload các bộ sticker và own-echo của lệnh gửi.
 
 **Pha 3 · Kiểm thử cục bộ:** nhận diện sticker có category/type, cache theo phiên, tìm và duyệt bộ, gửi qua hàng đợi Inbox, xem sticker tĩnh/động từ archive và dùng xem gần đây/yêu thích theo người dùng và tài khoản. Đã kiểm tra fallback, giảm chuyển động và cache. Còn xác nhận trên Zalo thật về payload các bộ sticker và own-echo của lệnh gửi.
 
@@ -181,71 +186,79 @@ Checklist lưu lại kết quả đối chiếu Zalo Account của ChatbotX vớ
 
 ## P1 · 8. Delivered, seen, typing và reaction
 
+**Pha 1 · Kiểm thử cục bộ:** Inbox hiển thị trạng thái DM, đếm receipt nhóm, popup có giới hạn, typing tự hết hạn và reaction theo kênh. Gửi reaction, request lịch sử reaction và các receipt outbound đã nối qua API có kiểm tra quyền. Cấu hình mặc định tắt; thay đổi, gỡ reaction, hiệu lực receipt và dữ liệu lịch sử còn chờ Zalo staging.
+
 - [x] Nhận delivered/seen/typing/reaction; gửi typing đã có đường xử lý.
-- [ ] Hiển thị nhất quán trạng thái gửi/đã giao/đã xem cho DM.
-- [ ] Hiển thị số người đã giao/đã xem trong nhóm.
-- [ ] Popup danh sách người đã giao/đã xem nếu dữ liệu provider đủ.
-- [ ] Typing DM/nhóm với tên actor nếu có và tự hết hạn.
-- [ ] Reaction DM hiển thị đầy đủ như nhóm.
+- [x] Hiển thị nhất quán trạng thái gửi/đã giao/đã xem cho DM.
+- [x] Hiển thị số người đã giao/đã xem trong nhóm.
+- [x] Popup danh sách người đã giao/đã xem nếu dữ liệu provider đủ.
+- [x] Typing DM/nhóm với tên actor nếu có và tự hết hạn.
+- [x] Reaction DM hiển thị đầy đủ như nhóm.
 - [ ] Gửi/thay đổi/gỡ reaction qua `addReaction` theo contract SDK.
-- [ ] Popup người reaction, emoji, thời điểm nếu có.
+- [x] Popup người reaction, emoji, thời điểm nếu có.
 - [ ] Đồng bộ reaction cũ qua `requestOldReactions`/`old_reactions`.
-- [ ] Phân biệt nhận read receipt với gửi read receipt lên Zalo.
+- [x] Phân biệt nhận read receipt với gửi read receipt lên Zalo.
 - [ ] Tích hợp `sendSeenEvent`, `sendDeliveredEvent` theo thiết lập tài khoản/hội thoại.
-- [ ] Không để “đánh dấu đã đọc trong CRM” âm thầm đồng nghĩa với “đã đọc trên Zalo”.
-- [ ] Không tạo customer activity/MAC từ receipt/reaction của nhóm.
+- [x] Không để “đánh dấu đã đọc trong CRM” âm thầm đồng nghĩa với “đã đọc trên Zalo”.
+- [x] Không tạo customer activity/MAC từ receipt/reaction của nhóm.
 
 ## P1 · 9. Đồng bộ lịch sử và bắt kịp sau offline
 
+**Pha 2 · Kiểm thử cục bộ:** đã có phân trang có giới hạn, checkpoint bền vững, đồng bộ thủ công cho các hội thoại đã có liên kết và đường nhập tin lịch sử độc lập. Inbox báo số tin đã xử lý, media đã đưa vào hàng đợi và trạng thái một phần. Lần chạy không khẳng định đã có toàn bộ lịch sử Zalo. Cần xác nhận cửa sổ nhóm, thứ tự cursor DM và receipt/reaction lịch sử trên Zalo thật.
+
 - [ ] DM history qua `requestOldMessages` và `old_messages`.
 - [ ] Group history qua `getGroupChatHistory`.
-- [ ] Đồng bộ thủ công theo account/hội thoại/phạm vi provider cho phép.
+- [x] Đồng bộ thủ công theo account/hội thoại/phạm vi provider cho phép.
 - [ ] Đồng bộ ban đầu và bắt kịp sau reconnect.
-- [ ] Cursor/checkpoint bền vững, chống cursor lặp và trang lặp.
-- [ ] Tiến độ: số trang, số tin, số media, lỗi, partial/complete và điểm tiếp tục.
+- [x] Cursor/checkpoint bền vững, chống cursor lặp và trang lặp.
+- [x] Tiến độ: số trang, số tin, số media, lỗi, partial/complete và điểm tiếp tục.
 - [ ] Chống trùng giữa history, realtime và own-echo.
-- [ ] Lưu timestamp gốc; không biến tin cũ thành tin mới.
-- [ ] Tin lịch sử không chạy lại automation, thông báo và tính hoạt động như tin mới.
-- [ ] Tôn trọng tombstone thu hồi và policy nhóm khi import.
+- [x] Lưu timestamp gốc; không biến tin cũ thành tin mới.
+- [x] Tin lịch sử không chạy lại automation, thông báo và tính hoạt động như tin mới.
+- [x] Tôn trọng tombstone thu hồi và policy nhóm khi import.
 - [ ] Backfill reaction/receipt nếu provider cung cấp.
-- [ ] Phân biệt “đã đọc hết dữ liệu provider trả” với “đã có toàn bộ lịch sử Zalo”.
+- [x] Phân biệt “đã đọc hết dữ liệu provider trả” với “đã có toàn bộ lịch sử Zalo”.
 
 ## P1 · 10. Hồ sơ khách hàng và dữ liệu định danh
 
+**Pha 3 · Kiểm thử cục bộ:** hồ sơ Zalo đọc theo account và quyền hội thoại, giữ nguồn/thời điểm theo từng trường, mở theo nhu cầu và tách khỏi tên CRM. Nhân viên thiếu quyền điện thoại không thấy số công khai. Đã tạo migration và cần áp dụng theo quy trình triển khai. Còn kiểm chứng trường do provider trả, tình huống hồ sơ ẩn, avatar lớn và gợi ý liên kết khi dữ liệu xung đột.
+
 - [x] Friend sync hiện lưu UID, tên và avatar.
 - [ ] Chuẩn hóa chung dữ liệu từ `getUserInfo`, `getAllFriends`, `findUser`.
-- [ ] Lưu tên Zalo gốc, tên hiển thị theo account và tên CRM riêng biệt.
+- [x] Lưu tên Zalo gốc, tên hiển thị theo account và tên CRM riêng biệt.
 - [ ] Lưu `globalId`, username nếu có; dùng làm tín hiệu liên kết khách hàng.
-- [ ] Lưu giới tính, ngày/năm sinh theo mức chi tiết provider trả.
-- [ ] Lưu số điện thoại công khai kèm nguồn; không coi là số đã xác minh.
-- [ ] Lưu bio/status, cover, thông tin business và thời điểm profile cập nhật.
+- [x] Lưu giới tính, ngày/năm sinh theo mức chi tiết provider trả.
+- [x] Lưu số điện thoại công khai kèm nguồn; không coi là số đã xác minh.
+- [x] Lưu bio/status, cover, thông tin business và thời điểm profile cập nhật.
 - [ ] Lưu quan hệ bạn bè, block và các cờ trạng thái có ý nghĩa nghiệp vụ.
-- [ ] Lưu thời điểm thu thập, nguồn API và account đã nhìn thấy dữ liệu.
-- [ ] Refresh profile khi mở hồ sơ hoặc theo TTL; có cache/batch.
-- [ ] Không ghi đè trường khách hàng đã chỉnh thủ công.
-- [ ] Dữ liệu thiếu/ẩn không tự xóa dữ liệu đã lưu.
+- [x] Lưu thời điểm thu thập, nguồn API và account đã nhìn thấy dữ liệu.
+- [x] Refresh profile khi mở hồ sơ hoặc theo TTL; có cache/batch.
+- [x] Không ghi đè trường khách hàng đã chỉnh thủ công.
+- [x] Dữ liệu thiếu/ẩn không tự xóa dữ liệu đã lưu.
 - [ ] Avatar lớn qua `getFullAvatar`, `getAvatarUrlProfile` khi cần.
-- [ ] Popup hồ sơ người gửi nhóm mà không tự tạo Contact khách hàng.
+- [x] Popup hồ sơ người gửi nhóm mà không tự tạo Contact khách hàng.
 - [ ] Gợi ý liên kết/merge có kiểm tra xung đột; không tự gộp chỉ theo một tín hiệu chưa kiểm chứng.
 
 ## P1 · 11. Bạn bè, tìm kiếm và presence
 
-- [ ] Tìm bằng `findUser`, `findUserByUsername`.
-- [ ] Tra cứu theo số điện thoại qua `getMultiUsersByPhones` khi phù hợp.
-- [ ] Mở hội thoại sau tra cứu hợp lệ; không gửi mù tới số điện thoại.
+**Pha 4 · Kiểm thử cục bộ:** tìm theo số/username, chọn kết quả có token theo account, đọc danh sách và xác nhận thao tác quan hệ trong cài đặt. Presence tải khi cần với TTL ngắn; vắng trong danh sách online vẫn là chưa biết. Lời mời đến dựa trên event đã nhận. Thao tác provider cần bật theo account và còn chờ đối chiếu với tài khoản thật.
+
+- [x] Tìm bằng `findUser`, `findUserByUsername`.
+- [x] Tra cứu theo số điện thoại qua `getMultiUsersByPhones` khi phù hợp.
+- [x] Mở hội thoại sau tra cứu hợp lệ. Nếu chưa có liên hệ, tạo liên hệ cho UID đã xác minh mà không gửi tin nhắn.
 - [ ] Gửi lời mời bằng `sendFriendRequest`.
 - [ ] Chấp nhận/từ chối/hủy bằng `acceptFriendRequest`, `rejectFriendRequest`, `undoFriendRequest`.
 - [ ] Danh sách lời mời đã gửi và trạng thái qua `getSentFriendRequest`, `getFriendRequestStatus`.
-- [ ] Danh sách lời mời nhận cập nhật từ event; không giả định có API snapshot nếu SDK không cung cấp.
+- [x] Danh sách lời mời nhận cập nhật từ event; không giả định có API snapshot nếu SDK không cung cấp.
 - [ ] Hủy bạn bằng `removeFriend`.
 - [ ] Block/unblock bằng `blockUser`, `unblockUser`; quản lý chặn xem feed bằng `blockViewFeed`.
 - [ ] Alias hai chiều qua `getAliasList`, `changeFriendAlias`, `removeFriendAlias`.
 - [ ] Tận dụng `getFriendRecommendations`, `getCloseFriends` cho giao diện phù hợp.
-- [ ] Presence qua `getFriendOnlines`, `lastOnline`, có TTL và giới hạn truy vấn.
-- [ ] Phân biệt online/offline/ẩn trạng thái/không biết.
-- [ ] Tôn trọng `show_online_status`; không suy ra offline chỉ vì vắng trong danh sách online.
+- [x] Presence qua `getFriendOnlines`, `lastOnline`, có TTL và giới hạn truy vấn.
+- [x] Phân biệt online/offline/ẩn trạng thái/không biết.
+- [x] Tôn trọng `show_online_status`; không suy ra offline chỉ vì vắng trong danh sách online.
 - [ ] Nhận đủ `friend_event`: add/remove/request/undo/reject/seen/block/unblock/block-call/pin.
-- [ ] Lịch sử quan hệ và thao tác theo account; không xóa khách chỉ vì không còn trong friend snapshot.
+- [x] Lịch sử quan hệ và thao tác theo account; không xóa khách chỉ vì không còn trong friend snapshot.
 
 ## P1 · 12. Thông tin và quản trị nhóm
 

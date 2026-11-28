@@ -1,7 +1,9 @@
 import type { Redis } from "@chatbotx.io/redis"
 import {
   parseZaloAccountCommandEnvelope,
+  ZALO_ACCOUNT_HISTORY_RESULT_TTL_MS,
   type ZaloAccountCommandEnvelope,
+  zaloAccountContactMutationSchema,
   zaloAccountTransportKeys,
 } from "@chatbotx.io/sdk"
 import type {
@@ -270,7 +272,7 @@ export class RedisCommandConsumer {
 
     try {
       const outcome = await this.options.executor.execute(command)
-      await this.storeResult(command.commandId, outcome)
+      await this.storeResult(command, outcome)
       await this.ackAndDelete(stream, entryId)
     } catch (error) {
       this.options.logger.warn(
@@ -337,14 +339,20 @@ export class RedisCommandConsumer {
   }
 
   private async storeResult(
-    commandId: string,
+    command: ZaloAccountCommandEnvelope,
     outcome: CommandExecutionOutcome,
   ): Promise<void> {
     await this.options.redis.set(
-      zaloAccountTransportKeys.commandResult(commandId),
+      zaloAccountTransportKeys.commandResult(command.commandId),
       JSON.stringify(outcome),
       "PX",
-      this.options.resultTtlMs,
+      command.kind === "fetch_history_page" ||
+        command.kind === "read_profiles" ||
+        (command.kind === "contact_operation" &&
+          !zaloAccountContactMutationSchema.safeParse(command.contactOperation)
+            .success)
+        ? Math.min(this.options.resultTtlMs, ZALO_ACCOUNT_HISTORY_RESULT_TTL_MS)
+        : this.options.resultTtlMs,
     )
   }
 }
